@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+  <div class="sm:flex sm:items-center">
+    <div class="sm:flex-auto">
+      <h1 class="text-2xl font-bold leading-6 text-slate-900">Settings</h1>
+      <p class="mt-2 text-sm text-slate-500">Configure global alert policies, notifications, and troubleshoot application logs.</p>
+    </div>
+  </div>
+
+  <!-- Manage Family Members Card -->
+  <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
+    <div class="sm:flex sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-base font-bold leading-7 text-slate-900">Manage People Profiles</h2>
+        <p class="mt-1 text-xs text-slate-400">Create, edit, and assign custom badge colors to family members or owners to organize reward accounts.</p>
+      </div>
+      <div class="mt-4 sm:mt-0">
+        <a href="{{ url_for('people') }}" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors">
+          Manage People & Colors
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Configuration Card -->
+  <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
+    <form class="space-y-6" action="{{ url_for('settings') }}" method="POST">
+      <div>
+        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3">Notification Alert Channels</h2>
+        <p class="mt-1 text-xs text-slate-400">Specify which alert channels are active globally for expiring accounts and sync failure alerts.</p>
+        
+        <div class="mt-6 space-y-4">
+          <!-- OS Native -->
+          <div class="relative flex items-start">
+            <div class="flex h-6 items-center">
+              <input id="native-notifications" name="native-notifications" type="checkbox" {% if settings.native_notifications == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+            </div>
+            <div class="ml-3 text-sm leading-6">
+              <label for="native-notifications" class="font-bold text-slate-700">OS Native Toast Notifications</label>
+              <p class="text-xs text-slate-400">Trigger immediate OS push notifications locally on the desktop via powershell/notify-send.</p>
+            </div>
+          </div>
+          
+
+        </div>
+      </div>
+
+      <!-- Expiration Warning Threshold -->
+      <div class="pt-6 border-t border-slate-100">
+        <h2 class="text-base font-bold leading-7 text-slate-900 mb-2">Expiry Badge Policy</h2>
+        <div class="max-w-xs">
+          <label for="warning-threshold" class="block text-xs font-semibold text-slate-500 uppercase">Warning Threshold</label>
+          <div class="mt-2 flex rounded-md shadow-sm">
+            <input type="number" name="warning-threshold" id="warning-threshold" value="{{ settings.warning_threshold }}" min="1" max="365" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm">
+            <span class="inline-flex items-center px-3 rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-slate-500 sm:text-sm font-semibold">days</span>
+          </div>
+          <p class="mt-1.5 text-[10px] text-slate-400">Accounts with expiration dates within this window will trigger OS warnings and Dashboard warning badges.</p>
+        </div>
+      </div>
+
+      <!-- Scheduled Sync Configuration -->
+      <div class="pt-6 border-t border-slate-100">
+        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4">Scheduled Sync Configuration</h2>
+        <p class="mt-1 text-xs text-slate-400 mb-6">Manage how and when the application runs background synchronization batches for all reward accounts.</p>
+        
+        <div class="space-y-4">
+          <!-- Enforce Consent Required -->
+          <div class="relative flex items-start">
+            <div class="flex h-6 items-center">
+              <input id="scheduled-sync-consent" name="scheduled-sync-consent" type="checkbox" {% if settings.scheduled_sync_consent_required == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+            </div>
+            <div class="ml-3 text-sm leading-6">
+              <label for="scheduled-sync-consent" class="font-bold text-slate-700">Enforce Explicit User Consent</label>
+              <p class="text-xs text-slate-400">When enabled, prompt for consent on the dashboard before starting a scheduled sync batch. Shows a manual approval and snooze UI.</p>
+            </div>
+          </div>
+          
+          <!-- Sync Frequency Dropdown -->
+          <div class="max-w-xs pt-2">
+            <label for="scheduled-sync-frequency" class="block text-xs font-semibold text-slate-500 uppercase">Synchronization Frequency</label>
+            <div class="mt-2">
+              <select id="scheduled-sync-frequency" name="scheduled-sync-frequency" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 bg-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm">
+                <option value="never" {% if settings.scheduled_sync_frequency == 'never' %}selected{% endif %}>Never (Disabled)</option>
+                <option value="hourly" {% if settings.scheduled_sync_frequency == 'hourly' %}selected{% endif %}>Every Hour</option>
+                <option value="daily" {% if settings.scheduled_sync_frequency == 'daily' %}selected{% endif %}>Every Day</option>
+                <option value="every_3_days" {% if settings.scheduled_sync_frequency == 'every_3_days' %}selected{% endif %}>Every 3 Days</option>
+                <option value="weekly" {% if settings.scheduled_sync_frequency == 'weekly' %}selected{% endif %}>Every Week</option>
+                <option value="monthly" {% if settings.scheduled_sync_frequency == 'monthly' %}selected{% endif %}>Every Month</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- System Integration Policies -->
+      <div class="pt-6 border-t border-slate-100">
+        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4">System Integration</h2>
+        <p class="mt-1 text-xs text-slate-400 mb-6">Manage how the application integrates with your operating system and web browser environment.</p>
+        
+        <div class="space-y-4">
+          <!-- Auto-Open On Manual Launch -->
+          <div class="relative flex items-start">
+            <div class="flex h-6 items-center">
+              <input id="auto-open" name="auto-open" type="checkbox" {% if settings.auto_open_on_launch == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+            </div>
+            <div class="ml-3 text-sm leading-6">
+              <label for="auto-open" class="font-bold text-slate-700">Auto-open dashboard on manual launch</label>
+              <p class="text-xs text-slate-400">Automatically open your default browser to the login or setup page when starting Award Tracker manually.</p>
+            </div>
+          </div>
+          
+          <!-- Launch On Boot -->
+          <div class="relative flex items-start">
+            <div class="flex h-6 items-center">
+              <input id="launch-on-boot" name="launch-on-boot" type="checkbox" {% if settings.launch_on_boot == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+            </div>
+            <div class="ml-3 text-sm leading-6">
+              <label for="launch-on-boot" class="font-bold text-slate-700">Launch Award Tracker automatically on computer boot</label>
+              <p class="text-xs text-slate-400">Run the application silently as a background tray service in the taskbar when Windows starts (does not automatically open dashboard browser in this case).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="pt-6 border-t border-slate-100 flex items-center justify-end">
+        <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors">
+          Save Settings
+        </button>
+      </div>
+    </form>
+  </div>
+
+
+  <!-- Scraper Debug Logs Card -->
+  <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 mb-4">
+      <div>
+        <h2 class="text-base font-bold leading-7 text-slate-900">Scraper Debug Logs</h2>
+        <p class="mt-1 text-xs text-slate-400">Monitor background account crawls, API requests, and web driver automation diagnostics.</p>
+      </div>
+      <div>
+        <a href="{{ url_for('download_logs') }}" class="inline-flex items-center justify-center rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 transition-colors">
+          <svg class="mr-2 h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          Download Logs
+        </a>
+      </div>
+    </div>
+    
+    <!-- Sleeek terminal console viewer -->
+    <div class="rounded-xl bg-slate-900 p-5 border border-slate-950 shadow-inner">
+      <div id="log-content" 
+           hx-get="{{ url_for('view_logs') }}" 
+           hx-trigger="load, every 5s" 
+           class="h-80 overflow-y-auto text-[11px] text-slate-300 font-mono whitespace-pre-wrap leading-relaxed scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
+           style="scroll-behavior: smooth;">
+        <div class="flex items-center justify-center h-full">
+          <span class="text-slate-500 animate-pulse font-semibold">Streaming scraper log file...</span>
+        </div>
+      </div>
+    </div>
+    <div class="mt-2.5 flex items-center justify-between text-[10px] text-slate-400 font-medium px-1">
+      <span class="flex items-center gap-1.5">
+        <span class="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+        Live Auto-Refresh Active
+      </span>
+      <span>Streams last 100 entries • Refreshes every 5s</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Automatically scroll the console to the bottom when new logs are appended
+  document.body.addEventListener('htmx:afterRequest', function(evt) {
+    if (evt.detail.target.id === 'log-content') {
+      const consoleBox = document.getElementById('log-content');
+      consoleBox.scrollTop = consoleBox.scrollHeight;
+    }
+  });
+</script>
+{% endblock %}

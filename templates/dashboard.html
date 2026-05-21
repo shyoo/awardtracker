@@ -1,0 +1,712 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="px-4 sm:px-6 lg:px-8">
+  <div class="sm:flex sm:items-center justify-between">
+    <div class="sm:flex-auto">
+      <h1 class="text-2xl font-bold leading-6 text-slate-900">Dashboard</h1>
+      <p class="mt-2 text-sm text-slate-500">Overview of your tracked award accounts, dynamic valuations, and upcoming expirations.</p>
+    </div>
+    
+    <!-- Sync All and Grouping -->
+    <div class="mt-4 sm:ml-16 sm:mt-0 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+      <div class="flex rounded-md shadow-sm ring-1 ring-inset ring-slate-300 bg-white overflow-hidden">
+        <a href="?group=program" class="{% if group_mode == 'program' %}bg-primary text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %} px-3 py-1.5 text-sm font-semibold transition-colors">By Program</a>
+        <a href="?group=person" class="{% if group_mode == 'person' %}bg-primary text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %} px-3 py-1.5 text-sm font-semibold transition-colors border-l border-slate-300">By Person</a>
+      </div>
+      
+      <button id="syncAllBtn" class="flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 transition-colors">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        Sync All
+      </button>
+
+      <a href="{{ url_for('add_account') }}" class="flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+        Add Program
+      </a>
+    </div>
+  </div>
+
+  <!-- Scheduled Sync Consent Banner -->
+  <div id="consentBanner" class="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-6 shadow-sm hidden">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div class="flex items-start gap-3">
+        <div class="rounded-lg bg-primary p-2 text-white shadow-sm mt-0.5">
+          <svg class="h-5 w-5 animate-bounce" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-slate-800">Scheduled Sync Available</h3>
+          <p class="text-xs text-slate-500 mt-1">A scheduled background synchronization of all your accounts is due. Would you like to proceed now?</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 self-end sm:self-center">
+        <!-- Snooze Select Dropdown & Button -->
+        <div class="flex items-center gap-2">
+          <select id="snoozeDuration" class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+            <option value="1">Snooze 1h</option>
+            <option value="4">Snooze 4h</option>
+            <option value="8">Snooze 8h</option>
+            <option value="24">Snooze 24h</option>
+          </select>
+          <button onclick="snoozeSync()" class="rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
+            Snooze
+          </button>
+        </div>
+        <button onclick="startScheduledSync()" class="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-400 transition-colors">
+          Sync Now
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+    <!-- Stats widgets -->
+    <!-- Total Portfolio Value Card -->
+    <div class="relative overflow-hidden rounded-xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+      <dt>
+        <div class="absolute rounded-lg bg-emerald-500 p-3 shadow-sm">
+          <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-1.971-.659-1.171-.88-1.171-2.303 0-3.182.442-.332 1.028-.521 1.63-.564m0 0V3.75m0 16.5V18" />
+          </svg>
+        </div>
+        <p class="ml-16 truncate text-sm font-semibold text-slate-500">Portfolio Value</p>
+      </dt>
+      <dd class="ml-16 flex items-baseline mt-1">
+        <p class="text-2xl font-bold text-slate-900">${{ "{:,.2f}".format(total_value) }}</p>
+      </dd>
+    </div>
+
+    <!-- Total Points Card -->
+    <div class="relative overflow-hidden rounded-xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+      <dt>
+        <div class="absolute rounded-lg bg-blue-500 p-3 shadow-sm">
+          <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </div>
+        <p class="ml-16 truncate text-sm font-semibold text-slate-500">Total Points/Miles</p>
+      </dt>
+      <dd class="ml-16 flex items-baseline mt-1">
+        <p class="text-2xl font-bold text-slate-900">{{ "{:,}".format(total_points) }}</p>
+      </dd>
+    </div>
+
+    <!-- Tracked Accounts Card -->
+    <div class="relative overflow-hidden rounded-xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+      <dt>
+        <div class="absolute rounded-lg bg-indigo-500 p-3 shadow-sm">
+          <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+          </svg>
+        </div>
+        <p class="ml-16 truncate text-sm font-semibold text-slate-500">Tracked Accounts</p>
+      </dt>
+      <dd class="ml-16 flex items-baseline mt-1">
+        <p class="text-2xl font-bold text-slate-900">{{ total_accounts }}</p>
+      </dd>
+    </div>
+
+    <!-- Expiring Soon Card -->
+    <div class="relative overflow-hidden rounded-xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+      <dt>
+        <div class="absolute rounded-lg {% if expiring_soon > 0 %}bg-rose-500 animate-pulse{% else %}bg-slate-500{% endif %} p-3 shadow-sm">
+          <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <p class="ml-16 truncate text-sm font-semibold text-slate-500">Expiring Soon (30d)</p>
+      </dt>
+      <dd class="ml-16 flex items-baseline mt-1">
+        <p class="text-2xl font-bold {% if expiring_soon > 0 %}text-rose-600{% else %}text-slate-900{% endif %}">{{ expiring_soon }}</p>
+      </dd>
+    </div>
+  </div>
+
+  {% set grouped = accounts|groupby('group_person_name' if group_mode == 'person' else 'group_provider_name') %}
+  
+  {% if not grouped %}
+  <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-8 text-center text-sm text-slate-400">
+    No accounts configured yet. <a href="{{ url_for('add_account') }}" class="text-primary font-semibold hover:underline">Add an account</a> to get started.
+  </div>
+  {% else %}
+  
+    {% for group_name, group_accounts in grouped %}
+    <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl">
+      <div class="border-b border-slate-100 bg-slate-50/50 px-4 py-3 sm:px-6 flex items-center justify-between">
+        <h3 class="text-sm font-extrabold leading-6 text-slate-800 uppercase tracking-wider flex items-center gap-2">
+          {% if group_mode == 'person' %}
+            <span class="inline-block h-2 w-2 rounded-full" style="background-color: {{ group_accounts[0].person.color if group_accounts[0].person else '#6366f1' }}"></span>
+            {{ group_name }}
+          {% else %}
+            <svg class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-19.5 0A2.25 2.25 0 004.5 15h15a2.25 2.25 0 002.25-2.25m-19.5 0v.25A2.25 2.25 0 004.5 17.25h15a2.25 2.25 0 002.25-2.25v-.25" />
+            </svg>
+            {{ group_name }}
+          {% endif %}
+        </h3>
+        <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 shadow-sm border border-slate-200/40">
+          {{ group_accounts|length }} account{% if group_accounts|length > 1 %}s{% endif %}
+        </span>
+      </div>
+      <ul role="list" class="divide-y divide-slate-100">
+        {% set sorted_accounts = group_accounts|sort(attribute='provider.name') if group_mode == 'person' else group_accounts %}
+        {% for account in sorted_accounts %}
+        <li class="px-4 py-3 sm:px-6 hover:bg-slate-50/80 transition-colors relative" id="account-row-{{ account.id }}">
+          
+          <!-- Sync Progress Overlay -->
+          <div id="sync-overlay-{{ account.id }}" class="absolute inset-0 bg-white/80 hidden flex-col items-center justify-center z-10 transition-opacity rounded-xl">
+            <svg class="animate-spin h-6 w-6 text-primary mb-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-xs font-semibold text-primary">Syncing...</span>
+          </div>
+
+          <div class="flex items-center justify-between">
+            
+            <!-- Left side: Logo & Account Info -->
+            <div class="flex items-center gap-4">
+              <!-- Logo -->
+              <div class="flex-shrink-0 h-12 w-12 rounded-lg flex items-center justify-center overflow-hidden">
+                  {% if get_logo_url(account.provider.plugin_name) %}
+                  <img src="{{ get_logo_url(account.provider.plugin_name) }}" alt="{{ account.program_name }} logo" class="h-12 w-12 object-cover rounded-lg">
+                  {% else %}
+                  <span class="text-sm font-bold text-slate-400 bg-slate-100 h-12 w-12 flex items-center justify-center rounded-lg">{{ account.program_name[:2].upper() }}</span>
+                  {% endif %}
+              </div>
+              
+              <div class="flex flex-col">
+                <div class="flex items-center gap-2">
+                  <a href="{{ url_for('account_detail', account_id=account.id) }}" class="text-sm font-bold text-slate-900 hover:text-primary hover:underline">
+                    {{ account.program_name }}
+                  </a>
+                  {% if group_mode == 'program' %}
+                  <span class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold border" 
+                        style="background-color: {{ account.person.color if account.person else '#64748b' }}15; 
+                               color: {{ account.person.color if account.person else '#64748b' }}; 
+                               border-color: {{ account.person.color if account.person else '#64748b' }}30;">
+                    {{ account.group_person_name }}
+                  </span>
+                  {% endif %}
+
+                  {% if account.status %}
+                  <span class="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 ring-1 ring-inset ring-blue-700/10">{{ account.status }}</span>
+                  {% endif %}
+                </div>
+                
+                <div class="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+                  {% if account.is_manual %}
+                  <span class="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 ring-1 ring-inset ring-indigo-500/20">
+                    <svg class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" /></svg>
+                    Manual
+                  </span>
+                  {% else %}
+                  <span>{{ account.username }}</span>
+                  {% endif %}
+                  <span class="text-slate-300">&bull;</span>
+                  <div class="flex items-center gap-1" id="sync-status-{{ account.id }}">
+                      {% if account.is_manual %}
+                          <span class="text-indigo-500 font-medium">Updated {{ time_ago(account.last_updated) }}</span>
+                      {% elif account.last_fetch_status == 'SUCCESS' %}
+                          <span class="text-emerald-600 font-medium">Synced ({{ time_ago(account.last_updated) }})</span>
+                      {% elif account.last_fetch_status == 'FAILED' %}
+                          <span class="text-rose-600 font-medium" title="{{ account.last_error }}">Sync Failed</span>
+                      {% else %}
+                          <span class="text-slate-500">Pending</span>
+                      {% endif %}
+                  </div>
+                </div>
+                {% if account.last_fetch_status == 'FAILED' and account.last_error and ('security' in account.last_error.lower() or 'interactive' in account.last_error.lower() or 'mfa' in account.last_error.lower() or 'captcha' in account.last_error.lower() or 'verification' in account.last_error.lower() or 'password field not visible' in account.last_error.lower()) %}
+                <div class="mt-2 text-[11px] text-amber-700 font-medium bg-amber-50 border border-amber-200/60 rounded-lg px-2.5 py-1.5 flex items-start gap-2 max-w-xl shadow-sm">
+                  <svg class="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <span class="font-bold">MFA / Additional security screening required.</span> Please click the orange warning icon on the right to perform an <strong class="text-amber-800">Interactive Login</strong>, and check the checkbox of <strong class="text-amber-800">"Don't require verification code again."</strong> during sign-in to prevent this next time.
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+            
+            <!-- Right side: Expiration, Balance, Actions -->
+            <div class="flex items-center gap-6">
+              <!-- Expiration Badges -->
+              <div class="hidden sm:block">
+                {% if account.provider.plugin_name == 'korean' and account.expiration_meta and account.expiration_meta.get('earliest_expiring_amount') %}
+                    {% set bg_class = 'bg-rose-50 text-rose-700 ring-rose-600/20' %}
+                    {% if account.expiration_status == 'warning' %}
+                        {% set bg_class = 'bg-amber-50 text-amber-800 ring-amber-600/20' %}
+                    {% elif account.expiration_status == 'safe' %}
+                        {% set bg_class = 'bg-emerald-50 text-emerald-800 ring-emerald-600/20' %}
+                    {% endif %}
+                    <span class="custom-tooltip inline-flex items-center rounded-md px-2 py-1 text-[11px] font-medium ring-1 ring-inset {{ bg_class }}" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">
+                      {{ "{:,}".format(account.expiration_meta.get('earliest_expiring_amount')) }} Expiring {{ account.expiration_meta.get('earliest_expiring_date') }}
+                    </span>
+                {% elif account.expiration_status == 'expired' %}
+                <span class="custom-tooltip inline-flex items-center rounded-md bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-800 ring-1 ring-inset ring-rose-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">Expired</span>
+                {% elif account.expiration_status == 'critical' %}
+                <span class="custom-tooltip inline-flex items-center rounded-md bg-rose-100 px-2 py-1 text-[11px] font-bold text-rose-800 ring-1 ring-inset ring-rose-600/20 animate-pulse" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">Critical: {{ format_time_remaining(account.days_left) }}</span>
+                {% elif account.expiration_status == 'warning' %}
+                <span class="custom-tooltip inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">Warning: {{ format_time_remaining(account.days_left) }}</span>
+                {% elif account.expiration_status == 'safe' %}
+                <span class="custom-tooltip inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">Safe: {{ format_time_remaining(account.days_left) }}</span>
+                {% else %}
+                <span class="custom-tooltip inline-flex items-center rounded-md bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-inset ring-slate-500/10" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">Never Expires{{ get_never_expires_reason(account.provider.plugin_name, account.status, account.has_exemption) }}</span>
+                {% endif %}
+              </div>
+              
+              <!-- Balance -->
+              <div class="flex flex-col text-right w-24">
+                <span class="text-base font-bold text-slate-900" id="balance-{{ account.id }}">{{ "{:,}".format(account.balance) }}</span>
+                <span class="text-[10px] font-medium text-slate-400" id="value-{{ account.id }}">${{ "{:,.2f}".format(account.value_usd) }}</span>
+              </div>
+              
+              <!-- Actions -->
+              <div class="flex items-center gap-1 border-l border-slate-100 pl-4">
+                  {% if account.is_manual %}
+                  <!-- Manual account: Update Balance button -->
+                  <button type="button"
+                          onclick="openUpdateBalanceModal({{ account.id }}, '{{ account.program_name }}', {{ account.balance }})"
+                          class="p-1.5 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-md transition-colors"
+                          title="Update Balance">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" /></svg>
+                  </button>
+                  {% else %}
+                  <!-- Auto-sync account: Sync Now button -->
+                  <button type="button" onclick="syncSingleAccount({{ account.id }})" class="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-100 rounded-md transition-colors" title="Sync Now">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                  </button>
+                  {% if account.last_fetch_status == 'FAILED' %}
+                  <form action="{{ url_for('interactive_login', account_id=account.id) }}" method="POST" class="inline" title="Interactive Login" onsubmit="showInteractiveLoginOverlay(event, '{{ account.provider.name }}')">
+                      <button type="submit" class="p-1.5 text-orange-500 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-colors">
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                      </button>
+                  </form>
+                  {% endif %}
+                  {% endif %}
+              </div>
+            </div>
+            
+          </div>
+
+          {% if account.certificates %}
+          <!-- Nested Vouchers & Certificates -->
+          <div class="mt-3 pl-16 pr-4 pb-1">
+            <div class="flex flex-col gap-2 rounded-lg bg-slate-50/50 border border-slate-100/80 p-3">
+              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Active Certificates & Vouchers</span>
+              <ul class="divide-y divide-slate-100/60">
+                {% for cert in account.certificates %}
+                <li class="py-2 {% if not loop.first %}pt-2{% endif %} flex items-center justify-between text-xs">
+                  <div class="flex flex-col gap-0.5">
+                    <span class="font-bold text-slate-800">{{ cert.name }}</span>
+                    {% if cert.details %}
+                    <span class="text-[10px] text-slate-500 font-mono">
+                      {% for k, v in cert.details.items() %}
+                        {{ k }}: {{ v }}{% if not loop.last %} | {% endif %}
+                      {% endfor %}
+                    </span>
+                    {% endif %}
+                  </div>
+                  <div class="flex items-center gap-2">
+                    {% if cert.expiration_date %}
+                    <span class="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-inset ring-amber-600/10">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }}</span>
+                    {% else %}
+                    <span class="inline-flex items-center rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 ring-1 ring-inset ring-green-600/10">Active</span>
+                    {% endif %}
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+          {% endif %}
+
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  {% endif %}
+</div>
+
+<!-- ====================================================================
+     Update Balance Modal (for manually-tracked accounts)
+===================================================================== -->
+<div id="updateBalanceModal" class="relative z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="update-balance-title">
+  <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="closeUpdateBalanceModal()"></div>
+  <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="relative transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all w-full max-w-md">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="rounded-xl bg-white/20 p-2">
+                <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-white" id="update-balance-title">Update Balance</h3>
+                <p class="text-xs text-indigo-200" id="update-balance-subtitle">Manual account</p>
+              </div>
+            </div>
+            <button onclick="closeUpdateBalanceModal()" class="rounded-lg p-1.5 text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+        <!-- Form Body -->
+        <form id="updateBalanceForm" action="" method="POST">
+          <div class="px-6 py-5 space-y-4">
+            <div class="rounded-xl bg-indigo-50 border border-indigo-100 p-3 text-xs text-indigo-700">
+              <span class="font-semibold">No credentials are stored</span> for this account. Enter your current balance below — it will be saved and your portfolio value updated instantly.
+            </div>
+            <div>
+              <label for="modal-balance-input" class="block text-sm font-semibold text-slate-700 mb-1.5">Current Balance <span class="text-slate-400 font-normal">(points / miles)</span></label>
+              <input type="number" id="modal-balance-input" name="balance" min="0" step="1" required
+                     class="block w-full rounded-xl border-0 py-3 px-4 text-slate-900 text-lg font-bold shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-base">
+            </div>
+          </div>
+          <div class="px-6 pb-5 flex justify-end gap-3">
+            <button type="button" onclick="closeUpdateBalanceModal()" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors">Cancel</button>
+            <button type="submit" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+              <span class="flex items-center gap-1.5">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                Save Balance
+              </span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sync Progress Modal -->
+<div id="syncModal" class="relative z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity"></div>
+  <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+    <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+      <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-sm sm:p-6">
+        <div>
+          <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+            <svg class="h-6 w-6 text-emerald-600 animate-spin" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+          </div>
+          <div class="mt-3 text-center sm:mt-5">
+            <h3 class="text-base font-semibold leading-6 text-slate-900" id="modal-title">Syncing Accounts</h3>
+            <div class="mt-2">
+              <p class="text-sm text-slate-500" id="syncProgressText">Preparing to sync...</p>
+              
+              <!-- Progress Bar -->
+              <div class="mt-4 w-full bg-slate-200 rounded-full h-2.5">
+                <div id="syncProgressBar" class="bg-emerald-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-5 sm:mt-6 hidden" id="syncDoneBtnContainer">
+          <button type="button" onclick="closeSyncModal()" class="inline-flex w-full justify-center rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">Got it, thanks!</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scheduled Sync Progress Modal -->
+<div id="scheduledSyncModal" class="relative z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity"></div>
+  <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+    <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+      <div class="relative transform overflow-hidden rounded-lg bg-white px-6 pb-6 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-sm sm:p-6">
+        <div>
+          <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+            <svg class="h-6 w-6 text-primary animate-spin" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+          </div>
+          <div class="mt-3 text-center sm:mt-5">
+            <h3 class="text-base font-semibold leading-6 text-slate-900" id="scheduledModalTitle">Auto Syncing Accounts</h3>
+            <div class="mt-2">
+              <p class="text-sm text-slate-500" id="scheduledSyncProgressText">Initializing background sync...</p>
+              
+              <!-- Progress Bar -->
+              <div class="mt-4 w-full bg-slate-200 rounded-full h-2.5">
+                <div id="scheduledSyncProgressBar" class="bg-primary h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-6">
+          <button type="button" onclick="cancelScheduledSync()" class="inline-flex w-full justify-center rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 transition-colors">
+            Cancel Sync
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Interactive Login Progress Modal -->
+<div id="interactiveLoginModal" class="relative z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity"></div>
+  <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+    <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+      <div class="relative transform overflow-hidden rounded-lg bg-white px-6 pb-6 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md sm:p-6">
+        <div>
+          <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 animate-bounce">
+            <svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div class="mt-3 text-center sm:mt-5">
+            <h3 class="text-base font-semibold leading-6 text-slate-900" id="interactive-modal-title">Interactive Sign-in Active</h3>
+            <div class="mt-2">
+              <p class="text-sm text-slate-500 mb-4" id="interactiveProgressText">Launching login window...</p>
+              <div class="mt-4 p-4 bg-slate-50 border border-slate-100 rounded-xl text-[11px] text-left text-slate-600 leading-relaxed space-y-2.5">
+                <p>🖥️ <strong>1. Look at your desktop/taskbar</strong>: A Chrome window will open. Click on it to bring it forward.</p>
+                <p>💬 <strong>2. Enter MFA / Phone Code</strong>: Complete any requested 6-digit verification code or captcha prompts.</p>
+                <p>✅ <strong>3. Check "Don't require verification code again."</strong>: Ensure you check the checkbox of "Don't require verification code again." to prevent this next time.</p>
+                <p>🎯 <strong class="text-orange-600">4. CLICK "SIGN IN" MANUALLY</strong>: You must click the <strong>"Sign in"</strong> button manually on the page once ready!</p>
+                <p>⌛ <strong>5. Automatic Completion</strong>: Once you are logged in, the window will auto-close and this dashboard will reload to sync your balance.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const accountIds = [
+    {% for acc in accounts %}
+      {{ acc.id }}{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  function showInteractiveLoginOverlay(event, providerName) {
+    const modal = document.getElementById('interactiveLoginModal');
+    const text = document.getElementById('interactiveProgressText');
+    if (modal && text) {
+      text.innerHTML = `Launching interactive login window for <strong>${providerName}</strong>. Please complete the sign-in on your screen...`;
+      modal.classList.remove('hidden');
+    }
+  }
+
+  function openUpdateBalanceModal(accountId, providerName, currentBalance) {
+    const modal = document.getElementById('updateBalanceModal');
+    const subtitle = document.getElementById('update-balance-subtitle');
+    const form = document.getElementById('updateBalanceForm');
+    const input = document.getElementById('modal-balance-input');
+    if (!modal) return;
+    subtitle.textContent = providerName;
+    form.action = `/accounts/${accountId}/update-balance`;
+    input.value = currentBalance;
+    input.select && setTimeout(() => input.select(), 50);
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeUpdateBalanceModal() {
+    const modal = document.getElementById('updateBalanceModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeUpdateBalanceModal();
+  });
+
+  async function syncSingleAccount(accountId) {
+    const overlay = document.getElementById('sync-overlay-' + accountId);
+    if(overlay) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+    }
+    try {
+        const response = await fetch(`/api/accounts/${accountId}/sync`, { method: 'POST' });
+        const data = await response.json();
+        if(data.status === 'success') {
+            document.getElementById('sync-status-' + accountId).innerHTML = `<span class="text-emerald-600 font-medium">Synced (just now)</span>`;
+            document.getElementById('balance-' + accountId).innerText = data.balance.toLocaleString();
+            setTimeout(() => {
+                window.location.reload();
+            }, 600);
+        } else {
+            document.getElementById('sync-status-' + accountId).innerHTML = `<span class="text-rose-600 font-medium" title="${data.message}">Sync Failed</span>`;
+        }
+    } catch (e) {
+        document.getElementById('sync-status-' + accountId).innerHTML = `<span class="text-rose-600 font-medium">Sync Error</span>`;
+    } finally {
+        if(overlay) overlay.classList.add('hidden');
+        if(overlay) overlay.classList.remove('flex');
+    }
+  }
+
+  document.getElementById('syncAllBtn')?.addEventListener('click', async () => {
+      if(accountIds.length === 0) return;
+      
+      const modal = document.getElementById('syncModal');
+      const text = document.getElementById('syncProgressText');
+      const bar = document.getElementById('syncProgressBar');
+      const doneBtn = document.getElementById('syncDoneBtnContainer');
+      
+      modal.classList.remove('hidden');
+      doneBtn.classList.add('hidden');
+      
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < accountIds.length; i++) {
+          const accId = accountIds[i];
+          text.innerText = `Syncing account ${i+1} of ${accountIds.length}...`;
+          bar.style.width = `${((i) / accountIds.length) * 100}%`;
+          
+          const overlay = document.getElementById('sync-overlay-' + accId);
+          if(overlay) { overlay.classList.remove('hidden'); overlay.classList.add('flex'); }
+
+          try {
+              const res = await fetch(`/api/accounts/${accId}/sync`, { method: 'POST' });
+              const data = await res.json();
+              if(data.status === 'success') {
+                  successCount++;
+                  document.getElementById('sync-status-' + accId).innerHTML = `<span class="text-emerald-600 font-medium">Synced (just now)</span>`;
+                  document.getElementById('balance-' + accId).innerText = data.balance.toLocaleString();
+              } else {
+                  failCount++;
+                  document.getElementById('sync-status-' + accId).innerHTML = `<span class="text-rose-600 font-medium" title="${data.message}">Sync Failed</span>`;
+              }
+          } catch(e) {
+              failCount++;
+          } finally {
+              if(overlay) overlay.classList.add('hidden');
+              if(overlay) overlay.classList.remove('flex');
+          }
+      }
+      
+      bar.style.width = '100%';
+      text.innerText = `Done! ${successCount} succeeded, ${failCount} failed.`;
+      doneBtn.classList.remove('hidden');
+  });
+
+  function closeSyncModal() {
+      document.getElementById('syncModal').classList.add('hidden');
+      window.location.reload();
+  }
+
+  // Control triggers for Scheduled Sync All
+  async function startScheduledSync() {
+    try {
+      const response = await fetch('/api/sync-all/start', { method: 'POST' });
+      const data = await response.json();
+      if (data.status === 'success') {
+        document.getElementById('consentBanner').classList.add('hidden');
+        document.getElementById('scheduledSyncModal').classList.remove('hidden');
+        pollSyncStatus();
+      }
+    } catch (e) {
+      console.error("Error starting scheduled sync:", e);
+    }
+  }
+
+  async function snoozeSync() {
+    const duration = document.getElementById('snoozeDuration').value;
+    try {
+      const response = await fetch('/api/sync-all/snooze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration_hours: parseInt(duration) })
+      });
+      const data = await response.json();
+      if (data.status === 'success') {
+        document.getElementById('consentBanner').classList.add('hidden');
+      }
+    } catch (e) {
+      console.error("Error snoozing sync:", e);
+    }
+  }
+
+  async function cancelScheduledSync() {
+    try {
+      const response = await fetch('/api/sync-all/cancel', { method: 'POST' });
+      const data = await response.json();
+      if (data.status === 'success') {
+        document.getElementById('scheduledSyncModal').classList.add('hidden');
+        window.location.reload();
+      }
+    } catch (e) {
+      console.error("Error canceling sync:", e);
+    }
+  }
+
+  let wasRunning = false;
+  let pollTimeoutId = null;
+  let pollInterval = 60000; // Default slow poll (60s) when idle
+  
+  async function pollSyncStatus() {
+    try {
+      const response = await fetch('/api/sync-all/status');
+      const data = await response.json();
+      
+      const banner = document.getElementById('consentBanner');
+      const modal = document.getElementById('scheduledSyncModal');
+      const progressText = document.getElementById('scheduledSyncProgressText');
+      const progressBar = document.getElementById('scheduledSyncProgressBar');
+      
+      if (data.status === 'pending_consent') {
+        banner.classList.remove('hidden');
+        modal.classList.add('hidden');
+        wasRunning = false;
+        pollInterval = 5000; // Poll moderately (every 5s) when waiting for user consent
+      } else if (data.status === 'running') {
+        banner.classList.add('hidden');
+        modal.classList.remove('hidden');
+        
+        const current = data.current_index;
+        const total = data.total_count;
+        const percent = total > 0 ? (current / total) * 100 : 0;
+        
+        progressText.innerText = `Syncing account ${current} of ${total}: ${data.current_account}...`;
+        progressBar.style.width = `${percent}%`;
+        
+        wasRunning = true;
+        pollInterval = 3000; // Poll frequently (every 3s) during active progress
+      } else {
+        banner.classList.add('hidden');
+        modal.classList.add('hidden');
+        
+        if (wasRunning) {
+          wasRunning = false;
+          // Reload the page when background sync completes
+          window.location.reload();
+          return;
+        }
+        
+        pollInterval = 60000; // Poll very slowly (every 60s) when idle
+      }
+    } catch (e) {
+      console.error("Error polling sync status:", e);
+      pollInterval = 60000; // Fallback to slow poll on error
+    } finally {
+      // Schedule the next poll dynamically using the updated interval
+      if (pollTimeoutId) clearTimeout(pollTimeoutId);
+      pollTimeoutId = setTimeout(pollSyncStatus, pollInterval);
+    }
+  }
+
+  // Initial call to start the dynamic polling loop
+  pollSyncStatus();
+</script>
+{% endblock %}

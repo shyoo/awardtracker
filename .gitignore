@@ -1,0 +1,12 @@
+**/__pycache__/
+build/
+browser_profiles/
+backups/
+dist/
+downloaded_files/
+scratch/
+profiles/
+venv/
+*.log
+awardtracker.db
+scraper_debug.log

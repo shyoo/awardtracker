@@ -1,0 +1,78 @@
+{
+  "marriott": {
+    "cpp": 0.8,
+    "name": "Marriott Bonvoy"
+  },
+  "hyatt": {
+    "cpp": 2.3,
+    "name": "World of Hyatt"
+  },
+  "hilton": {
+    "cpp": 0.6,
+    "name": "Hilton Honors"
+  },
+  "ihg": {
+    "cpp": 0.8,
+    "name": "IHG One Rewards"
+  },
+  "american": {
+    "cpp": 1.5,
+    "name": "American Airlines AAdvantage"
+  },
+  "united": {
+    "cpp": 1.2,
+    "name": "United Airlines MileagePlus"
+  },
+  "delta": {
+    "cpp": 1.2,
+    "name": "Delta SkyMiles"
+  },
+  "korean": {
+    "cpp": 1.8,
+    "name": "Korean Air Skypass"
+  },
+  "alaska": {
+    "cpp": 1.4,
+    "name": "Alaska Airlines Mileage Plan"
+  },
+  "southwest": {
+    "cpp": 1.3,
+    "name": "Southwest Rapid Rewards"
+  },
+  "virgin": {
+    "cpp": 1.2,
+    "name": "Virgin Atlantic Flying Club"
+  },
+  "avianca": {
+    "cpp": 1.2,
+    "name": "Avianca LifeMiles"
+  },
+  "asiana": {
+    "cpp": 1.4,
+    "name": "Asiana Club"
+  },
+  "chase": {
+    "cpp": 2.05,
+    "name": "Chase Ultimate Rewards"
+  },
+  "amex": {
+    "cpp": 2.0,
+    "name": "Amex Membership Rewards"
+  },
+  "citi": {
+    "cpp": 1.9,
+    "name": "Citi ThankYou Rewards"
+  },
+  "capitalone": {
+    "cpp": 1.85,
+    "name": "Capital One Miles"
+  },
+  "wellsfargo": {
+    "cpp": 0.9,
+    "name": "Wells Fargo Rewards"
+  },
+  "manual": {
+    "cpp": 1.0,
+    "name": "Manual Entry"
+  }
+}

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="px-4 sm:px-6 lg:px-8 max-w-2xl mx-auto">
+  <!-- Back Button & Header -->
+  <div class="flex items-center gap-3 border-b border-slate-200 pb-5">
+    <a href="{{ url_for('account_detail', account_id=account.id) }}" class="inline-flex items-center justify-center rounded-lg bg-white p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-500 border border-slate-200 shadow-sm transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+      </svg>
+    </a>
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Edit Account</h1>
+      <p class="mt-1 text-sm text-slate-500">Configure connection details and credentials for {{ account.provider.name }}.</p>
+    </div>
+  </div>
+
+  <!-- Form Body -->
+  <div class="mt-8 bg-white rounded-xl shadow-sm border border-slate-100 p-6 sm:p-8">
+    <form action="{{ url_for('edit_account', account_id=account.id) }}" method="POST" class="space-y-6">
+      <!-- Provider (Read-Only) -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-700">Provider</label>
+        <div class="mt-2 block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500 sm:text-sm">
+          {{ account.provider.name }}
+        </div>
+      </div>
+
+      <!-- Owner (Person) -->
+      <div>
+        <label for="person_id" class="block text-sm font-semibold text-slate-700">Owner (Person)</label>
+        <p class="mt-1 text-xs text-slate-400">Assign this account to a family member or owner.</p>
+        <div class="flex items-center gap-2 mt-2">
+            <select id="person_id" name="person_id" class="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+              <option value="">-- Unassigned --</option>
+              {% for p in people %}
+              <option value="{{ p.id }}" {% if account.person_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+              {% endfor %}
+            </select>
+            <a href="{{ url_for('people') }}" class="text-sm font-semibold text-primary whitespace-nowrap hover:underline">Manage People</a>
+        </div>
+      </div>
+
+      {% if account.is_manual %}
+      <!-- Custom Program Name -->
+      <div>
+        <label for="custom_program_name" class="block text-sm font-semibold text-slate-700">Custom Program Name</label>
+        <p class="mt-1 text-xs text-slate-400">The custom name for this manually-tracked rewards program.</p>
+        <div class="mt-2">
+          <input type="text" name="custom_program_name" id="custom_program_name" value="{{ account.extra_metadata.get('custom_program_name', '') }}" required class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+        </div>
+      </div>
+      {% else %}
+      <!-- Username -->
+      <div>
+        <label for="username" class="block text-sm font-semibold text-slate-700">Username / Member ID</label>
+        <p class="mt-1 text-xs text-slate-400">The login identifier used on the provider's website.</p>
+        <div class="mt-2">
+          <input type="text" name="username" id="username" value="{{ account.username }}" required class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+        </div>
+      </div>
+
+      <!-- Password -->
+      <div>
+        <label for="password" class="block text-sm font-semibold text-slate-700">Password / PIN</label>
+        <p class="mt-1 text-xs text-slate-400">Your password will be securely re-encrypted locally in zero-knowledge.</p>
+        <div class="mt-2 relative rounded-md shadow-sm">
+          <input type="password" name="password" id="password" value="{{ decrypted_password }}" required class="block w-full rounded-lg border border-slate-200 px-3 py-2 pr-10 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+          <div class="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer" onclick="togglePasswordVisibility()">
+            <svg id="eyeIcon" class="h-5 w-5 text-slate-400 hover:text-slate-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Last Name -->
+      <div>
+        <label for="meta_last_name" class="block text-sm font-semibold text-slate-700">
+          Last Name {% if account.provider.plugin_name == 'hyatt' %}<span class="text-rose-500 font-bold">(Required for World of Hyatt)</span>{% endif %}
+        </label>
+        <p class="mt-1 text-xs text-slate-400">Optional, but required for some providers like Hyatt.</p>
+        <div class="mt-2">
+          <input type="text" name="meta_last_name" id="meta_last_name" value="{{ account.extra_metadata.get('last_name', '') }}" {% if account.provider.plugin_name == 'hyatt' %}required{% endif %} class="block w-full rounded-lg border {% if account.provider.plugin_name == 'hyatt' %}border-rose-200 focus:ring-rose-500 focus:border-rose-500{% else %}border-slate-200 focus:ring-primary focus:border-primary{% endif %} px-3 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 sm:text-sm shadow-sm transition-shadow">
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Exemption Bypass Toggle -->
+      <div class="relative flex items-start mt-4">
+        <div class="flex h-6 items-center">
+          <input id="has_exemption" name="has_exemption" type="checkbox" value="y" {% if account.has_exemption %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+        </div>
+        <div class="ml-3 text-sm leading-6">
+          <label for="has_exemption" class="font-medium text-slate-900">Exempt from Expiration</label>
+          <p class="text-slate-500 text-xs">Check this if you hold a co-branded credit card, lifetime status, or other exemption that keeps your points/miles from expiring.</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-end gap-3 border-t border-slate-100 pt-6">
+        <a href="{{ url_for('account_detail', account_id=account.id) }}" class="inline-flex items-center justify-center rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 transition-colors">
+          Cancel
+        </a>
+        <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors">
+          Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Danger Zone -->
+  <div class="mt-8 bg-white rounded-xl shadow-sm border border-rose-100 p-6 sm:p-8">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-col gap-1">
+        <h3 class="text-sm font-bold text-rose-800">Danger Zone</h3>
+        <p class="text-xs text-rose-600">Permanently delete this account connection, saved credentials, point history, and active certificates.</p>
+      </div>
+      <div>
+        <form action="{{ url_for('delete_account', account_id=account.id) }}" method="POST" onsubmit="return confirm('Are you absolutely sure you want to delete this account? This will permanently delete all balance history, certificates, and saved credentials. This action cannot be undone.');">
+          <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 transition-colors">
+            Delete Account
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('password');
+    const eyeIcon = document.getElementById('eyeIcon');
+    if (passwordInput.type === 'password') {
+      passwordInput.type = 'text';
+      // Change icon to eye-slash
+      eyeIcon.innerHTML = `
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+      `;
+    } else {
+      passwordInput.type = 'password';
+      // Change icon back to eye
+      eyeIcon.innerHTML = `
+        <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      `;
+    }
+  }
+</script>
+{% endblock %}

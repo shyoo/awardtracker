@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+  <div class="sm:flex sm:items-center">
+    <div class="sm:flex-auto">
+      <h1 class="text-2xl font-semibold leading-6 text-slate-900">Manage People</h1>
+      <p class="mt-2 text-sm text-slate-700">Add or edit family members to group your accounts.</p>
+    </div>
+    <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+      <a href="{{ url_for('index') }}" class="block rounded-md bg-white px-3 py-2 text-center text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50">Back to Dashboard</a>
+    </div>
+  </div>
+
+  <div class="mt-8 flex flex-col md:flex-row gap-8">
+    
+    <div class="md:w-1/3">
+      <div class="bg-white shadow sm:rounded-lg p-6">
+        <h2 class="text-lg font-medium text-slate-900 mb-4">Add Person</h2>
+        <form action="{{ url_for('people') }}" method="POST" class="space-y-4">
+          <div>
+            <label for="name" class="block text-sm font-medium leading-6 text-slate-900">Name</label>
+            <div class="mt-2">
+              <input type="text" name="name" id="name" required class="block w-full rounded-md border-0 py-1.5 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary sm:text-sm sm:leading-6">
+            </div>
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium leading-6 text-slate-900">Badge Color</label>
+            <div class="mt-2 flex items-center gap-3">
+              <input type="color" name="color" id="add_color" value="#6366f1" class="h-9 w-9 rounded-md border-0 p-0 cursor-pointer shadow-sm">
+              <div class="flex flex-wrap gap-1.5">
+                {% for color in ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'] %}
+                <button type="button" onclick="document.getElementById('add_color').value='{{ color }}'" 
+                        class="h-6 w-6 rounded-full border border-slate-200 shadow-sm hover:scale-105 transition-transform focus:outline-none" 
+                        style="background-color: {{ color }}"></button>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          
+          <button type="submit" class="w-full flex justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-primary-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Add Person</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="md:w-2/3">
+      <div class="bg-white shadow sm:rounded-lg overflow-hidden">
+        <ul role="list" class="divide-y divide-slate-200">
+          {% for p in people %}
+          <li class="p-6">
+            <div class="flex items-center justify-between gap-4">
+              <form action="{{ url_for('edit_person', person_id=p.id) }}" method="POST" class="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                <input type="text" name="name" value="{{ p.name }}" required class="block w-full max-w-xs rounded-md border-0 py-1.5 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary sm:text-sm sm:leading-6">
+                
+                <div class="flex items-center gap-2">
+                  <input type="color" name="color" id="edit_color_{{ p.id }}" value="{{ p.color or '#6366f1' }}" class="h-8 w-8 rounded-md border-0 p-0 cursor-pointer shadow-sm">
+                  <div class="flex gap-1">
+                    {% for color in ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'] %}
+                    <button type="button" onclick="document.getElementById('edit_color_{{ p.id }}').value='{{ color }}'" 
+                            class="h-5 w-5 rounded-full border border-slate-200 shadow-sm focus:outline-none" 
+                            style="background-color: {{ color }}"></button>
+                    {% endfor %}
+                  </div>
+                </div>
+                
+                <button type="submit" class="text-sm font-semibold text-primary hover:text-primary-dark sm:ml-2">Save</button>
+              </form>
+              <form action="{{ url_for('delete_person', person_id=p.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this person? Their accounts will remain but become unassigned.');" class="flex-none">
+                <button type="submit" class="text-sm font-semibold text-red-600 hover:text-red-800">Delete</button>
+              </form>
+            </div>
+          </li>
+          {% else %}
+          <li class="p-6 text-center text-sm text-slate-500">No people added yet.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
