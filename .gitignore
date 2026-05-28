@@ -4,6 +4,7 @@ browser_profiles/
 backups/
 dist/
 downloaded_files/
+internal_docs/
 scratch/
 profiles/
 venv/
