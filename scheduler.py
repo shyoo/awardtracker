@@ -10,7 +10,6 @@ from config import write_dir
 
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
 log_file = os.path.join(write_dir, 'scraper_debug.log')
-
 log_handler = RotatingFileHandler(log_file, mode='a', maxBytes=5*1024*1024, backupCount=2, encoding='utf-8', delay=0)
 log_handler.setFormatter(log_formatter)
 log_handler.setLevel(logging.INFO)
