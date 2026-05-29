@@ -121,8 +121,10 @@ If you are a developer and want to clone and compile the application standalone 
      ./run.sh
      ```
 
-### 3. Standalone Executable Compilation
-We have provided streamlined builder scripts that compile the Flask app, database migrations, static assets, and the tray daemon into a single standalone executable or bundle using PyInstaller:
+### 3. Standalone Compilation & Release Packaging
+We have provided streamlined build and release tools that compile the Flask app, database migrations, static assets, and the tray daemon into standalone binaries and native setup installers:
+
+#### Standalone Binary Compilation
 * **Windows**:
   ```powershell
   powershell -ExecutionPolicy Bypass -File build-win.ps1
@@ -133,6 +135,18 @@ We have provided streamlined builder scripts that compile the Flask app, databas
   ./build.sh
   ```
   Generates a native app bundle at `dist/AwardTracker.app` (~54 MB) and standalone binary at `dist/awardtracker`.
+
+#### Complete Release Packaging (Setup Installer & Portable Zip)
+* **Windows (Setup Wizard)**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File release.ps1
+  ```
+  Generates a Setup Wizard installer (`dist/awardtracker-setup.exe`) and portable zip (`dist/awardtracker-portable.zip`).
+* **macOS (Disk Image DMG)**:
+  ```bash
+  ./release.sh
+  ```
+  Generates a native Drag-and-Drop Disk Image installer (`dist/AwardTracker-Setup.dmg`) and portable zip (`dist/awardtracker-portable.zip`).
 
 ### 4. Running the Tests
 To verify all APIs, naming overrides, settings parameters, and plugin infrastructure are fully functional, execute our premium color-coded test runners:

@@ -11,9 +11,10 @@ import sys
 import json
 
 def load_settings():
+    from config import write_dir
+    settings_path = os.path.join(write_dir, 'settings.json')
     if getattr(sys, 'frozen', False):
-        write_dir = os.path.dirname(sys.executable)
-        user_settings_path = os.path.join(write_dir, 'settings.json')
+        user_settings_path = settings_path
         if not os.path.exists(user_settings_path):
             default_path = os.path.join(sys._MEIPASS, 'settings.json')
             if os.path.exists(default_path):
@@ -33,10 +34,11 @@ def load_settings():
         return {}
 
 def load_valuations():
+    from config import write_dir
+    val_path = os.path.join(write_dir, 'valuations.json')
+    # If user hasn't created a local valuations.json, copy default from bundle
     if getattr(sys, 'frozen', False):
-        write_dir = os.path.dirname(sys.executable)
-        user_val_path = os.path.join(write_dir, 'valuations.json')
-        # If user hasn't created a local valuations.json, copy default from bundle
+        user_val_path = val_path
         if not os.path.exists(user_val_path):
             default_path = os.path.join(sys._MEIPASS, 'valuations.json')
             if os.path.exists(default_path):
@@ -54,6 +56,7 @@ def load_valuations():
             return json.load(f)
     except Exception:
         return {}
+
 
 
 def set_app_autostart(enabled: bool):

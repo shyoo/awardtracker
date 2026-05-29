@@ -43,6 +43,28 @@ if [ $RESULT -eq 0 ]; then
     echo -e "${GREEN}==================================================${NC}"
     if [ "$(uname)" == "Darwin" ]; then
         echo -e "Native macOS App Bundle: ${GREEN}dist/AwardTracker.app${NC}"
+        echo -e "${YELLOW}Packaging into DMG Installer...${NC}"
+        
+        if command -v create-dmg &> /dev/null; then
+            create-dmg \
+              --volname "Award Tracker" \
+              --window-pos 200 120 \
+              --window-size 600 400 \
+              --icon-size 100 \
+              --icon "AwardTracker.app" 150 190 \
+              --hide-extension "AwardTracker.app" \
+              --app-drop-link 450 190 \
+              "dist/AwardTracker.dmg" \
+              "dist/AwardTracker.app"
+        else
+            echo "create-dmg not found, using hdiutil..."
+            mkdir -p dist/dmg_root
+            cp -R dist/AwardTracker.app dist/dmg_root/
+            ln -s /Applications dist/dmg_root/Applications
+            hdiutil create -volname "Award Tracker" -srcfolder dist/dmg_root -ov -format UDZO dist/AwardTracker.dmg
+            rm -rf dist/dmg_root
+        fi
+        echo -e "Native macOS DMG Installer: ${GREEN}dist/AwardTracker.dmg${NC}"
     fi
     echo -e "Standalone Binary: ${GREEN}dist/awardtracker${NC}"
 else
