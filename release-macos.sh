@@ -13,14 +13,14 @@ echo -e "${CYAN}      Award Tracker Release Builder Tool (macOS)   ${NC}"
 echo -e "${CYAN}==================================================${NC}"
 
 # 1. Verify build script
-if [ ! -f "./build.sh" ]; then
-    echo -e "${RED}Error: Build script './build.sh' not found.${NC}"
+if [ ! -f "./build-macos.sh" ]; then
+    echo -e "${RED}Error: Build script './build-macos.sh' not found.${NC}"
     exit 1
 fi
 
-# 2. Call build.sh to compile application
-echo -e "${YELLOW}Step 1: Compiling application via build.sh...${NC}"
-./build.sh
+# 2. Call build-macos.sh to compile application
+echo -e "${YELLOW}Step 1: Compiling application via build-macos.sh...${NC}"
+./build-macos.sh
 RESULT=$?
 if [ $RESULT -ne 0 ]; then
     echo -e "${RED}Error: Compilation failed.${NC}"

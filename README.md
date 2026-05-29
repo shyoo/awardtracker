@@ -132,19 +132,19 @@ We have provided streamlined build and release tools that compile the Flask app,
   Generates a standalone binary at `dist/awardtracker.exe` (~42 MB).
 * **macOS**:
   ```bash
-  ./build.sh
+  ./build-macos.sh
   ```
   Generates a native app bundle at `dist/AwardTracker.app` (~54 MB) and standalone binary at `dist/awardtracker`.
 
 #### Complete Release Packaging (Setup Installer & Portable Zip)
 * **Windows (Setup Wizard)**:
   ```powershell
-  powershell -ExecutionPolicy Bypass -File release.ps1
+  powershell -ExecutionPolicy Bypass -File release-win.ps1
   ```
   Generates a Setup Wizard installer (`dist/awardtracker-setup.exe`) and portable zip (`dist/awardtracker-portable.zip`).
 * **macOS (Disk Image DMG)**:
   ```bash
-  ./release.sh
+  ./release-macos.sh
   ```
   Generates a native Drag-and-Drop Disk Image installer (`dist/AwardTracker-Setup.dmg`) and portable zip (`dist/awardtracker-portable.zip`).
 
