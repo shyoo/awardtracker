@@ -11,9 +11,10 @@ import sys
 import json
 
 def load_settings():
+    from config import write_dir
+    settings_path = os.path.join(write_dir, 'settings.json')
     if getattr(sys, 'frozen', False):
-        write_dir = os.path.dirname(sys.executable)
-        user_settings_path = os.path.join(write_dir, 'settings.json')
+        user_settings_path = settings_path
         if not os.path.exists(user_settings_path):
             default_path = os.path.join(sys._MEIPASS, 'settings.json')
             if os.path.exists(default_path):
@@ -33,10 +34,11 @@ def load_settings():
         return {}
 
 def load_valuations():
+    from config import write_dir
+    val_path = os.path.join(write_dir, 'valuations.json')
+    # If user hasn't created a local valuations.json, copy default from bundle
     if getattr(sys, 'frozen', False):
-        write_dir = os.path.dirname(sys.executable)
-        user_val_path = os.path.join(write_dir, 'valuations.json')
-        # If user hasn't created a local valuations.json, copy default from bundle
+        user_val_path = val_path
         if not os.path.exists(user_val_path):
             default_path = os.path.join(sys._MEIPASS, 'valuations.json')
             if os.path.exists(default_path):
@@ -56,39 +58,83 @@ def load_valuations():
         return {}
 
 
-def set_windows_autostart(enabled: bool):
+
+def set_app_autostart(enabled: bool):
     import platform
-    if platform.system() != "Windows":
-        return
-    try:
-        import winreg
-        import sys
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        app_name = "AwardTracker"
-        
-        if enabled:
-            exe_path = sys.executable
-            if getattr(sys, 'frozen', False):
-                command = f'"{exe_path}" --startup'
+    import sys
+    os_name = platform.system()
+    if os_name == "Windows":
+        try:
+            import winreg
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            app_name = "AwardTracker"
+            
+            if enabled:
+                exe_path = sys.executable
+                if getattr(sys, 'frozen', False):
+                    command = f'"{exe_path}" --startup'
+                else:
+                    # Resolve script path
+                    script_path = os.path.abspath(sys.argv[0])
+                    if script_path.endswith('app.py'):
+                        script_path = script_path.replace('app.py', 'tray.py')
+                    command = f'"{exe_path}" "{script_path}" --startup'
+                    
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, command)
+                winreg.CloseKey(key)
             else:
-                # Resolve script path
-                script_path = os.path.abspath(sys.argv[0])
-                if script_path.endswith('app.py'):
-                    script_path = script_path.replace('app.py', 'tray.py')
-                command = f'"{exe_path}" "{script_path}" --startup'
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+                try:
+                    winreg.DeleteValue(key, app_name)
+                except FileNotFoundError:
+                    pass
+                winreg.CloseKey(key)
+        except Exception as e:
+            print(f"Error setting Windows autostart: {str(e)}")
+            
+    elif os_name == "Darwin":
+        try:
+            plist_dir = os.path.expanduser("~/Library/LaunchAgents")
+            plist_path = os.path.join(plist_dir, "com.awardtracker.plist")
+            
+            if enabled:
+                os.makedirs(plist_dir, exist_ok=True)
+                exe_path = sys.executable
+                if getattr(sys, 'frozen', False):
+                    # In a bundled macOS app (AwardTracker.app/Contents/MacOS/awardtracker)
+                    arguments = [exe_path, "--startup"]
+                else:
+                    script_path = os.path.abspath(sys.argv[0])
+                    if script_path.endswith('app.py'):
+                        script_path = script_path.replace('app.py', 'tray.py')
+                    arguments = [sys.executable, script_path, "--startup"]
                 
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
-            winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, command)
-            winreg.CloseKey(key)
-        else:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
-            try:
-                winreg.DeleteValue(key, app_name)
-            except FileNotFoundError:
-                pass
-            winreg.CloseKey(key)
-    except Exception as e:
-        print(f"Error setting autostart: {str(e)}")
+                # Create a robust Launch Agent plist
+                arguments_xml = "".join(f"        <string>{arg}</string>\n" for arg in arguments)
+                plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.awardtracker.app</string>
+    <key>ProgramArguments</key>
+    <array>
+{arguments_xml}    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>"""
+                with open(plist_path, "w") as f:
+                    f.write(plist_content.strip())
+            else:
+                if os.path.exists(plist_path):
+                    os.remove(plist_path)
+        except Exception as e:
+            print(f"Error setting macOS autostart: {str(e)}")
+
 
 
 def format_time_remaining(days):
@@ -974,8 +1020,8 @@ def create_app(config_class=Config):
                     db.session.add(setting)
             db.session.commit()
             
-            # Apply Windows Startup registry adjustments
-            set_windows_autostart(launch_on_boot == 'true')
+            # Apply cross-platform Startup adjustments
+            set_app_autostart(launch_on_boot == 'true')
             
             flash('Settings saved successfully.')
             return redirect(url_for('settings'))

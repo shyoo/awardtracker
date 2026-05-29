@@ -4,6 +4,20 @@ import threading
 import webbrowser
 import time
 import math
+import subprocess
+import copy
+
+if getattr(sys, 'frozen', False) and sys.platform == 'darwin':
+    # Remove DYLD_LIBRARY_PATH to prevent child processes (like Chrome in SeleniumBase or /usr/bin/open) from crashing
+    os.environ.pop("DYLD_LIBRARY_PATH", None)
+    os.environ.pop("LD_LIBRARY_PATH", None)
+
+if getattr(sys, 'frozen', False):
+    # When launched from a .app bundle or frozen exe, CWD may be '/' (read-only on macOS)
+    # or an unpredictable location on Windows. Change to the writable user data directory
+    # so that SeleniumBase's relative 'downloaded_files' folder is created somewhere writable.
+    from config import write_dir
+    os.chdir(write_dir)
 from PIL import Image, ImageDraw
 import pystray
 import socket
@@ -77,8 +91,18 @@ def start_flask():
     # use_reloader=False is mandatory when running in secondary thread
     app.run(debug=False, port=PORT, use_reloader=False)
 
+def open_url_safely(url):
+    if sys.platform == 'darwin':
+        env = copy.deepcopy(os.environ)
+        env.pop('DYLD_LIBRARY_PATH', None)
+        subprocess.Popen(['open', url], env=env)
+    elif sys.platform == 'win32':
+        os.startfile(url)
+    else:
+        webbrowser.open(url)
+
 def open_browser(icon, item):
-    webbrowser.open(f"http://127.0.0.1:{PORT}")
+    open_url_safely(f"http://127.0.0.1:{PORT}")
 
 def run_background_sync():
     from notifier import send_desktop_notification
@@ -134,7 +158,7 @@ def main():
             should_open = (auto_open_setting.value == 'true') if auto_open_setting else True
             
         if should_open:
-            webbrowser.open(f"http://127.0.0.1:{PORT}")
+            open_url_safely(f"http://127.0.0.1:{PORT}")
             
     # Set up System Tray icon
     menu = pystray.Menu(

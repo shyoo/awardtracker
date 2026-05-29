@@ -6,17 +6,13 @@ import sys
 from datetime import datetime
 
 # Setup rotating log
-if getattr(sys, 'frozen', False):
-    write_dir = os.path.dirname(sys.executable)
-else:
-    write_dir = os.path.dirname(os.path.abspath(__file__))
+from config import write_dir
 
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
 log_file = os.path.join(write_dir, 'scraper_debug.log')
 log_handler = RotatingFileHandler(log_file, mode='a', maxBytes=5*1024*1024, backupCount=2, encoding='utf-8', delay=0)
 log_handler.setFormatter(log_formatter)
 log_handler.setLevel(logging.INFO)
-
 
 app_log = logging.getLogger('awardtracker')
 app_log.setLevel(logging.INFO)
@@ -204,11 +200,6 @@ def backup_database():
     app_log.info("Starting automated daily database backup...")
     import shutil
     
-    if getattr(sys, 'frozen', False):
-        write_dir = os.path.dirname(sys.executable)
-    else:
-        write_dir = os.path.dirname(os.path.abspath(__file__))
-        
     db_file = os.path.join(write_dir, 'awardtracker.db')
     backup_dir = os.path.join(write_dir, 'backups')
 

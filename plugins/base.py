@@ -161,8 +161,26 @@ def _apply_selenium_patches():
             
             setattr(BaseCase, method_name, make_wrapper(original))
 
+def _apply_sb_context_patch():
+    import sys
+    if getattr(sys, 'frozen', False):
+        try:
+            import os
+            from config import write_dir
+            from seleniumbase.fixtures import constants
+            
+            # Re-route standard downloads/archives folder constants to absolute writeable paths
+            constants.Files.DOWNLOADS_FOLDER = os.path.join(write_dir, "downloaded_files")
+            constants.Files.ARCHIVED_DOWNLOADS_FOLDER = os.path.join(write_dir, "archived_files")
+            
+            os.makedirs(constants.Files.DOWNLOADS_FOLDER, exist_ok=True)
+            os.makedirs(constants.Files.ARCHIVED_DOWNLOADS_FOLDER, exist_ok=True)
+        except Exception as e:
+            print(f"Error redirecting SeleniumBase constants: {e}")
+
 try:
     _apply_selenium_patches()
+    _apply_sb_context_patch()
 except Exception:
     pass
 
