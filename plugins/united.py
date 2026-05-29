@@ -18,25 +18,58 @@ class UnitedAirlinesPlugin(ProviderPlugin):
         balance, status = None, None
         
         try:
+            import re
             html = sb.get_page_source()
             soup = BeautifulSoup(html, "html.parser")
             
             # 1. Search for miles balance in the DOM
-            # We look for spans, divs, or paragraphs that contain the word "miles" or "balance"
-            # and have a clear numeric value
             candidates = []
-            for el in soup.find_all(["span", "div", "p", "strong", "h1", "h2", "h3"]):
-                text = el.get_text().strip()
-                if "miles" in text.lower() and len(text) < 50:
-                    clean_points = "".join(filter(str.isdigit, text))
-                    if clean_points:
-                        candidates.append((int(clean_points), text))
+            
+            # Strategy A: Check for elements with class containing 'mileageBalance' or id/testid containing 'mileage'
+            for elem in soup.find_all(class_=re.compile(r'(?:mileageBalance|milesBalance|mileage-balance)', re.I)):
+                text = elem.get_text().strip()
+                m = re.search(r'([\d,]+)', text)
+                if m:
+                    val = int(m.group(1).replace(",", ""))
+                    candidates.append((val, text))
+            
+            # Strategy B: Find text labels like "MileagePlus balance", "Mileage balance", "Miles balance" and extract number
+            if not candidates:
+                for label_text in ["MileagePlus balance", "Mileage balance", "Miles balance", "Account balance"]:
+                    label_elem = soup.find(string=re.compile(label_text, re.I))
+                    if label_elem:
+                        parent = label_elem.parent
+                        if parent:
+                            m = re.search(r'([\d,]+)', parent.get_text())
+                            if m:
+                                candidates.append((int(m.group(1).replace(",", "")), parent.get_text()))
+                            else:
+                                sibling = parent.find_next_sibling()
+                                if sibling:
+                                    m = re.search(r'([\d,]+)', sibling.get_text())
+                                    if m:
+                                        candidates.append((int(m.group(1).replace(",", "")), sibling.get_text()))
+            
+            # Strategy C: Standard scan elements with "miles" or "balance"
+            if not candidates:
+                for el in soup.find_all(["span", "div", "p", "strong", "h1", "h2", "h3"]):
+                    text = el.get_text().strip()
+                    if ("miles" in text.lower() or "balance" in text.lower()) and len(text) < 50:
+                        # Extract the first contiguous sequence of digits/commas to avoid concatenating unrelated digits (e.g. trailing '0')
+                        m = re.search(r'([\d,]+)', text)
+                        if m:
+                            val = int(m.group(1).replace(",", ""))
+                            candidates.append((val, text))
             
             if candidates:
-                # Prioritize numbers that are likely the main balance (e.g. positive and realistic)
-                # Sort by balance descending to find the prominent number or pick the first candidate
-                # Usually the main balance is the first or largest number
-                balance = candidates[0][0]
+                # Filter out unrealistic values if possible, e.g. choose the first candidate that is non-zero
+                # Usually the main balance is the first valid candidate
+                for val, text in candidates:
+                    if val > 0:
+                        balance = val
+                        break
+                if balance is None:
+                    balance = candidates[0][0]
                 
             # 2. Extract elite status tier
             status = "Member"
@@ -228,6 +261,18 @@ class UnitedAirlinesPlugin(ProviderPlugin):
                 sb.open("https://www.united.com/en/us/myunited")
                 sb.sleep(12)
                 
+                # Check for United session timeout/expiration modal and clear cookies if found
+                try:
+                    html = sb.get_page_source().lower()
+                    if "session timed out" in html or "session expired" in html or "sign in again" in html:
+                        print("United Airlines session expired modal/text detected. Clearing cookies and local storage to start a fresh login flow...")
+                        sb.delete_all_cookies()
+                        sb.execute_script("window.localStorage.clear(); window.sessionStorage.clear();")
+                        sb.open("https://www.united.com/en/us/myunited")
+                        sb.sleep(8)
+                except Exception as e:
+                    print(f"Error handling session expired scenario in fetch_data: {e}")
+                
                 # Check if we are redirected to a login page
                 curr_url = sb.get_current_url()
                 if "myunited" in curr_url and not sb.is_element_visible("input#password") and not sb.is_element_visible("input#MPIDEmailField"):
@@ -293,6 +338,18 @@ class UnitedAirlinesPlugin(ProviderPlugin):
         with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
             sb.open("https://www.united.com/en/us/myunited")
             sb.sleep(4)
+            
+            # Check for United session timeout/expiration modal and clear cookies if found
+            try:
+                html = sb.get_page_source().lower()
+                if "session timed out" in html or "session expired" in html or "sign in again" in html:
+                    print("United Airlines session expired modal/text detected. Clearing cookies and local storage to start a fresh login flow...")
+                    sb.delete_all_cookies()
+                    sb.execute_script("window.localStorage.clear(); window.sessionStorage.clear();")
+                    sb.open("https://www.united.com/en/us/myunited")
+                    sb.sleep(4)
+            except Exception as e:
+                print(f"Error handling session expired scenario in interactive_login: {e}")
             
             # Prefill credentials if form is visible
             try:

@@ -199,5 +199,30 @@ class TestAPIsAndPlugins(unittest.TestCase):
             "kwargs in interactive_login must be VAR_KEYWORD"
         )
 
+    def test_united_extraction_inflation_prevention(self):
+        plugin = plugin_manager.get_plugin('united')
+        self.assertIsNotNone(plugin)
+        
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+                
+        # Simulate HTML that used to cause 10x inflation due to digits concatenation
+        # (e.g. 10,000 Miles 0 pending)
+        test_html = """
+        <html>
+            <body>
+                <span class="app-components-MyUnited-Card-MemberCard-styles__mileageBalance___3a">
+                    10,000 Miles 0
+                </span>
+            </body>
+        </html>
+        """
+        mock_sb = MockSB(test_html)
+        balance, status = plugin._extract_data(mock_sb)
+        self.assertEqual(balance, 10000)
+
 if __name__ == '__main__':
     unittest.main()
