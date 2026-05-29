@@ -76,7 +76,7 @@ cp -R "$APP_PATH" "$DMG_TEMP/"
 # Create standard Applications symlink inside DMG staging area for drag-and-drop installation
 ln -s /Applications "$DMG_TEMP/Applications"
 
-DMG_OUT="dist/awardtracker-MacOs-Setup.dmg"
+DMG_OUT="dist/awardtracker-macos-setup.dmg"
 rm -f "$DMG_OUT"
 
 echo -e "Creating disk image (hdiutil)..."
