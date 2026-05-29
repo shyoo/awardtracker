@@ -11,7 +11,6 @@ venv/
 *.log
 awardtracker.db
 scraper_debug.log
-
 .DS_Store
 ._.DS_Store
 **/.DS_Store
