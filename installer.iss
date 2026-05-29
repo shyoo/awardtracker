@@ -3,13 +3,13 @@
 
 [Setup]
 AppName=Award Tracker
-AppVersion=1.1.0
+AppVersion=1.2.0
 AppPublisher=Sunghwan Yoo
 DefaultDirName={userappdata}\AwardTracker
 DefaultGroupName=Award Tracker
 DisableProgramGroupPage=yes
 OutputDir=dist
-OutputBaseFilename=awardtracker-setup
+OutputBaseFilename=awardtracker-win64-setup
 SetupIconFile=
 Compression=lzma
 SolidCompression=yes
