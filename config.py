@@ -10,7 +10,7 @@ if getattr(sys, 'frozen', False):
         write_dir = os.path.join(base, "AwardTracker")
     elif os_name == "Darwin":
         write_dir = os.path.expanduser("~/Library/Application Support/AwardTracker")
-    else:
+    else:  # Linux / POSIX fallback
         write_dir = os.path.expanduser("~/.config/awardtracker")
 else:
     basedir = os.path.abspath(os.path.dirname(__file__))
