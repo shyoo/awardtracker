@@ -146,7 +146,7 @@ We have provided streamlined build and release tools that compile the Flask app,
   ```bash
   ./release-macos.sh
   ```
-  Generates a native Drag-and-Drop Disk Image installer (`dist/AwardTracker-Setup.dmg`) and portable zip (`dist/awardtracker-portable.zip`).
+  Generates a native Drag-and-Drop Disk Image installer (`dist/awardtracker-MacOs-Setup.dmg`) and portable zip (`dist/awardtracker-macos-portable.zip`).
 
 ### 4. Running the Tests
 To verify all APIs, naming overrides, settings parameters, and plugin infrastructure are fully functional, execute our premium color-coded test runners:

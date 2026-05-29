@@ -52,9 +52,9 @@ if [ -f "settings.json" ]; then
     cp "settings.json" "$PORTABLE_DIR/settings.json"
 fi
 
-PORTABLE_ZIP="dist/awardtracker-portable.zip"
+PORTABLE_ZIP="dist/awardtracker-macos-portable.zip"
 rm -f "$PORTABLE_ZIP"
-(cd dist && zip -r -q "awardtracker-portable.zip" "AwardTracker-Portable")
+(cd dist && zip -r -q "awardtracker-macos-portable.zip" "AwardTracker-Portable")
 rm -rf "$PORTABLE_DIR"
 
 if [ -f "$PORTABLE_ZIP" ]; then
@@ -76,7 +76,7 @@ cp -R "$APP_PATH" "$DMG_TEMP/"
 # Create standard Applications symlink inside DMG staging area for drag-and-drop installation
 ln -s /Applications "$DMG_TEMP/Applications"
 
-DMG_OUT="dist/AwardTracker-Setup.dmg"
+DMG_OUT="dist/awardtracker-MacOs-Setup.dmg"
 rm -f "$DMG_OUT"
 
 echo -e "Creating disk image (hdiutil)..."

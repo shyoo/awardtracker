@@ -15,7 +15,6 @@ log_handler = RotatingFileHandler(log_file, mode='a', maxBytes=5*1024*1024, back
 log_handler.setFormatter(log_formatter)
 log_handler.setLevel(logging.INFO)
 
-
 app_log = logging.getLogger('awardtracker')
 app_log.setLevel(logging.INFO)
 app_log.addHandler(log_handler)
