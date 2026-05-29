@@ -176,5 +176,28 @@ class TestAPIsAndPlugins(unittest.TestCase):
             self.assertTrue(hasattr(plugin, 'fetch_data'))
             self.assertTrue(hasattr(plugin, 'interactive_login'))
 
+    def test_virgin_plugin_kwargs(self):
+        import inspect
+        plugin = plugin_manager.get_plugin('virgin')
+        self.assertIsNotNone(plugin)
+        
+        # Verify fetch_data signature accepts **kwargs
+        fetch_sig = inspect.signature(plugin.fetch_data)
+        self.assertIn('kwargs', fetch_sig.parameters, "virgin.fetch_data must accept **kwargs")
+        self.assertEqual(
+            fetch_sig.parameters['kwargs'].kind, 
+            inspect.Parameter.VAR_KEYWORD,
+            "kwargs in fetch_data must be VAR_KEYWORD"
+        )
+        
+        # Verify interactive_login signature accepts **kwargs
+        login_sig = inspect.signature(plugin.interactive_login)
+        self.assertIn('kwargs', login_sig.parameters, "virgin.interactive_login must accept **kwargs")
+        self.assertEqual(
+            login_sig.parameters['kwargs'].kind, 
+            inspect.Parameter.VAR_KEYWORD,
+            "kwargs in interactive_login must be VAR_KEYWORD"
+        )
+
 if __name__ == '__main__':
     unittest.main()

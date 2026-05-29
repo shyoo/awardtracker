@@ -1,6 +1,7 @@
 from typing import Dict, Any, Tuple, Optional
 from .base import ProviderPlugin, PluginError, InteractionRequiredError
 from seleniumbase import SB
+from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 import time
 import re
@@ -247,7 +248,7 @@ class VirginAtlanticPlugin(ProviderPlugin):
             except Exception:
                 pass
 
-    def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
+    def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
         result = {
             "balance": 0,
             "status": "Member",
@@ -357,14 +358,51 @@ class VirginAtlanticPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Virgin Atlantic scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
         """
         Launches browser in headed mode to let the user perform interactive login.
         Automatically closes when successful dashboard loaded is detected.
         """
         with SB(uc=True, user_data_dir=profile_dir) as sb:
+            # Step 1: Open homepage first to establish solid WAF session state and cookies
+            print("Opening Virgin Atlantic home page to initialize session...")
             sb.open("https://www.virginatlantic.com/")
+            sb.sleep(6)
+            
+            # Accept cookies if banner is visible
+            cookie_selectors = [
+                "button#ensAcceptAll",
+                "button:contains('Accept All')",
+                "button:contains('Accept all')",
+                "button:contains('예, 동의합니다')",
+                "#ensAcceptAll"
+            ]
+            for sel in cookie_selectors:
+                try:
+                    if sb.is_element_visible(sel):
+                        sb.click(sel)
+                        sb.sleep(1)
+                        break
+                except Exception:
+                    pass
+              # Step 2: Navigate to account overview to trigger clean B2C login page redirect
+            print("Navigating to account overview to trigger login gateway...")
+            sb.open("https://www.virginatlantic.com/flying-club/account/overview")
             sb.sleep(5)
+            
+            # Handle B2C JS block if present immediately after navigation
+            for attempt in range(5):
+                try:
+                    html = sb.get_page_source()
+                    if "block JavaScript" in html and not sb.is_element_present("input#signInName"):
+                        print(f"JavaScript blocked on B2C login gateway during interactive login (attempt {attempt+1}/5). Reconnecting...")
+                        sb.sleep(2)
+                        sb.uc_open_with_reconnect(sb.get_current_url(), 8)
+                        sb.sleep(8)
+                    else:
+                        break
+                except Exception:
+                    break
             
             print("Please perform interactive login. Monitoring dashboard navigation...")
             
@@ -374,13 +412,13 @@ class VirginAtlanticPlugin(ProviderPlugin):
             
             while time.time() - start_time < 300:  # 5 minutes timeout
                 try:
-                    # Check for B2C JS block and automatically bypass it for the user
+                    # Detect and handle WAF / JavaScript blocks during interactive login
                     html = sb.get_page_source()
-                    if "block JavaScript" in html and not sb.is_element_present("input#signInName"):
-                        print("JavaScript blocked detected during interactive login. Reconnecting...")
-                        sb.sleep(1)
+                    if "block JavaScript" in html and not any(sb.is_element_present(sel) for sel in ["input#signInName", "input[name='signInName']", "input#email", "input#password"]):
+                        print("JavaScript blocked during interactive login. Reconnecting...")
+                        sb.sleep(2)
                         sb.uc_open_with_reconnect(sb.get_current_url(), 8)
-                        sb.sleep(5)
+                        sb.sleep(8)
                         continue
                         
                     # If fields are visible and we haven't prefilled yet, prefill them!
@@ -390,8 +428,8 @@ class VirginAtlanticPlugin(ProviderPlugin):
                             self._fill_login_form(sb, username, password, auto_submit=False)
                             prefilled = True
                             print("Pre-filled credentials successfully during interactive login!")
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            print(f"Credentials pre-filling failed (will retry): {e}")
                             
                     current_url = sb.get_current_url()
                     parsed = urlparse(current_url)
@@ -404,8 +442,15 @@ class VirginAtlanticPlugin(ProviderPlugin):
                             print("Interactive login successful. Closing browser...")
                             sb.sleep(5)
                             break
-                except Exception:
-                    pass
+                except WebDriverException as e:
+                    err_msg = str(e).lower()
+                    if "no such window" in err_msg or "invalid session id" in err_msg or "closed" in err_msg:
+                        print("Interactive login browser window was closed by the user.")
+                        break
+                    print(f"WebDriver exception during interactive login (will retry): {e}")
+                except Exception as e:
+                    print(f"Unexpected exception during interactive login (will retry): {e}")
+                
                 time.sleep(4)
                 
             if not success:
