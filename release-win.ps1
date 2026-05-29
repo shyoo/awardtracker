@@ -1,5 +1,5 @@
 # Award Tracker - Premium Release Packaging Script
-# Usage: .\release.ps1
+# Usage: .\release-win.ps1
 
 Clear-Host
 Write-Host "==================================================" -ForegroundColor Cyan
@@ -10,8 +10,8 @@ $VenvPath = "venv\Scripts\Activate.ps1"
 $SpecFile = "awardtracker.spec"
 $IssFile = "installer.iss"
 $DistDir = "dist"
-$PortableZip = "dist\awardtracker-portable.zip"
-$SetupExe = "dist\awardtracker-setup.exe"
+$PortableZip = "dist\awardtracker-win64-portable.zip"
+$SetupExe = "dist\awardtracker-win64-setup.exe"
 
 # 1. Verify environment
 if (-not (Test-Path $SpecFile)) {
@@ -27,8 +27,8 @@ if (Test-Path $VenvPath) {
 
 # 2. Run compilation build script
 Write-Host "Step 1: Compiling standalone binary..." -ForegroundColor Yellow
-if (Test-Path "build.ps1") {
-    powershell -ExecutionPolicy Bypass -File build.ps1
+if (Test-Path "build-win.ps1") {
+    powershell -ExecutionPolicy Bypass -File build-win.ps1
 } else {
     Write-Host "Running PyInstaller manually..." -ForegroundColor Gray
     if (Test-Path "build") { Remove-Item -Recurse -Force "build" }

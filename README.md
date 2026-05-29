@@ -108,7 +108,7 @@ If you are a developer and want to clone and compile the application standalone 
 ### 3. Standalone Executable Compilation
 We have provided a streamlined builder script that compiles the Flask app, database migrations, static assets, and the tray daemon into a single standalone executable `dist/awardtracker.exe` using PyInstaller:
 ```powershell
-powershell -ExecutionPolicy Bypass -File build.ps1
+powershell -ExecutionPolicy Bypass -File build-win.ps1
 ```
 The compiled executable will be generated at `dist/awardtracker.exe` (~42 MB).
 

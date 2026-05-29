@@ -1,5 +1,5 @@
 # Award Tracker - Premium Build Script
-# Usage: .\build.ps1
+# Usage: .\build-win.ps1
 
 Clear-Host
 Write-Host "==================================================" -ForegroundColor Cyan
