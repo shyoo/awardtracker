@@ -63,3 +63,17 @@ exe = EXE(
     entitlements_file=None,
     icon=None,
 )
+
+import sys
+if sys.platform == 'darwin':
+    app = BUNDLE(
+        exe,
+        name='AwardTracker.app',
+        icon=None,
+        bundle_identifier='com.awardtracker.app',
+        info_plist={
+            'NSPrincipalClass': 'NSApplication',
+            'NSAppleScriptEnabled': False,
+        },
+    )
+

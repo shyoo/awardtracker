@@ -26,7 +26,7 @@ Award Tracker runs entirely on your local machine:
 * **Unified Family Groupings**: Group and organize your reward portfolios cleanly by **Owner/Person** (complete with custom badge colors) or by **Program**.
 * **Automated Background Syncing**: Quiety executes in the background at custom intervals (e.g. *Every Day*, *Every Week*), cleanly skipping offline or manually-managed portfolios.
 * **Guided Interactive Sign-in (Unified Overlay)**: If a loyalty program prompts you for a Multi-Factor Authentication (MFA) passcode or a captcha screening, Award Tracker opens a headed browser window and injects a custom floating guide card (`awardtracker-guide-modal`) in the corner, guiding you step-by-step to complete the verification manually!
-* **Windows Native OS Toast Alerts**: Dispatches native notifications locally through the Windows Action Center on app startup, sync start, sync success/failures, and points-expiry warnings.
+* **Cross-Platform Native OS Notifications**: Dispatches native notifications locally through the Windows Action Center, macOS Notification Center, or Linux notify-send on app startup, sync start, sync success/failures, and points-expiry warnings.
 * **Custom Manual Tracking**: Easily track points from credit cards (Chase, Amex, Citi, Capital One, Wells Fargo) or offline store programs (e.g. "Best Buy points", "Panera rewards"), complete with custom name overrides.
 
 ---
@@ -71,7 +71,7 @@ Provides a tracking chart that shows points history over the times.
 
 ---
 
-## 🛠️ Windows Developer Compilation Guide (From Scratch)
+## 🛠️ Developer Compilation Guide (macOS & Windows)
 
 If you are a developer and want to clone and compile the application standalone binary:
 
@@ -82,41 +82,68 @@ If you are a developer and want to clone and compile the application standalone 
 
 ### 2. Local Installation Steps
 1. Clone this repository:
-   ```powershell
+   ```bash
    git clone https://github.com/your-username/awardtracker.git
    cd awardtracker
    ```
 2. Create and activate a Python virtual environment:
-   ```powershell
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
-   ```
+   * **Windows**:
+     ```powershell
+     python -m venv venv
+     .\venv\Scripts\Activate.ps1
+     ```
+   * **macOS/Linux**:
+     ```bash
+     python3 -m venv venv
+     source venv/bin/activate
+     ```
 3. Install dependencies:
-   ```powershell
+   ```bash
    pip install -r requirements.txt
    ```
 4. Perform database migrations and set up the SQLite schema:
-   ```powershell
-   venv\Scripts\python.exe -m flask db upgrade
-   ```
+   * **Windows**:
+     ```powershell
+     venv\Scripts\python.exe -m flask db upgrade
+     ```
+   * **macOS/Linux**:
+     ```bash
+     python3 -m flask db upgrade
+     ```
 5. Run the dev server manually:
-   ```powershell
-   venv\Scripts\python.exe tray.py
-   ```
-   *(Or simply double-click the `run.bat` file in the root folder!)*
+   * **Windows**:
+     ```powershell
+     venv\Scripts\python.exe tray.py
+     ```
+     *(Or simply double-click the `run.bat` file in the root folder!)*
+   * **macOS/Linux**:
+     ```bash
+     ./run.sh
+     ```
 
 ### 3. Standalone Executable Compilation
-We have provided a streamlined builder script that compiles the Flask app, database migrations, static assets, and the tray daemon into a single standalone executable `dist/awardtracker.exe` using PyInstaller:
-```powershell
-powershell -ExecutionPolicy Bypass -File build-win.ps1
-```
-The compiled executable will be generated at `dist/awardtracker.exe` (~42 MB).
+We have provided streamlined builder scripts that compile the Flask app, database migrations, static assets, and the tray daemon into a single standalone executable or bundle using PyInstaller:
+* **Windows**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File build-win.ps1
+  ```
+  Generates a standalone binary at `dist/awardtracker.exe` (~42 MB).
+* **macOS**:
+  ```bash
+  ./build.sh
+  ```
+  Generates a native app bundle at `dist/AwardTracker.app` (~54 MB) and standalone binary at `dist/awardtracker`.
 
 ### 4. Running the Tests
-To verify all APIs, naming overrides, settings parameters, and plugin infrastructure are fully functional, execute our premium color-coded test runner:
-```powershell
-powershell -ExecutionPolicy Bypass -File run_tests.ps1
-```
+To verify all APIs, naming overrides, settings parameters, and plugin infrastructure are fully functional, execute our premium color-coded test runners:
+* **Windows**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File run_tests.ps1
+  ```
+* **macOS/Linux**:
+  ```bash
+  ./run_tests.sh
+  ```
 
 ---
 
