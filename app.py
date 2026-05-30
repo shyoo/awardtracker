@@ -220,12 +220,36 @@ def create_app(config_class=Config):
                 days = int(seconds // 86400)
                 return f"{days} day{'s' if days > 1 else ''} ago"
 
+        def get_update_info():
+            check_enabled = Settings.query.filter_by(key='check_for_updates').first()
+            if check_enabled and check_enabled.value == 'false':
+                return None
+                
+            latest_version = Settings.query.filter_by(key='latest_version_available').first()
+            dismissed_version = Settings.query.filter_by(key='update_dismissed_version').first()
+            release_url = Settings.query.filter_by(key='latest_release_url').first()
+            
+            if latest_version and latest_version.value:
+                if dismissed_version and dismissed_version.value == latest_version.value:
+                    return None
+                    
+                from updater import parse_version
+                current_ver = app.config.get('APP_VERSION', '1.2.2')
+                if parse_version(latest_version.value) > parse_version(current_ver):
+                    return {
+                        'version': latest_version.value,
+                        'url': release_url.value if release_url else 'https://github.com/shyoo/awardtracker/releases'
+                    }
+            return None
+
         return dict(
             get_program_rule_description=get_program_rule_description,
             get_never_expires_reason=get_never_expires_reason,
             format_time_remaining=format_time_remaining,
             get_logo_url=get_logo_url,
-            time_ago=time_ago
+            time_ago=time_ago,
+            app_version=app.config.get('APP_VERSION', '1.2.2'),
+            update_info=get_update_info()
         )
 
     @app.before_request
@@ -247,6 +271,9 @@ def create_app(config_class=Config):
 
     @app.route('/')
     def index():
+        from updater import check_for_updates_bg
+        check_for_updates_bg(app)
+        
         total_accounts = Account.query.count()
         total_points = db.session.query(db.func.sum(Account.balance)).scalar() or 0
         
@@ -994,6 +1021,19 @@ def create_app(config_class=Config):
             
         return redirect(url_for('index'))
 
+    @app.route('/api/updates/dismiss', methods=['POST'])
+    def dismiss_update():
+        latest_version = Settings.query.filter_by(key='latest_version_available').first()
+        if latest_version and latest_version.value:
+            dismissed = Settings.query.filter_by(key='update_dismissed_version').first()
+            if not dismissed:
+                dismissed = Settings(key='update_dismissed_version', value=latest_version.value)
+                db.session.add(dismissed)
+            else:
+                dismissed.value = latest_version.value
+            db.session.commit()
+        return '', 204
+
     @app.route('/settings', methods=['GET', 'POST'])
     def settings():
         if request.method == 'POST':
@@ -1003,6 +1043,7 @@ def create_app(config_class=Config):
             warning_threshold = request.form.get('warning-threshold', '30')
             auto_open_on_launch = 'true' if request.form.get('auto-open') == 'on' else 'false'
             launch_on_boot = 'true' if request.form.get('launch-on-boot') == 'on' else 'false'
+            check_for_updates = 'true' if request.form.get('check-for-updates') == 'on' else 'false'
             scheduled_sync_consent_required = 'true' if request.form.get('scheduled-sync-consent') == 'on' else 'false'
             scheduled_sync_frequency = request.form.get('scheduled-sync-frequency', 'never')
             scheduled_sync_enabled = 'true' if scheduled_sync_frequency != 'never' else 'false'
@@ -1014,6 +1055,7 @@ def create_app(config_class=Config):
                 'warning_threshold': warning_threshold,
                 'auto_open_on_launch': auto_open_on_launch,
                 'launch_on_boot': launch_on_boot,
+                'check_for_updates': check_for_updates,
                 'scheduled_sync_enabled': scheduled_sync_enabled,
                 'scheduled_sync_consent_required': scheduled_sync_consent_required,
                 'scheduled_sync_frequency': scheduled_sync_frequency
@@ -1041,6 +1083,7 @@ def create_app(config_class=Config):
         warning_threshold = Settings.query.filter_by(key='warning_threshold').first()
         auto_open_on_launch = Settings.query.filter_by(key='auto_open_on_launch').first()
         launch_on_boot = Settings.query.filter_by(key='launch_on_boot').first()
+        check_for_updates = Settings.query.filter_by(key='check_for_updates').first()
         scheduled_sync_enabled = Settings.query.filter_by(key='scheduled_sync_enabled').first()
         scheduled_sync_consent_required = Settings.query.filter_by(key='scheduled_sync_consent_required').first()
         scheduled_sync_frequency = Settings.query.filter_by(key='scheduled_sync_frequency').first()
@@ -1052,6 +1095,7 @@ def create_app(config_class=Config):
             'warning_threshold': int(warning_threshold.value) if warning_threshold else 30,
             'auto_open_on_launch': auto_open_on_launch.value if auto_open_on_launch else 'true',
             'launch_on_boot': launch_on_boot.value if launch_on_boot else 'false',
+            'check_for_updates': check_for_updates.value if check_for_updates else 'true',
             'scheduled_sync_enabled': scheduled_sync_enabled.value if scheduled_sync_enabled else 'false',
             'scheduled_sync_consent_required': scheduled_sync_consent_required.value if scheduled_sync_consent_required else 'true',
             'scheduled_sync_frequency': scheduled_sync_frequency.value if scheduled_sync_frequency else 'daily'

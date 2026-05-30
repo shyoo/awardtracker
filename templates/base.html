@@ -83,7 +83,7 @@
                 <div class="flex h-16 justify-between">
                     <div class="flex">
                         <div class="flex flex-shrink-0 items-center">
-                            <span class="text-white text-xl font-bold tracking-tight">Award Tracker</span>
+                            <span class="text-white text-xl font-bold tracking-tight">Award Tracker <span class="text-xs font-normal text-slate-400 ml-1 align-middle select-none">v{{ app_version }}</span></span>
                         </div>
                         <div class="hidden sm:-my-px sm:ml-6 sm:flex sm:space-x-8">
                             <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}border-primary text-white{% else %}border-transparent text-slate-300 hover:border-slate-300 hover:text-white{% endif %} inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium">Dashboard</a>

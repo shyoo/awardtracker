@@ -1,22 +1,37 @@
 ; Award Tracker - Premium Setup Script
 ; For compiling with Inno Setup Compiler (ISCC)
 
+#define FileHandle FileOpen(SourcePath + "\version.txt")
+#define AppVersion FileRead(FileHandle)
+#expr FileClose(FileHandle)
+
 [Setup]
 AppName=Award Tracker
-AppVersion=1.2.1
+AppVersion={#AppVersion}
 AppPublisher=Sunghwan Yoo
-DefaultDirName={userappdata}\AwardTracker
+DefaultDirName={code:GetDefaultDirName}
+UsePreviousAppDir=no
+DirExistsWarning=no
 DefaultGroupName=Award Tracker
 DisableProgramGroupPage=yes
+DisableDirPage=no
 OutputDir=dist
 OutputBaseFilename=awardtracker-win64-setup
-SetupIconFile=
+SetupIconFile=awardtracker.ico
 Compression=lzma
 SolidCompression=yes
-PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
+PrivilegesRequired=admin
 UninstallDisplayIcon={app}\awardtracker.exe
 WizardStyle=modern
+
+[InstallDelete]
+Type: files; Name: "{userappdata}\AwardTracker\awardtracker.exe"
+Type: files; Name: "{userappdata}\AwardTracker\unins000.exe"
+Type: files; Name: "{userappdata}\AwardTracker\unins000.dat"
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\Award Tracker_is1"; Flags: deletekey
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\AwardTracker_is1"; Flags: deletekey
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -36,8 +51,93 @@ Name: "{autodesktop}\Award Tracker"; Filename: "{app}\awardtracker.exe"; Tasks: 
 Filename: "{app}\awardtracker.exe"; Description: "{cm:LaunchProgram,Award Tracker}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+function ExtractDirFromUninstallString(UninstStr: String): String;
+var
+  PosExe: Integer;
+begin
+  Result := UninstStr;
+  if (Length(Result) > 0) and (Result[1] = '"') then
+  begin
+    Delete(Result, 1, 1);
+  end;
+  if (Length(Result) > 0) and (Result[Length(Result)] = '"') then
+  begin
+    Delete(Result, Length(Result), 1);
+  end;
+  PosExe := Pos('\unins', LowerCase(Result));
+  if PosExe > 0 then
+  begin
+    Result := Copy(Result, 1, PosExe - 1);
+  end;
+end;
+
+function CheckRegistryForPrevPath(RootKey: Integer; SubKeyName: String; var Path: String): Boolean;
+var
+  UninstStr: String;
+  CleanPath: String;
+  UserAppData: String;
+begin
+  Result := False;
+  if RegQueryStringValue(RootKey, SubKeyName, 'UninstallString', UninstStr) then
+  begin
+    if UninstStr <> '' then
+    begin
+      CleanPath := ExtractDirFromUninstallString(UninstStr);
+      if CleanPath <> '' then
+      begin
+        UserAppData := ExpandConstant('{userappdata}');
+        if Pos(UserAppData, CleanPath) = 0 then
+        begin
+          Path := CleanPath;
+          Result := True;
+        end;
+      end;
+    end;
+  end;
+end;
+
+function GetDefaultDirName(Param: String): String;
+var
+  PrevPath: String;
+begin
+  if CheckRegistryForPrevPath(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\AwardTracker_is1', PrevPath) then
+  begin
+    Result := PrevPath;
+    Exit;
+  end;
+  if CheckRegistryForPrevPath(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\Award Tracker_is1', PrevPath) then
+  begin
+    Result := PrevPath;
+    Exit;
+  end;
+  if CheckRegistryForPrevPath(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\AwardTracker_is1', PrevPath) then
+  begin
+    Result := PrevPath;
+    Exit;
+  end;
+  if CheckRegistryForPrevPath(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\Award Tracker_is1', PrevPath) then
+  begin
+    Result := PrevPath;
+    Exit;
+  end;
+  Result := ExpandConstant('{autopf}\AwardTracker');
+end;
+
 var
   CleanupUserData: Boolean;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  OldVal: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'AwardTracker', OldVal) then
+    begin
+      RegWriteStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'AwardTracker', '"' + ExpandConstant('{app}\awardtracker.exe') + '" --startup');
+    end;
+  end;
+end;
 
 procedure InitializeUninstallProgressForm();
 var
@@ -101,13 +201,13 @@ begin
     if CleanupUserData then
     begin
       // Delete the dynamically created folders and files
-      DelTree(ExpandConstant('{app}\backups'), True, True, True);
-      DelTree(ExpandConstant('{app}\browser_profiles'), True, True, True);
-      DelTree(ExpandConstant('{app}\downloaded_files'), True, True, True);
-      DeleteFile(ExpandConstant('{app}\awardtracker.db'));
-      DeleteFile(ExpandConstant('{app}\scraper_debug.log'));
-      DeleteFile(ExpandConstant('{app}\settings.json'));
-      DeleteFile(ExpandConstant('{app}\valuations.json'));
+      DelTree(ExpandConstant('{userappdata}\AwardTracker\backups'), True, True, True);
+      DelTree(ExpandConstant('{userappdata}\AwardTracker\browser_profiles'), True, True, True);
+      DelTree(ExpandConstant('{userappdata}\AwardTracker\downloaded_files'), True, True, True);
+      DeleteFile(ExpandConstant('{userappdata}\AwardTracker\awardtracker.db'));
+      DeleteFile(ExpandConstant('{userappdata}\AwardTracker\scraper_debug.log'));
+      DeleteFile(ExpandConstant('{userappdata}\AwardTracker\settings.json'));
+      DeleteFile(ExpandConstant('{userappdata}\AwardTracker\valuations.json'));
     end;
   end;
 end;

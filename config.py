@@ -19,11 +19,20 @@ else:
 # Ensure the writeable user directory exists
 os.makedirs(write_dir, exist_ok=True)
 
+# Read dynamic version from version.txt in basedir
+version_path = os.path.join(basedir, 'version.txt')
+try:
+    with open(version_path, 'r', encoding='utf-8') as f:
+        APP_VERSION = f.read().strip()
+except Exception:
+    APP_VERSION = "1.2.2"
+
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-key-change-in-production'
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         'sqlite:///' + os.path.join(write_dir, 'awardtracker.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     ROOT_DIR = write_dir
+    APP_VERSION = APP_VERSION
 
 

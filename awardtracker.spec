@@ -10,6 +10,7 @@ added_files = [
     ('plugins', 'plugins'),
     ('valuations.json', '.'),
     ('settings.json', '.'),
+    ('version.txt', '.'),
 ]
 
 a = Analysis(
@@ -61,7 +62,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon='awardtracker.ico',
 )
 
 import sys

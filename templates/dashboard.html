@@ -31,6 +31,33 @@
     </div>
   </div>
 
+  <!-- New Version Alert Banner -->
+  {% if update_info %}
+  <div id="update-banner" class="mb-6 rounded-xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-200/60 p-5 shadow-sm backdrop-blur-sm transition-all duration-300">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div class="flex items-start gap-3.5">
+        <div class="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 p-2 text-white shadow-md animate-pulse">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-slate-800">New Version Available!</h3>
+          <p class="text-xs text-slate-500 mt-1">A new version of Award Tracker (<strong class="text-slate-700">{{ update_info.version }}</strong>) is available for download. Get the latest features and scraper updates.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4 self-end sm:self-center">
+        <button hx-post="/api/updates/dismiss" hx-target="#update-banner" hx-swap="delete" class="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors select-none focus:outline-none">
+          Dismiss
+        </button>
+        <a href="{{ update_info.url }}" target="_blank" class="rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-xs font-bold text-white shadow-sm hover:from-amber-600 hover:to-orange-600 transition-all select-none">
+          View Release Notes
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Scheduled Sync Consent Banner -->
   <div id="consentBanner" class="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-6 shadow-sm hidden">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
