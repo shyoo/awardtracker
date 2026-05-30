@@ -3,7 +3,7 @@
 
 [Setup]
 AppName=Award Tracker
-AppVersion=1.2.0
+AppVersion=1.2.1
 AppPublisher=Sunghwan Yoo
 DefaultDirName={userappdata}\AwardTracker
 DefaultGroupName=Award Tracker

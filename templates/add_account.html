@@ -79,6 +79,9 @@
           <label for="username" class="block text-sm font-medium leading-6 text-slate-900">Username / Email / Member ID</label>
           <div class="mt-2">
             <input type="text" name="username" id="username" class="block w-full rounded-md border-0 py-1.5 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
+            <p id="username-korean-warning" class="mt-2 text-xs text-amber-600 hidden font-medium">
+              ⚠️ SKYPASS numbers should not contain spaces. We will automatically trim spaces to treat this as a 12-digit SKYPASS number.
+            </p>
           </div>
         </div>
 
@@ -129,6 +132,18 @@ document.addEventListener("DOMContentLoaded", function() {
     var lastNameInput = document.getElementById("meta_last_name");
     var lastNameLabel = document.getElementById("last-name-label");
 
+    var usernameWarning = document.getElementById("username-korean-warning");
+
+    function checkKoreanUsername() {
+        var selectedOption = providerSelect.options[providerSelect.selectedIndex];
+        var plugin = selectedOption ? selectedOption.getAttribute("data-plugin") : "";
+        if (plugin === "korean" && usernameInput.value.includes(" ")) {
+            usernameWarning.classList.remove("hidden");
+        } else {
+            usernameWarning.classList.add("hidden");
+        }
+    }
+
     function updateFormMode() {
         var selectedOption = providerSelect.options[providerSelect.selectedIndex];
         var plugin = selectedOption ? selectedOption.getAttribute("data-plugin") : "";
@@ -140,6 +155,7 @@ document.addEventListener("DOMContentLoaded", function() {
             scrapingSection.classList.add("hidden");
             usernameInput.required = false;
             passwordInput.required = false;
+            if (usernameWarning) usernameWarning.classList.add("hidden");
         } else {
             manualSection.classList.add("hidden");
             scrapingSection.classList.remove("hidden");
@@ -156,12 +172,18 @@ document.addEventListener("DOMContentLoaded", function() {
                 lastNameLabel.innerHTML = 'Last Name (Optional, required for some providers like Hyatt)';
                 lastNameInput.classList.remove("ring-rose-300", "focus:ring-rose-500", "border-rose-300");
             }
+
+            checkKoreanUsername();
         }
     }
 
     if (providerSelect) {
         providerSelect.addEventListener("change", updateFormMode);
         updateFormMode(); // Run initially
+    }
+
+    if (usernameInput) {
+        usernameInput.addEventListener("input", checkKoreanUsername);
     }
 });
 </script>

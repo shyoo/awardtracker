@@ -46,6 +46,7 @@ def inject_control_modal(sb):
             provider_name = "Asiana Airlines"
         elif "koreanair.com" in current_url:
             provider_name = "Korean Air"
+            custom_tip = "After a successful sign-in, please wait a few seconds for the application to automatically redirect to your mileage overview page, or navigate to <strong>My Mileage > Overview</strong> manually if needed."
         elif "alaskaair.com" in current_url:
             provider_name = "Alaska Airlines"
         elif "delta.com" in current_url:
@@ -112,6 +113,7 @@ def inject_control_modal(sb):
                 guide.style.textAlign = 'left';
                 
                 guide.innerHTML = `
+                    <button id="awardtracker-guide-modal-close" style="position: absolute; top: 12px; right: 12px; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 18px; font-weight: bold; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center;" onclick="document.getElementById('awardtracker-guide-modal').style.display='none';">&times;</button>
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                         <span style="font-size: 20px;">🤖</span>
                         <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #ffffff;">{title_js}</h4>

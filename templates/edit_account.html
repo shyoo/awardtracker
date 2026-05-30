@@ -57,6 +57,11 @@
         <p class="mt-1 text-xs text-slate-400">The login identifier used on the provider's website.</p>
         <div class="mt-2">
           <input type="text" name="username" id="username" value="{{ account.username }}" required class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+          {% if account.provider.plugin_name == 'korean' %}
+          <p id="username-korean-warning" class="mt-2 text-xs text-amber-600 {% if ' ' not in account.username %}hidden{% endif %} font-medium">
+            ⚠️ SKYPASS numbers should not contain spaces. We will automatically trim spaces to treat this as a 12-digit SKYPASS number.
+          </p>
+          {% endif %}
         </div>
       </div>
 
@@ -147,5 +152,21 @@
       `;
     }
   }
+
+  {% if account.provider.plugin_name == 'korean' %}
+  document.addEventListener("DOMContentLoaded", function() {
+    const usernameInput = document.getElementById('username');
+    const usernameWarning = document.getElementById('username-korean-warning');
+    if (usernameInput && usernameWarning) {
+      usernameInput.addEventListener('input', function() {
+        if (usernameInput.value.includes(' ')) {
+          usernameWarning.classList.remove('hidden');
+        } else {
+          usernameWarning.classList.add('hidden');
+        }
+      });
+    }
+  });
+  {% endif %}
 </script>
 {% endblock %}

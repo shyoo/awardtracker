@@ -529,6 +529,10 @@ def create_app(config_class=Config):
                     flash('Provider, Username and Password are required.')
                     return redirect(url_for('add_account'))
 
+                # Clean Korean Air skypass username if spaces are present
+                if provider and provider.plugin_name == 'korean' and username:
+                    username = username.replace(' ', '')
+
                 try:
                     encrypted_password = security_manager.encrypt(password)
                     has_exemption = request.form.get('has_exemption') == 'y'
@@ -923,6 +927,10 @@ def create_app(config_class=Config):
                 if not username:
                     flash('Username is required.')
                     return redirect(url_for('edit_account', account_id=account.id))
+                
+                # Clean Korean Air skypass username if spaces are present
+                if account.provider.plugin_name == 'korean' and username:
+                    username = username.replace(' ', '')
                 
             has_exemption = request.form.get('has_exemption') == 'y'
             

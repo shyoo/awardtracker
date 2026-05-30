@@ -447,10 +447,19 @@ class KoreanAirPlugin(ProviderPlugin):
                     except Exception:
                         pass
 
+                if "set-password" in current_url or "password/verify" in current_url:
+                    print("Detected password reset redirection.")
+                    raise InteractionRequiredError(
+                        "Your Korean Air account requires a password reset. "
+                        "Please run Interactive Login to complete the password reset flow directly."
+                    )
+
                 if "login" not in current_url and "signin" not in current_url:
                     return True
 
             return False
+        except InteractionRequiredError:
+            raise
         except Exception:
             return False
 
@@ -638,6 +647,8 @@ class KoreanAirPlugin(ProviderPlugin):
         return ""
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
+        if username:
+            username = username.replace(' ', '')
         result = None
 
         try:
@@ -647,6 +658,11 @@ class KoreanAirPlugin(ProviderPlugin):
                 sb.sleep(5)
 
                 current_url = sb.get_current_url().lower()
+                if "set-password" in current_url or "password/verify" in current_url:
+                    raise InteractionRequiredError(
+                        "Your Korean Air account requires a password reset. "
+                        "Please run Interactive Login to complete the password reset flow directly."
+                    )
                 prefix = self._get_localized_prefix(sb)
 
                 # If redirected or stuck on login page, attempt login
@@ -654,6 +670,12 @@ class KoreanAirPlugin(ProviderPlugin):
                     logged_in = self._try_auto_login(sb, username, password)
                     if not logged_in:
                         raise InteractionRequiredError("auto_login_failed")
+                    current_url = sb.get_current_url().lower()
+                    if "set-password" in current_url or "password/verify" in current_url:
+                        raise InteractionRequiredError(
+                            "Your Korean Air account requires a password reset. "
+                            "Please run Interactive Login to complete the password reset flow directly."
+                        )
                     prefix = self._get_localized_prefix(sb)
 
                 # 2. Open localized overview page
@@ -662,10 +684,21 @@ class KoreanAirPlugin(ProviderPlugin):
                 sb.sleep(5)
 
                 current_url = sb.get_current_url().lower()
+                if "set-password" in current_url or "password/verify" in current_url:
+                    raise InteractionRequiredError(
+                        "Your Korean Air account requires a password reset. "
+                        "Please run Interactive Login to complete the password reset flow directly."
+                    )
                 # Post-navigation session-loss fallback check
                 if "login" in current_url or "signin" in current_url:
                     logged_in = self._try_auto_login(sb, username, password)
                     if logged_in:
+                        current_url = sb.get_current_url().lower()
+                        if "set-password" in current_url or "password/verify" in current_url:
+                            raise InteractionRequiredError(
+                                "Your Korean Air account requires a password reset. "
+                                "Please run Interactive Login to complete the password reset flow directly."
+                            )
                         prefix = self._get_localized_prefix(sb)
                         sb.open(f"https://www.koreanair.com/{prefix}my-mileage/overview")
                         sb.sleep(5)
@@ -735,6 +768,8 @@ class KoreanAirPlugin(ProviderPlugin):
             raise PluginError(f"Korean Air scraping failed: {e}")
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+        if username:
+            username = username.replace(' ', '')
         with SB(uc=True, user_data_dir=profile_dir, headed=True) as sb:
             sb.open("https://www.koreanair.com/login")
             sb.sleep(3)
@@ -744,8 +779,19 @@ class KoreanAirPlugin(ProviderPlugin):
             print("Your mileage will be captured automatically once the page loads.")
             try:
                 for _ in range(60):  # Wait up to 5 minutes
-                    current_url = sb.get_current_url()
-                    if "my-mileage" in current_url.lower() or "skypass" in current_url.lower():
+                    current_url = sb.get_current_url().lower()
+                    
+                    # If logged in successfully and landed on homepage/any non-login page, redirect to mileage overview
+                    if "login" not in current_url and "signin" not in current_url and "my-mileage" not in current_url and "skypass" not in current_url:
+                        match = re.search(r'koreanair\.com/([a-z]{2})/([a-z]{2})', current_url)
+                        prefix = f"{match.group(1)}/{match.group(2)}/" if match else ""
+                        target = f"https://www.koreanair.com/{prefix}my-mileage/overview"
+                        print(f"Logged in detected! Redirecting automatically to mileage overview: {target}")
+                        sb.open(target)
+                        sb.sleep(5)
+                        current_url = sb.get_current_url().lower()
+
+                    if "my-mileage" in current_url or "skypass" in current_url:
                         print(f"Detected dashboard URL: {current_url}")
 
                         match = re.search(r'koreanair\.com/([a-z]{2})/([a-z]{2})/', current_url.lower())
