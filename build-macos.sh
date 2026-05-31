@@ -28,6 +28,34 @@ if ! command -v pyinstaller &> /dev/null; then
     exit 1
 fi
 
+# Generate awardtracker.icns from static/favicon.png (macOS only, requires sips + iconutil)
+if [ "$(uname)" == "Darwin" ]; then
+    SOURCE_PNG="static/favicon.png"
+    ICONSET_DIR="awardtracker.iconset"
+    ICNS_FILE="awardtracker.icns"
+
+    if [ ! -f "$SOURCE_PNG" ]; then
+        echo -e "${RED}Error: Source icon not found at $SOURCE_PNG${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}Generating $ICNS_FILE from $SOURCE_PNG...${NC}"
+    rm -rf "$ICONSET_DIR"
+    mkdir -p "$ICONSET_DIR"
+
+    for SIZE in 16 32 64 128 256 512; do
+        sips -z $SIZE $SIZE "$SOURCE_PNG" --out "$ICONSET_DIR/icon_${SIZE}x${SIZE}.png" > /dev/null 2>&1
+        DOUBLE=$((SIZE * 2))
+        sips -z $DOUBLE $DOUBLE "$SOURCE_PNG" --out "$ICONSET_DIR/icon_${SIZE}x${SIZE}@2x.png" > /dev/null 2>&1
+    done
+
+    iconutil -c icns "$ICONSET_DIR" -o "$ICNS_FILE"
+    rm -rf "$ICONSET_DIR"
+    echo -e "${GREEN}Icon generated: $ICNS_FILE${NC}"
+else
+    echo -e "${YELLOW}Skipping .icns generation (not running on macOS).${NC}"
+fi
+
 # Clean previous build artifacts
 echo -e "${YELLOW}Cleaning previous build directories...${NC}"
 rm -rf build dist
