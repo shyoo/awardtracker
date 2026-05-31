@@ -115,10 +115,10 @@ If you are a developer and want to clone and compile the application standalone 
      ```powershell
      venv\Scripts\python.exe tray.py
      ```
-     *(Or simply double-click the `run.bat` file in the root folder!)*
+     *(Or simply double-click the `run-win.bat` file in the root folder!)*
    * **macOS/Linux**:
      ```bash
-     ./run.sh
+     ./run-macos.sh
      ```
 
 ### 3. Standalone Compilation & Release Packaging

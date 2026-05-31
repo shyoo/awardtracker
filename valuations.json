@@ -43,6 +43,10 @@
     "cpp": 1.2,
     "name": "Virgin Atlantic Flying Club"
   },
+  "aircanada": {
+    "cpp": 1.4,
+    "name": "Air Canada Aeroplan"
+  },
   "avianca": {
     "cpp": 1.2,
     "name": "Avianca LifeMiles"

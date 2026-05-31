@@ -13,6 +13,13 @@ from app import create_app
 from extensions import db
 from models import Settings
 
+class TestConfig:
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SECRET_KEY = 'test-key-signature'
+    ROOT_DIR = '.'
+
 class TestUpdaterLogic(unittest.TestCase):
     
     def test_parse_version_standard(self):
@@ -43,9 +50,7 @@ class TestUpdaterLogic(unittest.TestCase):
 
     def test_settings_integration(self):
         """Test that update checker settings fall back correctly or load as expected within application context."""
-        app = create_app()
-        app.config['TESTING'] = True
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+        app = create_app(TestConfig)
         
         with app.app_context():
             db.create_all()

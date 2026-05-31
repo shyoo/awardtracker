@@ -27,8 +27,19 @@ class TestExpirationCalculations(unittest.TestCase):
     def test_universal_exemption(self):
         # Universal exemption always forces None (Never Expires)
         dt = datetime(2026, 5, 20)
-        for pid in ['american', 'alaska', 'marriott', 'hilton', 'hyatt', 'ihg', 'avianca', 'korean', 'delta']:
+        for pid in ['american', 'alaska', 'marriott', 'hilton', 'hyatt', 'ihg', 'avianca', 'korean', 'delta', 'aircanada']:
             self.assertIsNone(calculate_expiration(pid, 1000, 'Member', dt, has_exemption=True))
+
+    def test_aircanada_aeroplan_rules(self):
+        # Standard Aeroplan expires in 18 months of inactivity
+        dt = datetime(2026, 5, 20, 10, 30, 0)
+        expected_standard = datetime(2027, 11, 20, 10, 30, 0)
+        self.assertEqual(calculate_expiration('aircanada', 5000, 'Member', dt, has_exemption=False), expected_standard)
+
+        # Aeroplan Elite status holders (25K, 50K, Super Elite, etc.) never expire
+        self.assertIsNone(calculate_expiration('aircanada', 5000, 'Elite 25K', dt, has_exemption=False))
+        self.assertIsNone(calculate_expiration('aircanada', 5000, 'Elite 50K', dt, has_exemption=False))
+        self.assertIsNone(calculate_expiration('aircanada', 5000, 'Super Elite', dt, has_exemption=False))
 
     def test_lifetime_programs(self):
         # Delta, Southwest, United, and Virgin Atlantic never expire under any condition

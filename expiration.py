@@ -44,6 +44,13 @@ def calculate_expiration(plugin_id: str, balance: int, status: str, last_activit
     if pid in ('american', 'alaska', 'marriott', 'hilton', 'hyatt'):
         return add_months(last_activity_date, 24)
 
+    elif pid == 'aircanada':
+        # Aeroplan Elite status holders never expire
+        st = (status or "").lower()
+        if any(tier in st for tier in ('elite', 'altitude', 'super elite', '25k', '35k', '50k', '75k', '100k')):
+            return None
+        return add_months(last_activity_date, 18)
+
     elif pid == 'ihg':
         # IHG Elite status holders (Silver, Gold, Platinum, Diamond) never expire
         st = (status or "").lower()
@@ -90,6 +97,12 @@ def get_program_rule_description(plugin_id: str, status: str = None) -> str:
     if pid == 'hyatt':
         return "Points expire after 24 months of inactivity. Any earning or redemption transaction extends them."
     
+    if pid == 'aircanada':
+        st = (status or "").lower()
+        if any(tier in st for tier in ('elite', 'altitude', 'super elite', '25k', '35k', '50k', '75k', '100k')):
+            return f"Points never expire for Elite members (your status: {status or 'Standard'})."
+        return "Points expire after 18 months of inactivity. Primary credit card holders or Elite status prevents expiration."
+
     if pid == 'ihg':
         st = (status or "").lower()
         if any(tier in st for tier in ('silver', 'gold', 'platinum', 'diamond')):
@@ -122,5 +135,9 @@ def get_never_expires_reason(plugin_id: str, status: str, has_exemption: bool = 
     if pid == 'ihg':
         st = (status or "").lower()
         if any(tier in st for tier in ('silver', 'gold', 'platinum', 'diamond')):
+            return " (Elite)"
+    elif pid == 'aircanada':
+        st = (status or "").lower()
+        if any(tier in st for tier in ('elite', 'altitude', 'super elite', '25k', '35k', '50k', '75k', '100k')):
             return " (Elite)"
     return ""

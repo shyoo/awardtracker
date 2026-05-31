@@ -166,6 +166,9 @@ def create_app(config_class=Config):
     else:
         app = Flask(__name__)
     app.config.from_object(config_class)
+    
+    print(f"DATABASE STARTUP URI: {app.config.get('SQLALCHEMY_DATABASE_URI')}")
+    app_log.info(f"DATABASE STARTUP URI: {app.config.get('SQLALCHEMY_DATABASE_URI')}")
 
 
     # Initialize Flask extensions here
@@ -191,6 +194,7 @@ def create_app(config_class=Config):
                 'avianca': 'avianca.com',
                 'virgin': 'virginatlantic.com',
                 'asiana': 'flyasiana.com',
+                'aircanada': 'aircanada.com',
                 'chase': 'chase.com',
                 'amex': 'americanexpress.com',
                 'citi': 'citi.com',
@@ -259,6 +263,20 @@ def create_app(config_class=Config):
             return
             
         # Check if master password is set
+        if not security_manager.is_initialized():
+            # Support dynamic reload auto-unlock in development mode
+            dev_password = os.environ.get('MASTER_PASSWORD')
+            if app.debug and dev_password:
+                try:
+                    security_manager.initialize_with_password(dev_password)
+                    verify_setting = Settings.query.filter_by(key='master_verification').first()
+                    if verify_setting:
+                        decrypted = security_manager.decrypt(verify_setting.value)
+                        if decrypted == "VERIFIED":
+                            app_log.info("Auto-unlocked master database in development mode via MASTER_PASSWORD.")
+                except Exception:
+                    security_manager.fernet = None
+
         if not security_manager.is_initialized():
             # If trying to access anything other than setup, redirect to setup
             if request.endpoint not in ['setup', 'login']:
@@ -927,6 +945,10 @@ def create_app(config_class=Config):
             profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
             plugin.interactive_login(account.username, password, profile_dir=profile_dir, **account.extra_metadata)
             app_log.info(f"Interactive login completed for {account.display_name}.")
+            account.last_fetch_status = "SUCCESS"
+            account.last_error = "Interactive Login succeeded. Please click 'Sync Now' to synchronize your points."
+            account.last_updated = datetime.utcnow()
+            db.session.commit()
             flash(f'Interactive login completed for {account.display_name}. Try syncing now.')
         except Exception as e:
             app_log.error(f"Interactive login failed for {account.display_name}: {str(e)}", exc_info=True)
@@ -1136,11 +1158,17 @@ def create_app(config_class=Config):
         flash("Log file not found.")
         return redirect(url_for('settings'))
 
+    # Make sure tables exist first
+    try:
+        with app.app_context():
+            db.create_all()
+    except Exception as e:
+        app_log.error(f"Database table creation failed (might be locked by another running instance): {e}")
+        raise e
+
     # Self-healing migration for Person.color
     try:
         with app.app_context():
-            # Make sure tables exist first
-            db.create_all()
             from sqlalchemy import text
             db.session.execute(text("SELECT color FROM person LIMIT 1"))
     except Exception:

@@ -61,6 +61,9 @@ def inject_control_modal(sb):
             provider_name = "Southwest Airlines"
         elif "virginatlantic.com" in current_url:
             provider_name = "Virgin Atlantic"
+        elif "aircanada.com" in current_url or "aeroplan" in current_url:
+            provider_name = "Air Canada Aeroplan"
+            custom_tip = "Complete any verification or security prompts if requested by Air Canada."
 
         title = f"{provider_name} Assistant"
         
