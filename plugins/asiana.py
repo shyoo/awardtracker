@@ -6,7 +6,10 @@ import re
 import os
 import json
 import traceback
+import logging
 from datetime import datetime
+
+app_log = logging.getLogger('awardtracker')
 
 class AsianaAirlinesPlugin(ProviderPlugin):
     @property
@@ -280,13 +283,7 @@ class AsianaAirlinesPlugin(ProviderPlugin):
                     
             sb.sleep(5)
             html_exp = sb.get_page_source()
-            
-            # Save HTML to scratch for debugging
-            dump_path = os.path.join(os.path.dirname(__file__), "..", "scratch", "asiana_exp.html")
-            with open(dump_path, "w", encoding="utf-8") as f:
-                f.write(html_exp)
-            print(f"DEBUG Asiana: Saved expiration HTML to {dump_path}")
-            
+
             # Parse expiration date from html_exp
             soup_exp = BeautifulSoup(html_exp, "html.parser")
             dates = []
@@ -307,10 +304,7 @@ class AsianaAirlinesPlugin(ProviderPlugin):
                 print(f"DEBUG Asiana: Found expiration date {result['expiration_date']}")
 
         except Exception as e:
-            print(f"DEBUG Asiana: Failed to fetch expiration: {e}")
-            err_path = os.path.join(os.path.dirname(__file__), "..", "scratch", "asiana_exp_error.txt")
-            with open(err_path, "w", encoding="utf-8") as f:
-                f.write(traceback.format_exc())
+            app_log.warning(f"Asiana: Failed to fetch expiration details (non-fatal): {e}\n{traceback.format_exc()}")
 
     def _try_auto_login(self, sb, username: str, password: str) -> bool:
         """Attempt to fill in credentials and log in on the Asiana login page."""

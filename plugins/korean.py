@@ -169,12 +169,6 @@ class KoreanAirPlugin(ProviderPlugin):
         
         try:
             html = sb.get_page_source()
-            try:
-                os.makedirs("scratch", exist_ok=True)
-                with open("scratch/korean_validity_fetched.html", "w", encoding="utf-8") as f:
-                    f.write(html)
-            except Exception:
-                pass
 
             soup = BeautifulSoup(html, "html.parser")
             for tag in soup(["script", "style"]):
@@ -518,13 +512,6 @@ class KoreanAirPlugin(ProviderPlugin):
         certificates = []
         try:
             html = sb.get_page_source()
-            # Save raw html for debugging
-            try:
-                os.makedirs("scratch", exist_ok=True)
-                with open("scratch/korean_coupons_fetched.html", "w", encoding="utf-8") as f:
-                    f.write(html)
-            except Exception:
-                pass
                 
             from bs4 import BeautifulSoup
             import re

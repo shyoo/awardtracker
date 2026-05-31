@@ -19,19 +19,8 @@ class HiltonHonorsPlugin(ProviderPlugin):
         
         try:
             html = sb.get_page_source()
-            
-            try:
-                import os
-                scratch_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scratch')
-                os.makedirs(scratch_dir, exist_ok=True)
-                with open(os.path.join(scratch_dir, 'hilton_dump.html'), 'w', encoding='utf-8') as f:
-                    f.write(html)
-                with open(os.path.join(scratch_dir, 'hilton_text_dump.txt'), 'w', encoding='utf-8') as f:
-                    f.write(sb.get_text('body'))
-            except Exception:
-                pass
-                
             soup = BeautifulSoup(html, "html.parser")
+
             
             # 1. Extract Points
             for p in soup.find_all("p"):
