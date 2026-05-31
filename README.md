@@ -62,6 +62,8 @@ Provides a tracking chart that shows points history over the times.
 * **Asiana Airlines** (Asiana Club)
 * **Virgin Atlantic** (Flying Club)
 * **Avianca** (LifeMiles)
+* **Air Canada** (Aeroplan)
+
 
 ### 🏨 Hotels
 * **Marriott Bonvoy**
