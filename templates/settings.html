@@ -17,18 +17,19 @@
         <p class="mt-1 text-xs text-slate-400">Award Tracker is running locally as a premium desktop reward monitoring client.</p>
         
         <div class="mt-2.5 flex items-center gap-2.5 text-xs font-semibold select-none flex-wrap">
-          {% if update_info %}
+          {% if update_info_raw %}
             <span class="inline-flex items-center gap-1.5 text-amber-600 bg-amber-50 border border-amber-100 px-2.5 py-0.5 rounded-full text-[10px]">
               <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping"></span>
-              Update Available: v{{ update_info.version }}!
+              Update Available: v{{ update_info_raw.version }}!
             </span>
-            <a href="{{ update_info.url }}" target="_blank" class="text-[10px] text-primary hover:underline font-bold">View Release Notes</a>
+            <a href="{{ update_info_raw.url }}" target="_blank" class="text-[10px] text-primary hover:underline font-bold">View Release Notes</a>
           {% else %}
             <span class="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-full text-[10px]">
               <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
               You are at the latest version.
             </span>
           {% endif %}
+
           <span class="text-slate-300 select-none">&bull;</span>
           <a href="https://github.com/shyoo/awardtracker" target="_blank" class="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-primary transition-colors font-bold">
             <svg class="h-3.5 w-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">

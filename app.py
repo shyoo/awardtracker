@@ -225,6 +225,7 @@ def create_app(config_class=Config):
                 return f"{days} day{'s' if days > 1 else ''} ago"
 
         def get_update_info():
+            """Returns update info for the dashboard banner — respects the dismissed flag."""
             check_enabled = Settings.query.filter_by(key='check_for_updates').first()
             if check_enabled and check_enabled.value == 'false':
                 return None
@@ -246,6 +247,26 @@ def create_app(config_class=Config):
                     }
             return None
 
+        def get_update_info_raw():
+            """Returns update info ignoring the dismissed flag — used by the Settings page
+            so it always reflects whether a newer version is truly available."""
+            check_enabled = Settings.query.filter_by(key='check_for_updates').first()
+            if check_enabled and check_enabled.value == 'false':
+                return None
+
+            latest_version = Settings.query.filter_by(key='latest_version_available').first()
+            release_url = Settings.query.filter_by(key='latest_release_url').first()
+
+            if latest_version and latest_version.value:
+                from updater import parse_version
+                current_ver = app.config.get('APP_VERSION', '1.2.2')
+                if parse_version(latest_version.value) > parse_version(current_ver):
+                    return {
+                        'version': latest_version.value,
+                        'url': release_url.value if release_url else 'https://github.com/shyoo/awardtracker/releases'
+                    }
+            return None
+
         return dict(
             get_program_rule_description=get_program_rule_description,
             get_never_expires_reason=get_never_expires_reason,
@@ -253,7 +274,8 @@ def create_app(config_class=Config):
             get_logo_url=get_logo_url,
             time_ago=time_ago,
             app_version=app.config.get('APP_VERSION', '1.2.2'),
-            update_info=get_update_info()
+            update_info=get_update_info(),
+            update_info_raw=get_update_info_raw()
         )
 
     @app.before_request
@@ -1054,7 +1076,8 @@ def create_app(config_class=Config):
             else:
                 dismissed.value = latest_version.value
             db.session.commit()
-        return '', 204
+        # Return 200 (not 204) so HTMX hx-swap="delete" triggers reliably
+        return '', 200
 
     @app.route('/settings', methods=['GET', 'POST'])
     def settings():
