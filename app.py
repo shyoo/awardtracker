@@ -1069,7 +1069,8 @@ def create_app(config_class=Config):
             scheduled_sync_consent_required = 'true' if request.form.get('scheduled-sync-consent') == 'on' else 'false'
             scheduled_sync_frequency = request.form.get('scheduled-sync-frequency', 'never')
             scheduled_sync_enabled = 'true' if scheduled_sync_frequency != 'never' else 'false'
-            
+            db_backup_frequency = request.form.get('db-backup-frequency', '7')
+
             settings_dict = {
                 'native_notifications': native_notifications,
                 'email_notifications': email_notifications,
@@ -1080,7 +1081,8 @@ def create_app(config_class=Config):
                 'check_for_updates': check_for_updates,
                 'scheduled_sync_enabled': scheduled_sync_enabled,
                 'scheduled_sync_consent_required': scheduled_sync_consent_required,
-                'scheduled_sync_frequency': scheduled_sync_frequency
+                'scheduled_sync_frequency': scheduled_sync_frequency,
+                'db_backup_frequency': db_backup_frequency
             }
             
             for key, val in settings_dict.items():
@@ -1109,7 +1111,8 @@ def create_app(config_class=Config):
         scheduled_sync_enabled = Settings.query.filter_by(key='scheduled_sync_enabled').first()
         scheduled_sync_consent_required = Settings.query.filter_by(key='scheduled_sync_consent_required').first()
         scheduled_sync_frequency = Settings.query.filter_by(key='scheduled_sync_frequency').first()
-        
+        db_backup_frequency = Settings.query.filter_by(key='db_backup_frequency').first()
+
         settings_data = {
             'native_notifications': native_notifications.value if native_notifications else 'true',
             'email_notifications': email_notifications.value if email_notifications else 'false',
@@ -1120,7 +1123,8 @@ def create_app(config_class=Config):
             'check_for_updates': check_for_updates.value if check_for_updates else 'true',
             'scheduled_sync_enabled': scheduled_sync_enabled.value if scheduled_sync_enabled else 'false',
             'scheduled_sync_consent_required': scheduled_sync_consent_required.value if scheduled_sync_consent_required else 'true',
-            'scheduled_sync_frequency': scheduled_sync_frequency.value if scheduled_sync_frequency else 'daily'
+            'scheduled_sync_frequency': scheduled_sync_frequency.value if scheduled_sync_frequency else 'daily',
+            'db_backup_frequency': db_backup_frequency.value if db_backup_frequency else '7'
         }
         return render_template('settings.html', settings=settings_data)
 
@@ -1256,6 +1260,11 @@ if __name__ == '__main__':
                 app_log.info(f"Self-healing: Cleared expiration dates for {len(zero_bal_accounts)} accounts with 0 balance.")
         except Exception as e:
             app_log.error(f"Self-healing zero-balance cleanup failed: {e}")
-        
+
+        # Run startup backup check in a daemon thread (non-blocking)
+        import threading as _threading
+        from scheduler import check_startup_backup
+        _threading.Thread(target=check_startup_backup, daemon=True).start()
+
     scheduler.start()
     app.run(debug=True, port=port, use_reloader=True)

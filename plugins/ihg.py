@@ -220,36 +220,58 @@ class IHGRewardsPlugin(ProviderPlugin):
         """
         Opens an interactive browser window for the user to resolve MFA.
         Uses the same user_data_dir so cookies are saved for future headless runs.
+        Once the user completes sign-in, automatically navigates to the IHG
+        account overview page (account-mgmt/home) and closes the window.
         """
+        ACCOUNT_URL = "https://www.ihg.com/rewardsclub/us/en/account-mgmt/home"
+
         with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
             sb.uc_open_with_reconnect("https://www.ihg.com/rewardsclub/us/en/sign-in", 4)
             sb.sleep(3)
-            
-            # Prefill credentials if visible
+
+            # Prefill credentials if the sign-in form is visible
             try:
                 self._fill_login_form(sb, username, password, auto_submit=False)
             except Exception:
                 pass
-            
-            # Wait up to 5 minutes for the user to resolve MFA and reach the dashboard
-            try:
-                start_time = time.time()
-                success = False
-                while time.time() - start_time < 300:
+
+            # Wait up to 5 minutes for the user to complete sign-in / MFA.
+            # We detect success as soon as IHG redirects away from any 'sign-in' URL.
+            # After that, we navigate to the account overview automatically.
+            start_time = time.time()
+            signed_in = False
+            while time.time() - start_time < 300:
+                try:
                     curr_url = sb.get_current_url()
-                    if "account-mgmt" in curr_url:
-                        # Let it settle so the dynamic script loads
-                        sb.sleep(5)
-                        balance, _ = self._extract_data(sb)
-                        if balance is not None:
-                            success = True
-                            break
+                except Exception:
                     time.sleep(2)
-                
-                if not success:
-                    raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
-                
-                # Let cookies save completely
-                sb.sleep(5)
-            except Exception:
-                raise PluginError("Interactive login timed out after 5 minutes or account overview failed to load.")
+                    continue
+
+                if "sign-in" not in curr_url and "ihg.com" in curr_url:
+                    # User has completed sign-in — take control and navigate to overview
+                    signed_in = True
+                    break
+
+                time.sleep(2)
+
+            if not signed_in:
+                raise PluginError("Interactive login timed out after 5 minutes.")
+
+            # Navigate to account overview so fetch_data can work headlessly next time
+            if "account-mgmt" not in sb.get_current_url():
+                sb.open(ACCOUNT_URL)
+                sb.sleep(8)
+
+            # Confirm we can read the balance (validates the session is live)
+            balance, _ = self._extract_data(sb)
+            if balance is None:
+                sb.refresh()
+                sb.sleep(8)
+                balance, _ = self._extract_data(sb)
+
+            # Let cookies flush to disk before closing
+            sb.sleep(3)
+
+            if balance is None:
+                raise PluginError("Interactive login completed but could not read points balance on account overview.")
+

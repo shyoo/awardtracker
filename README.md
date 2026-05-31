@@ -24,8 +24,9 @@ Award Tracker runs entirely on your local machine:
 
 * **Vibrant Dashboard Portfolio**: Summarizes point balances, USD values, membership tiers, and upcoming expiration dates under beautiful card grids.
 * **Unified Family Groupings**: Group and organize your reward portfolios cleanly by **Owner/Person** (complete with custom badge colors) or by **Program**.
-* **Automated Background Syncing**: Quiety executes in the background at custom intervals (e.g. *Every Day*, *Every Week*), cleanly skipping offline or manually-managed portfolios.
-* **Guided Interactive Sign-in (Unified Overlay)**: If a loyalty program prompts you for a Multi-Factor Authentication (MFA) passcode or a captcha screening, Award Tracker opens a headed browser window and injects a custom floating guide card (`awardtracker-guide-modal`) in the corner, guiding you step-by-step to complete the verification manually!
+* **Automated Background Syncing**: Quietly executes in the background at custom intervals (e.g. *Every Day*, *Every Week*), cleanly skipping offline or manually-managed portfolios.
+* **Guided Interactive Sign-in (4-Step Overlay)**: When a loyalty program requires MFA or a captcha, Award Tracker opens a headed browser window, **pre-fills your ID and password automatically**, and injects a custom floating guide card (`awardtracker-guide-modal`) in the corner. The card walks you through four steps: (1) credentials are pre-filled — don't touch them, (2) click **Sign In / Submit / Continue** yourself, (3) complete any MFA code manually, and (4) once signed in, the tool auto-navigates to your mileage overview and closes the window — hands off!
+* **Automatic Daily Database Backup**: Backs up your `awardtracker.db` file automatically at 3:00 AM daily (and on startup if yesterday's backup is missing). Retention window is user-configurable — **Never**, **3**, **7** (default), or **30** days — from the Settings page. Backup files are stored as `awardtracker_backup_YYYYMMDD.db` inside an `AwardTracker/backups/` folder in your OS application data directory.
 * **Cross-Platform Native OS Notifications**: Dispatches native notifications locally through the Windows Action Center, macOS Notification Center, or Linux notify-send on app startup, sync start, sync success/failures, and points-expiry warnings.
 * **Custom Manual Tracking**: Easily track points from credit cards (Chase, Amex, Citi, Capital One, Wells Fargo) or offline store programs (e.g. "Best Buy points", "Panera rewards"), complete with custom name overrides.
 
@@ -58,12 +59,13 @@ Provides a tracking chart that shows points history over the times.
 * **Delta Air Lines** (SkyMiles)
 * **Southwest Airlines** (Rapid Rewards)
 * **Alaska Airlines** (Mileage Plan)
-* **Korean Air** (SKYPASS)
+* **Korean Air** (SKYPASS) — *includes automatic Mileage Validity Batch & Certificate recognition*
 * **Asiana Airlines** (Asiana Club)
 * **Virgin Atlantic** (Flying Club)
 * **Avianca** (LifeMiles)
 * **Air Canada** (Aeroplan)
 
+> ⚠️ **Voucher & Certificate Support**: Automatic scraping of vouchers, coupons, and free-night certificates is currently supported for **Korean Air SKYPASS only**. Other programs display an informational notice on their account detail page.
 
 ### 🏨 Hotels
 * **Marriott Bonvoy**
@@ -185,3 +187,17 @@ Welcome to Award Tracker! Follow these steps to get started:
    * **Automated Scrapers**: Select a provider (e.g. *United Airlines*), enter your username, password, select the profile owner, and click **Save**.
    * **Manually-Tracked Programs**: Select *Manual Tracking* as the provider, enter your *Custom Program Name* (e.g. *Best Buy points*), and save.
 4. Click the **Sync Now** button (🔄) on the card to run a background sync and pull your balances automatically!
+
+### 4. Interactive Login (MFA / Captcha)
+If automated sync fails due to MFA, click the **Interactive Login** button (🔒) on the account card or detail page. A Chrome window will open:
+1. The tool **pre-fills your ID and password** automatically — do not modify them.
+2. Click **Sign In**, **Submit**, or **Continue** yourself.
+3. Complete any MFA code or captcha manually.
+4. Once signed in, the tool navigates automatically and closes the window — do not interact at that point.
+
+After a successful interactive login, click **Sync Now** to refresh your balance.
+
+### 5. Database Backup
+Award Tracker automatically backs up your database daily. To configure the retention window, go to **Settings → Data & Backup** and choose between **Never**, **3**, **7** (default), or **30** days. Backup files are stored in:
+* **Windows**: `%APPDATA%\AwardTracker\backups\`
+* **macOS**: `~/Library/Application Support/AwardTracker/backups/`

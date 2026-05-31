@@ -173,6 +173,27 @@
         </div>
       </div>
       
+      <!-- Data & Backup -->
+      <div class="pt-6 border-t border-slate-100">
+        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4">Data & Backup</h2>
+        <p class="mt-1 text-xs text-slate-400 mb-6">Configure automatic daily backups of your Award Tracker database. Backups are created once per day and pruned after the selected retention window.</p>
+
+        <div class="max-w-xs">
+          <label for="db-backup-frequency" class="block text-xs font-semibold text-slate-500 uppercase">Backup Retention Window</label>
+          <div class="mt-2">
+            <select id="db-backup-frequency" name="db-backup-frequency" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 bg-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm">
+              <option value="never" {% if settings.db_backup_frequency == 'never' %}selected{% endif %}>Never (Disabled)</option>
+              <option value="3" {% if settings.db_backup_frequency == '3' %}selected{% endif %}>Keep last 3 days</option>
+              <option value="7" {% if settings.db_backup_frequency == '7' or not settings.db_backup_frequency %}selected{% endif %}>Keep last 7 days (Default)</option>
+              <option value="30" {% if settings.db_backup_frequency == '30' %}selected{% endif %}>Keep last 30 days</option>
+            </select>
+          </div>
+          <p class="mt-2 text-[10px] text-slate-400 leading-relaxed">
+            Backup files are named <span class="font-mono bg-slate-50 px-1 rounded border border-slate-100">awardtracker_backup_YYYYMMDD.db</span> and stored in the <span class="font-mono bg-slate-50 px-1 rounded border border-slate-100">backups/</span> folder inside your AwardTracker data directory. A backup is automatically created at startup if yesterday's backup is missing.
+          </p>
+        </div>
+      </div>
+
       <div class="pt-6 border-t border-slate-100 flex items-center justify-end">
         <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors">
           Save Settings
@@ -180,6 +201,7 @@
       </div>
     </form>
   </div>
+
 
 
   <!-- Scraper Debug Logs Card -->

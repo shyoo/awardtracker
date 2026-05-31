@@ -70,16 +70,17 @@ def inject_control_modal(sb):
         if interactive:
             border_color = "#fc5d08"  # Premium Award Tracker Orange
             bg_color = "#1c1c1c"
-            step1 = "1. Complete any <strong>Multi-Factor Authentication (MFA)</strong> or security screening if prompted."
+            step2 = "2. Click the <strong>\"Sign In\"</strong>, <strong>\"Submit\"</strong>, or <strong>\"Continue\"</strong> button <strong>manually</strong> — the tool will NOT click this for you."
             if custom_tip:
-                step1 += f"<br><span style='color: #facc15;'>👉 {custom_tip}</span>"
-                
-            instructions = f"""
-                {step1}<br>
-                2. Fill in your credentials and complete the sign-in manually.<br>
-                3. The browser will automatically save your session and close.
-            """
-            tagline = "👉 ACTION REQUIRED: Complete sign-in manually"
+                step2 += f"<br><span style='color: #facc15;'>👉 {custom_tip}</span>"
+
+            instructions = (
+                "1. Your <strong>ID and Password have been pre-filled</strong> automatically — do not modify them.<br>"
+                f"{step2}<br>"
+                "3. If an <strong>MFA or one-time code</strong> is requested, complete that step manually.<br>"
+                "4. Once signed in, the tool will <strong>automatically navigate</strong> to your mileage overview and close the window — <strong>do not interact</strong> at that point."
+            )
+            tagline = "👉 ACTION REQUIRED: Please complete the steps above"
             tagline_color = "#facc15" # Yellow
         else:
             border_color = "#10b981"  # Vibrant Emerald Green for active sync

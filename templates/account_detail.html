@@ -281,6 +281,18 @@
     <div class="rounded-xl bg-white p-6 shadow-sm border border-slate-100">
       <h3 class="text-sm font-bold leading-6 text-slate-700 border-b border-slate-100 pb-4 mb-4">Vouchers & Certificates</h3>
       <div class="flow-root">
+        {% if account.provider.plugin_name != 'korean' %}
+        {# Voucher/coupon scraping is only supported for Korean Air SKYPASS #}
+        <div class="rounded-xl bg-amber-50 border border-amber-100 p-4 flex items-start gap-3">
+          <svg class="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+          </svg>
+          <div>
+            <p class="text-sm font-semibold text-amber-800">Not Supported for {{ account.program_name }}</p>
+            <p class="mt-1 text-xs text-amber-700">Voucher, coupon, and free-night certificate scraping is not currently supported for this program. Only <strong>Korean Air SKYPASS</strong> supports automatic certificate recognition.</p>
+          </div>
+        </div>
+        {% else %}
         <ul role="list" class="-my-5 divide-y divide-slate-100">
           {% for cert in certificates %}
           <li class="py-5">
@@ -313,6 +325,7 @@
           </li>
           {% endfor %}
         </ul>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -438,11 +451,10 @@
               <div id="interactiveSpecialInstructions" class="hidden text-left"></div>
 
               <div class="mt-4 p-4 bg-slate-50 border border-slate-100 rounded-xl text-[11px] text-left text-slate-600 leading-relaxed space-y-2.5">
-                <p>🖥️ <strong>1. Look at your desktop/taskbar</strong>: A Chrome window will open. Click on it to bring it forward.</p>
-                <p>💬 <strong>2. Enter MFA / Phone Code</strong>: Complete any requested 6-digit verification code or captcha prompts.</p>
-                <p>✅ <strong>3. Check "Don't require verification code again."</strong>: Ensure you check the checkbox of "Don't require verification code again." to prevent this next time.</p>
-                <p>🎯 <strong class="text-orange-600">4. CLICK "SIGN IN" / "CONTINUE" MANUALLY</strong>: You must click the <strong>"Sign in"</strong> or <strong>"Continue"</strong> button manually on the page once credentials are filled!</p>
-                <p>⌛ <strong>5. Automatic Completion</strong>: Once you are logged in, the window will auto-close and this page will reload to sync your balance.</p>
+                <p>🤖 <strong>1. Credentials Pre-filled</strong>: The tool will automatically fill in your <strong>ID and Password</strong> — please do not modify the fields.</p>
+                <p>🖱️ <strong>2. Click Sign In Manually</strong>: You must click the <strong>"Sign In"</strong>, <strong>"Submit"</strong>, or <strong>"Continue"</strong> button yourself — the tool will NOT click it for you.</p>
+                <p>🔐 <strong>3. Complete MFA if Prompted</strong>: If a one-time code, captcha, or verification step appears, complete it manually.</p>
+                <p>⌛ <strong class="text-orange-600">4. Hands Off After Sign-In</strong>: Once you are signed in, the tool will automatically navigate to your mileage overview and close the window — <strong>do not interact</strong> at that point.</p>
               </div>
             </div>
           </div>

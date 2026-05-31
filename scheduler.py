@@ -195,33 +195,80 @@ def sync_all_accounts():
 
 def backup_database():
     """
-    Automated daily database backup. Keeps rolling window of last 7 backups.
+    Automated daily database backup. Retention window is configurable via
+    the 'db_backup_frequency' setting (never / 3 / 7 / 30 days).
+    Backup filename format: awardtracker_backup_YYYYMMDD.db
     """
-    app_log.info("Starting automated daily database backup...")
+    from app import create_app
+    app = create_app()
+    with app.app_context():
+        retention_days_str = get_setting('db_backup_frequency', '7')
+        if retention_days_str == 'never':
+            app_log.info("Database backup skipped (backup disabled in settings).")
+            return
+        try:
+            retention_days = int(retention_days_str)
+        except ValueError:
+            retention_days = 7
+
+    app_log.info(f"Starting automated daily database backup (retention: {retention_days} days)...")
     import shutil
-    
+    from datetime import timedelta
+
     db_file = os.path.join(write_dir, 'awardtracker.db')
     backup_dir = os.path.join(write_dir, 'backups')
+    today_str = datetime.now().strftime('%Y%m%d')
+    backup_file = os.path.join(backup_dir, f'awardtracker_backup_{today_str}.db')
 
     try:
         if not os.path.exists(backup_dir):
             os.makedirs(backup_dir)
-        if os.path.exists(db_file):
-            timestamp = datetime.now().strftime('%Y%m%d')
-            backup_file = os.path.join(backup_dir, f'awardtracker_backup_{timestamp}.db')
-            shutil.copy2(db_file, backup_file)
-            app_log.info(f"Database backed up successfully to {backup_file}")
-            
-            # Prune old backups (keep rolling window of last 7 backups)
-            backups = sorted([os.path.join(backup_dir, f) for f in os.listdir(backup_dir) if f.startswith('awardtracker_backup_')])
-            while len(backups) > 7:
-                oldest = backups.pop(0)
-                os.remove(oldest)
-                app_log.info(f"Pruned old backup file: {oldest}")
-        else:
+
+        # Skip if today's backup already exists
+        if os.path.exists(backup_file):
+            app_log.info(f"Today's backup already exists at {backup_file}. Skipping.")
+            return
+
+        if not os.path.exists(db_file):
             app_log.warning("SQLite database file awardtracker.db not found. Skip backup.")
+            return
+
+        shutil.copy2(db_file, backup_file)
+        app_log.info(f"Database backed up successfully to {backup_file}")
+
+        # Prune backups older than retention window
+        cutoff = datetime.now() - timedelta(days=retention_days)
+        for fname in os.listdir(backup_dir):
+            if not fname.startswith('awardtracker_backup_') or not fname.endswith('.db'):
+                continue
+            fpath = os.path.join(backup_dir, fname)
+            try:
+                fmtime = datetime.fromtimestamp(os.path.getmtime(fpath))
+                if fmtime < cutoff:
+                    os.remove(fpath)
+                    app_log.info(f"Pruned old backup file: {fpath}")
+            except Exception as prune_err:
+                app_log.warning(f"Could not prune {fpath}: {prune_err}")
     except Exception as e:
         app_log.error(f"Automated database backup failed: {str(e)}")
+
+def check_startup_backup():
+    """
+    Called once at application startup. If yesterday's backup is missing, runs
+    backup_database() to ensure we never lose more than one day of data even if
+    the 3AM cron was missed (e.g., machine was off).
+    """
+    from datetime import timedelta
+    yesterday_str = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
+    backup_dir = os.path.join(write_dir, 'backups')
+    yesterday_file = os.path.join(backup_dir, f'awardtracker_backup_{yesterday_str}.db')
+    if not os.path.exists(yesterday_file):
+        app_log.info("Startup backup check: yesterday's backup not found. Running backup now.")
+        backup_database()
+    else:
+        app_log.info("Startup backup check: yesterday's backup already present. No action needed.")
+
+
 
 def check_scheduled_sync():
     """
