@@ -139,6 +139,58 @@ def quit_app(icon, item):
         pass
     os._exit(0)
 
+# Module-level slot — keeps the Objective-C delegate object alive (not GC'd)
+_macos_app_delegate = None
+
+if sys.platform == 'darwin':
+    try:
+        from Foundation import NSObject
+        import objc
+
+        class AwardTrackerAppDelegate(NSObject):
+            def applicationDockMenu_(self, sender):
+                from AppKit import NSMenu, NSMenuItem
+                dock_menu = NSMenu.alloc().init()
+                open_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                    "Open Award Tracker", "openAwardTrackerFromDock:", ""
+                )
+                open_item.setTarget_(self)
+                dock_menu.addItem_(open_item)
+                return dock_menu
+
+            @objc.typedSelector(b'v@:@')
+            def openAwardTrackerFromDock_(self, sender):
+                open_url_safely(f"http://127.0.0.1:{PORT}")
+
+            def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, hasVisibleWindows):
+                open_url_safely(f"http://127.0.0.1:{PORT}")
+                return False
+    except Exception as e:
+        print(f"[AwardTracker] Failed to define macOS delegate class: {e}")
+
+def _setup_macos_dock_menu():
+    """
+    Registers a macOS Dock icon context menu and reopening handler by setting
+    a custom NSApplicationDelegate on the shared NSApplication.
+
+    This is called synchronously on the main thread right after creating the
+    pystray Icon, ensuring proper thread safety and Cocoa event loop integration.
+    """
+    global _macos_app_delegate
+    if sys.platform != 'darwin':
+        return
+    try:
+        from AppKit import NSApplication
+        NSApp = NSApplication.sharedApplication()
+        if 'AwardTrackerAppDelegate' in globals():
+            _macos_app_delegate = AwardTrackerAppDelegate.alloc().init()
+            NSApp.setDelegate_(_macos_app_delegate)
+            print("[AwardTracker] macOS NSApplicationDelegate successfully registered.")
+        else:
+            print("[AwardTracker] AwardTrackerAppDelegate class was not defined.")
+    except Exception as e:
+        print(f"[AwardTracker] macOS dock menu setup failed (non-fatal): {e}")
+
 def main():
     # Detect startup argument
     is_startup = "--startup" in sys.argv
@@ -174,7 +226,12 @@ def main():
         "Award Tracker",
         menu
     )
-    
+
+    # On macOS, set up the NSApplication delegate on the main thread
+    # before icon.run() starts the Cocoa event loop.
+    if sys.platform == 'darwin':
+        _setup_macos_dock_menu()
+
     # Start blocking tray icon loop
     icon.run()
 
