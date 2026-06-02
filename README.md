@@ -147,10 +147,17 @@ We have provided streamlined build and release tools that compile the Flask app,
   ```
   Generates a Setup Wizard installer (`dist/awardtracker-setup.exe`) and portable zip (`dist/awardtracker-portable.zip`).
 * **macOS (Disk Image DMG)**:
+  By default, this compiles the application bundle targeting the **local architecture** of the build machine:
   ```bash
   ./release-macos.sh
   ```
-  Generates a native Drag-and-Drop Disk Image installer (`dist/awardtracker-macos-setup.dmg`) and portable zip (`dist/awardtracker-macos-portable.zip`).
+  To package a **Universal 2** release (supporting both Intel and Apple Silicon Macs natively), run:
+  ```bash
+  ./release-macos.sh --universal
+  ```
+  *(Note: The `--universal` flag performs pre-flight environment checks to verify that your Python interpreter and compiled dependencies support the universal2 architecture slice).*
+
+  Both commands generate a native Drag-and-Drop Disk Image installer (`dist/awardtracker-macos-setup.dmg`) and portable zip (`dist/awardtracker-macos-portable.zip`).
 
 ### 4. Running the Tests
 To verify all APIs, naming overrides, settings parameters, and plugin infrastructure are fully functional, execute our premium color-coded test runners:
