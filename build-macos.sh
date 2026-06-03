@@ -15,11 +15,16 @@ echo -e "${CYAN}==================================================${NC}"
 SPEC_FILE="awardtracker.spec"
 
 # Detect virtual environment
-if [ -d "venv" ]; then
-    echo -e "${GREEN}Activating virtual environment...${NC}"
-    source venv/bin/activate
+VENV_DIR="venv"
+if [ "$AWARDTRACKER_BUILD_UNIVERSAL" = "1" ] && [ -d "venv-universal" ]; then
+    VENV_DIR="venv-universal"
+fi
+
+if [ -d "$VENV_DIR" ]; then
+    echo -e "${GREEN}Activating virtual environment '$VENV_DIR'...${NC}"
+    source "$VENV_DIR/bin/activate"
 else
-    echo -e "${YELLOW}Warning: 'venv' directory not found. Trying global environment...${NC}"
+    echo -e "${YELLOW}Warning: '$VENV_DIR' directory not found. Trying global environment...${NC}"
 fi
 
 # Check for PyInstaller

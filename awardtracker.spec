@@ -59,7 +59,7 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch='universal2' if (__import__('sys').platform == 'darwin' and __import__('os').environ.get('AWARDTRACKER_BUILD_UNIVERSAL') == '1') else None,
     codesign_identity=None,
     entitlements_file=None,
     icon='awardtracker.ico',
