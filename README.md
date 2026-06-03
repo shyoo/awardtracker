@@ -155,7 +155,10 @@ We have provided streamlined build and release tools that compile the Flask app,
   ```bash
   ./release-macos.sh --universal
   ```
-  *(Note: The `--universal` flag performs pre-flight environment checks to verify that your Python interpreter and compiled dependencies support the universal2 architecture slice).*
+  > [!IMPORTANT]
+  > To package a **Universal 2** release, you **must** use the official Python installer from [Python.org](https://www.python.org/downloads/mac-osx/). The default Python installed via Homebrew lacks Universal2 architecture support and will fail compatibility verification.
+  > 
+  > The script will automatically locate your official Python installation, set up a dedicated `venv-universal` environment, compile C extensions for both architectures, and merge libraries like `Pillow` into a unified binary.
 
   Both commands generate a native Drag-and-Drop Disk Image installer (`dist/awardtracker-macos-setup.dmg`) and portable zip (`dist/awardtracker-macos-portable.zip`).
 

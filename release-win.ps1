@@ -10,8 +10,17 @@ $VenvPath = "venv\Scripts\Activate.ps1"
 $SpecFile = "awardtracker.spec"
 $IssFile = "installer.iss"
 $DistDir = "dist"
-$PortableZip = "dist\awardtracker-win64-portable.zip"
-$SetupExe = "dist\awardtracker-win64-setup.exe"
+
+$VersionSuffix = ""
+if (Test-Path "version.txt") {
+    $AppVersion = (Get-Content "version.txt").Trim()
+    if ($AppVersion) {
+        $VersionSuffix = "-v$AppVersion"
+    }
+}
+
+$PortableZip = "dist\awardtracker-win64-portable$VersionSuffix.zip"
+$SetupExe = "dist\awardtracker-win64-setup$VersionSuffix.exe"
 
 # 1. Verify environment
 if (-not (Test-Path $SpecFile)) {
@@ -98,8 +107,8 @@ if ($null -ne $IsccPath) {
     Write-Host "Found Inno Setup Compiler at: $IsccPath" -ForegroundColor Gray
     Write-Host "Compiling Windows setup wizard silently..." -ForegroundColor Gray
     
-    # Run the Inno Setup compiler
-    & $IsccPath /Q $IssFile
+    # Run the Inno Setup compiler with output filename override to include version suffix
+    & $IsccPath /Q /F"awardtracker-win64-setup$VersionSuffix" $IssFile
     
     if (Test-Path $SetupExe) {
         $setupFile = Get-Item $SetupExe

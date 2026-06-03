@@ -8,6 +8,7 @@ internal_docs/
 scratch/
 profiles/
 venv/
+venv-universal/
 *.log
 awardtracker.db
 scraper_debug.log
