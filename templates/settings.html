@@ -195,6 +195,195 @@
         </div>
       </div>
 
+      <!-- Point Valuations Configuration Card -->
+      <div class="pt-6 border-t border-slate-100">
+        <h2 class="text-base font-bold leading-7 text-slate-900">Point Valuations & Custom CPP Overrides</h2>
+        <p class="mt-1 text-xs text-slate-400 mb-6">Override the cents-per-point (CPP) valuation rate used to calculate the equivalent USD value of your point balances.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          
+          <!-- Standard Valuations -->
+          <div class="bg-slate-50/50 rounded-xl border border-slate-100 p-5">
+            <h3 class="text-sm font-bold text-slate-800 mb-3.5 flex items-center gap-1.5 select-none">
+              <svg class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-.778.099-1.533.284-2.253" />
+              </svg>
+              Standard Programs
+            </h3>
+            
+            <div class="max-h-96 overflow-y-auto pr-1 space-y-3.5 scrollbar-thin scrollbar-thumb-slate-200">
+              {% for val in standard_valuations %}
+              <div class="flex items-center justify-between gap-4 p-2 bg-white rounded-lg border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
+                <div class="flex items-center gap-2">
+                  <div class="h-6 w-6 rounded bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 overflow-hidden shrink-0">
+                    <img src="/static/logos/{{ val.key }}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" class="h-full w-full object-cover">
+                    <span class="hidden select-none">{{ val.name[0] }}</span>
+                  </div>
+                  <span class="text-xs font-semibold text-slate-700 leading-tight">{{ val.name }}</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <input type="number" step="0.01" min="0.0" name="val_cpp_{{ val.key }}" value="{{ val.cpp }}" 
+                         class="w-20 rounded border border-slate-200 px-2.5 py-1 text-right text-xs font-semibold text-slate-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+                  <span class="text-[10px] font-bold text-slate-400 uppercase select-none w-5">cpp</span>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Custom Valuations -->
+          <div class="bg-slate-50/50 rounded-xl border border-slate-100 p-5 flex flex-col justify-between">
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 mb-3.5 flex items-center gap-1.5 select-none">
+                <svg class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                </svg>
+                Custom & Manual Programs
+              </h3>
+
+              <div id="custom-valuations-list" class="max-h-72 overflow-y-auto pr-1 space-y-3.5 scrollbar-thin scrollbar-thumb-slate-200 mb-4">
+                {% for val in custom_valuations %}
+                <div class="flex items-center justify-between gap-3 p-2 bg-white rounded-lg border border-slate-100 hover:border-slate-200 transition-colors shadow-sm custom-val-row">
+                  <div class="flex flex-col">
+                    <span class="text-xs font-semibold text-slate-700 leading-tight">{{ val.name }}</span>
+                    {% if val.auto_detected %}
+                    <span class="text-[9px] text-primary font-bold mt-0.5 select-none">Active Account (Unsaved)</span>
+                    {% endif %}
+                  </div>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <input type="hidden" name="custom_val_name[]" value="{{ val.name }}">
+                    <input type="number" step="0.01" min="0.0" name="custom_val_cpp[]" value="{{ val.cpp }}" 
+                           class="w-18 rounded border border-slate-200 px-2 py-1 text-right text-xs font-semibold text-slate-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase select-none">cpp</span>
+                    <button type="button" onclick="this.closest('.custom-val-row').remove()" 
+                            class="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1 rounded transition-colors" title="Delete Override">
+                      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <!-- Add Custom Override Form Row -->
+            <div class="p-3.5 bg-white border border-slate-100 rounded-lg shadow-sm">
+              <span class="block text-[10px] font-bold text-slate-400 uppercase mb-2 select-none">Add Custom Program Valuation</span>
+              <div class="flex gap-2">
+                <input type="text" id="new-custom-name" placeholder="e.g. BILT Rewards" 
+                       class="block w-full rounded border border-slate-200 px-2.5 py-1 text-xs text-slate-800 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+                <input type="number" id="new-custom-cpp" placeholder="1.25" step="0.01" min="0.0" 
+                       class="w-20 rounded border border-slate-200 px-2 py-1 text-right text-xs font-semibold text-slate-800 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+                <button type="button" onclick="addCustomValuationRow()" 
+                        class="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded transition-colors shrink-0 flex items-center justify-center">
+                  Add
+                </button>
+              </div>
+              <p id="new-custom-error" class="hidden mt-1.5 text-[10px] text-rose-500 font-semibold"></p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <script>
+        function addCustomValuationRow() {
+          const nameInput = document.getElementById('new-custom-name');
+          const cppInput = document.getElementById('new-custom-cpp');
+          const errorMsg = document.getElementById('new-custom-error');
+          
+          const name = nameInput.value.trim().replace(/\s+/g, ' ');
+          const cpp = parseFloat(cppInput.value);
+          
+          errorMsg.classList.add('hidden');
+          
+          if (!name) {
+            errorMsg.textContent = "Please enter a program name.";
+            errorMsg.classList.remove('hidden');
+            return;
+          }
+          
+          if (isNaN(cpp) || cpp < 0) {
+            errorMsg.textContent = "Please enter a valid CPP value.";
+            errorMsg.classList.remove('hidden');
+            return;
+          }
+          
+          // Check for duplicate standard key or already added custom key
+          const standardKeys = [
+            'marriott', 'hyatt', 'hilton', 'ihg', 'american', 'united', 'delta',
+            'korean', 'alaska', 'southwest', 'virgin', 'aircanada', 'avianca',
+            'asiana', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'manual'
+          ];
+          
+          const nameLower = name.toLowerCase();
+          if (standardKeys.includes(nameLower)) {
+            errorMsg.textContent = `"${name}" matches a built-in standard program. Please override it in the Standard Programs section instead.`;
+            errorMsg.classList.remove('hidden');
+            return;
+          }
+          
+          // Check if already present in custom rows
+          let isDuplicate = false;
+          document.querySelectorAll('.custom-val-row input[name="custom_val_name[]"]').forEach(input => {
+            if (input.value.toLowerCase() === nameLower) {
+              isDuplicate = true;
+            }
+          });
+          
+          if (isDuplicate) {
+            errorMsg.textContent = `"${name}" has already been added below.`;
+            errorMsg.classList.remove('hidden');
+            return;
+          }
+          
+          const list = document.getElementById('custom-valuations-list');
+          const row = document.createElement('div');
+          row.className = "flex items-center justify-between gap-3 p-2 bg-white rounded-lg border border-slate-100 hover:border-slate-200 transition-colors shadow-sm custom-val-row";
+          row.innerHTML = `
+            <div class="flex flex-col">
+              <span class="text-xs font-semibold text-slate-700 leading-tight">${name}</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <input type="hidden" name="custom_val_name[]" value="${name}">
+              <input type="number" step="0.01" min="0.0" name="custom_val_cpp[]" value="${cpp.toFixed(2)}" 
+                     class="w-18 rounded border border-slate-200 px-2 py-1 text-right text-xs font-semibold text-slate-800 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+              <span class="text-[10px] font-bold text-slate-400 uppercase select-none">cpp</span>
+              <button type="button" onclick="this.closest('.custom-val-row').remove()" 
+                      class="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1 rounded transition-colors" title="Delete Override">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          `;
+          
+          list.appendChild(row);
+          
+          // Clear inputs
+          nameInput.value = '';
+          cppInput.value = '';
+          
+          // Scroll list to bottom
+          list.scrollTop = list.scrollHeight;
+        }
+
+        // Handle enter key on custom valuation inputs to add row instead of submitting form
+        document.getElementById('new-custom-name').addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addCustomValuationRow();
+          }
+        });
+        document.getElementById('new-custom-cpp').addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addCustomValuationRow();
+          }
+        });
+      </script>
+
       <div class="pt-6 border-t border-slate-100 flex items-center justify-end">
         <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors">
           Save Settings

@@ -23,7 +23,18 @@
           <span class="inline-flex items-center rounded-md bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 ring-1 ring-inset ring-blue-700/10">{{ account.status }}</span>
           {% endif %}
         </div>
+        {% if account.is_manual %}
+        <div class="mt-1 flex items-center gap-1.5 select-none">
+          <span class="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-600 ring-1 ring-inset ring-indigo-500/20">
+            <svg class="h-3.5 w-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" />
+            </svg>
+            Manually Managed Account
+          </span>
+        </div>
+        {% else %}
         <p class="mt-1 text-sm text-slate-500">Account Username: <span class="font-mono text-slate-700">{{ account.username }}</span></p>
+        {% endif %}
       </div>
     </div>
     
