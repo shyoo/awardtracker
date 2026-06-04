@@ -224,5 +224,75 @@ class TestAPIsAndPlugins(unittest.TestCase):
         balance, status = plugin._extract_data(mock_sb)
         self.assertEqual(balance, 10000)
 
+    def test_american_status_extraction(self):
+        plugin = plugin_manager.get_plugin('american')
+        self.assertIsNotNone(plugin)
+        
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        # Scenario 1: AAdvantage member with marketing table elsewhere on the page
+        html_promo = """
+        <html>
+            <body>
+                <div class="user-card-header">
+                    <span>AAdvantage® #</span>
+                    <span>ABC1234</span>
+                    <span>AAdvantage Member</span>
+                </div>
+                <div class="marketing-benefits-table">
+                    <h2>Earn Executive Platinum Status</h2>
+                    <p>Executive Platinum is the highest elite level.</p>
+                </div>
+            </body>
+        </html>
+        """
+        mock_sb_promo = MockSB(html_promo)
+        _, status_promo, _, _ = plugin._extract_data(mock_sb_promo)
+        self.assertEqual(status_promo, "Member")
+
+        # Scenario 2: Actual Executive Platinum member
+        html_elite = """
+        <html>
+            <body>
+                <div class="user-card-header">
+                    <span>AAdvantage # XYZ5678</span>
+                    <span>Executive Platinum</span>
+                </div>
+                <div class="marketing-benefits-table">
+                    <h2>Earn Gold Status</h2>
+                    <p>Compare benefits of Gold and Executive Platinum.</p>
+                </div>
+            </body>
+        </html>
+        """
+        mock_sb_elite = MockSB(html_elite)
+        _, status_elite, _, _ = plugin._extract_data(mock_sb_elite)
+        self.assertEqual(status_elite, "Executive Platinum")
+
+        # Scenario 3: AAdvantage member with Executive Platinum goal tracker in the same card container
+        html_goal = """
+        <html>
+            <body>
+                <div class="profile-card">
+                    <div class="user-info">
+                        <span>AAdvantage® # ABC1234</span>
+                        <span>AAdvantage Member</span>
+                    </div>
+                    <div class="status-goal-widget">
+                        <span>Status Goal</span>
+                        <span>Executive Platinum</span>
+                    </div>
+                </div>
+            </body>
+        </html>
+        """
+        mock_sb_goal = MockSB(html_goal)
+        _, status_goal, _, _ = plugin._extract_data(mock_sb_goal)
+        self.assertEqual(status_goal, "Member")
+
 if __name__ == '__main__':
     unittest.main()
