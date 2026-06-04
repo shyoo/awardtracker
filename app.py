@@ -11,21 +11,16 @@ import sys
 import json
 
 def load_settings():
-    from config import write_dir
+    from config import write_dir, basedir
     settings_path = os.path.join(write_dir, 'settings.json')
-    if getattr(sys, 'frozen', False):
-        user_settings_path = settings_path
-        if not os.path.exists(user_settings_path):
-            default_path = os.path.join(sys._MEIPASS, 'settings.json')
-            if os.path.exists(default_path):
-                import shutil
-                try:
-                    shutil.copy2(default_path, user_settings_path)
-                except Exception:
-                    pass
-        settings_path = user_settings_path
-    else:
-        settings_path = 'settings.json'
+    if not os.path.exists(settings_path):
+        default_path = os.path.join(basedir, 'settings.default.json')
+        if os.path.exists(default_path):
+            import shutil
+            try:
+                shutil.copy2(default_path, settings_path)
+            except Exception:
+                pass
         
     try:
         with open(settings_path, 'r') as f:
@@ -34,28 +29,52 @@ def load_settings():
         return {}
 
 def load_valuations():
-    from config import write_dir
+    from config import write_dir, basedir
     val_path = os.path.join(write_dir, 'valuations.json')
-    # If user hasn't created a local valuations.json, copy default from bundle
-    if getattr(sys, 'frozen', False):
-        user_val_path = val_path
-        if not os.path.exists(user_val_path):
-            default_path = os.path.join(sys._MEIPASS, 'valuations.json')
-            if os.path.exists(default_path):
-                import shutil
-                try:
-                    shutil.copy2(default_path, user_val_path)
-                except Exception:
-                    pass
-        val_path = user_val_path
-    else:
-        val_path = 'valuations.json'
+    if not os.path.exists(val_path):
+        default_path = os.path.join(basedir, 'valuations.default.json')
+        if os.path.exists(default_path):
+            import shutil
+            try:
+                shutil.copy2(default_path, val_path)
+            except Exception:
+                pass
 
     try:
         with open(val_path, 'r') as f:
             return json.load(f)
     except Exception:
         return {}
+
+
+def save_valuations(valuations):
+    from config import write_dir
+    val_path = os.path.join(write_dir, 'valuations.json')
+    try:
+        with open(val_path, 'w') as f:
+            json.dump(valuations, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def get_account_cpp_and_value(account, valuations):
+    """
+    Computes and returns the CPP (cents per point) and equivalent USD value
+    for an account, taking into account custom overrides for manual entries.
+    """
+    if account.is_manual and account.provider.plugin_name == 'manual':
+        prog_name = account.program_name or ""
+        val = valuations.get(prog_name.lower())
+        if val is None:
+            val = valuations.get('manual', {})
+        cpp = val.get('cpp', 1.0)
+    else:
+        val = valuations.get(account.provider.plugin_name, {})
+        cpp = val.get('cpp', 0.0)
+
+    value_usd = (account.balance * cpp) / 100.0
+    return cpp, value_usd
 
 
 
@@ -340,10 +359,9 @@ def create_app(config_class=Config):
         total_value = 0.0
         
         for acc in accounts:
-            val = valuations.get(acc.provider.plugin_name, {})
-            cpp = val.get('cpp', 0.0)
+            cpp, value_usd = get_account_cpp_and_value(acc, valuations)
             acc.cpp = cpp
-            acc.value_usd = (acc.balance * cpp) / 100.0
+            acc.value_usd = value_usd
             total_value += acc.value_usd
             
             
@@ -452,9 +470,9 @@ def create_app(config_class=Config):
         
         # Load valuations & inject dynamic attributes
         valuations = load_valuations()
-        val = valuations.get(account.provider.plugin_name, {})
-        account.cpp = val.get('cpp', 0.0)
-        account.value_usd = (account.balance * account.cpp) / 100.0
+        cpp, value_usd = get_account_cpp_and_value(account, valuations)
+        account.cpp = cpp
+        account.value_usd = value_usd
         
         # Read warning threshold
         warning_threshold_setting = Settings.query.filter_by(key='warning_threshold').first()
@@ -1081,6 +1099,12 @@ def create_app(config_class=Config):
 
     @app.route('/settings', methods=['GET', 'POST'])
     def settings():
+        STANDARD_VALUATION_KEYS = {
+            'marriott', 'hyatt', 'hilton', 'ihg', 'american', 'united', 'delta',
+            'korean', 'alaska', 'southwest', 'virgin', 'aircanada', 'avianca',
+            'asiana', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'manual'
+        }
+
         if request.method == 'POST':
             native_notifications = 'true' if request.form.get('native-notifications') == 'on' else 'false'
             email_notifications = 'true' if request.form.get('email-notifications') == 'on' else 'false'
@@ -1117,6 +1141,53 @@ def create_app(config_class=Config):
                     db.session.add(setting)
             db.session.commit()
             
+            # Save standard program valuations
+            valuations = load_valuations()
+            for key in STANDARD_VALUATION_KEYS:
+                val_input = request.form.get(f'val_cpp_{key}')
+                if val_input is not None:
+                    try:
+                        cpp_float = float(val_input)
+                        if key not in valuations:
+                            valuations[key] = {}
+                        valuations[key]['cpp'] = cpp_float
+                    except ValueError:
+                        pass
+
+            # Save custom manual program valuations
+            custom_names = request.form.getlist('custom_val_name[]')
+            custom_cpps = request.form.getlist('custom_val_cpp[]')
+            
+            # Remove all non-standard keys from valuations to re-populate them
+            keys_to_remove = [k for k in valuations if k not in STANDARD_VALUATION_KEYS]
+            for k in keys_to_remove:
+                del valuations[k]
+                
+            # Add updated custom valuations
+            seen_posted_keys = set()
+            for name, cpp_str in zip(custom_names, custom_cpps):
+                name_cleaned = " ".join(name.split())
+                if not name_cleaned:
+                    continue
+                try:
+                    cpp_val = float(cpp_str)
+                    key = name_cleaned.lower()
+                    # Prevent users from accidentally duplicate keys (like standard ones)
+                    if key in STANDARD_VALUATION_KEYS:
+                        continue
+                    if key in seen_posted_keys:
+                        continue
+                    seen_posted_keys.add(key)
+                    valuations[key] = {
+                        'cpp': cpp_val,
+                        'name': name_cleaned,
+                        'is_manual': True
+                    }
+                except ValueError:
+                    pass
+            
+            save_valuations(valuations)
+
             # Apply cross-platform Startup adjustments
             set_app_autostart(launch_on_boot == 'true')
             
@@ -1149,7 +1220,66 @@ def create_app(config_class=Config):
             'scheduled_sync_frequency': scheduled_sync_frequency.value if scheduled_sync_frequency else 'daily',
             'db_backup_frequency': db_backup_frequency.value if db_backup_frequency else '7'
         }
-        return render_template('settings.html', settings=settings_data)
+
+        # Load valuations & split into standard / custom
+        valuations = load_valuations()
+        
+        # Get active custom manual program names from the DB (deduplicated case-insensitively)
+        manual_accounts = Account.query.join(Provider).filter(Provider.plugin_name == 'manual').all()
+        active_custom_names = {}
+        for acc in manual_accounts:
+            custom_name = acc.extra_metadata.get('custom_program_name')
+            if custom_name:
+                custom_name_cleaned = " ".join(custom_name.split())
+                key = custom_name_cleaned.lower()
+                if key not in STANDARD_VALUATION_KEYS and key not in active_custom_names:
+                    active_custom_names[key] = custom_name_cleaned
+
+        standard_valuations = []
+        custom_valuations = []
+        
+        ordered_standard_keys = [
+            'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 
+            'virgin', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 
+            'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'manual'
+        ]
+        
+        for key in ordered_standard_keys:
+            val = valuations.get(key, {})
+            standard_valuations.append({
+                'key': key,
+                'name': val.get('name', key.capitalize()),
+                'cpp': val.get('cpp', 0.0 if key != 'manual' else 1.0)
+            })
+            
+        seen_custom_keys = set()
+        for key, val in valuations.items():
+            if key not in STANDARD_VALUATION_KEYS:
+                normalized_key = " ".join(key.split()).lower()
+                if normalized_key not in seen_custom_keys:
+                    custom_valuations.append({
+                        'key': normalized_key,
+                        'name': val.get('name', key),
+                        'cpp': val.get('cpp', 1.0)
+                    })
+                    seen_custom_keys.add(normalized_key)
+                
+        for key, custom_name in active_custom_names.items():
+            if key not in seen_custom_keys:
+                custom_valuations.append({
+                    'key': key,
+                    'name': custom_name,
+                    'cpp': 1.0,
+                    'auto_detected': True
+                })
+                seen_custom_keys.add(key)
+
+        return render_template(
+            'settings.html',
+            settings=settings_data,
+            standard_valuations=standard_valuations,
+            custom_valuations=custom_valuations
+        )
 
 
 

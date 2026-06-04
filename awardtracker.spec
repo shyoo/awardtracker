@@ -8,8 +8,8 @@ added_files = [
     ('static', 'static'),
     ('migrations', 'migrations'),
     ('plugins', 'plugins'),
-    ('valuations.json', '.'),
-    ('settings.json', '.'),
+    ('valuations.default.json', '.'),
+    ('settings.default.json', '.'),
     ('version.txt', '.'),
 ]
 

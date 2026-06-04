@@ -20,3 +20,7 @@ scraper_debug.log
 # macOS build-time generated icon artifacts
 awardtracker.icns
 awardtracker.iconset/
+
+# Local configuration overrides
+settings.json
+valuations.json
