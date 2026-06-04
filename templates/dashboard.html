@@ -155,7 +155,7 @@
     </div>
   </div>
 
-  {% set grouped = accounts|groupby('group_person_name' if group_mode == 'person' else 'group_provider_name') %}
+  {# Grouped accounts are already grouped and sorted by Flask #}
   
   {% if not grouped %}
   <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-8 text-center text-sm text-slate-400">
@@ -182,7 +182,7 @@
         </span>
       </div>
       <ul role="list" class="divide-y divide-slate-100">
-        {% set sorted_accounts = group_accounts|sort(attribute='provider.name') if group_mode == 'person' else group_accounts %}
+        {% set sorted_accounts = group_accounts %}
         {% for account in sorted_accounts %}
         <li class="px-4 py-3 sm:px-6 hover:bg-slate-50/80 transition-colors relative" id="account-row-{{ account.id }}">
           

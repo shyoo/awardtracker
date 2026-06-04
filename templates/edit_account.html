@@ -42,14 +42,16 @@
       </div>
 
       {% if account.is_manual %}
-      <!-- Custom Program Name -->
-      <div>
-        <label for="custom_program_name" class="block text-sm font-semibold text-slate-700">Custom Program Name</label>
-        <p class="mt-1 text-xs text-slate-400">The custom name for this manually-tracked rewards program.</p>
-        <div class="mt-2">
-          <input type="text" name="custom_program_name" id="custom_program_name" value="{{ account.extra_metadata.get('custom_program_name', '') }}" required class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+        {% if account.provider.plugin_name == 'manual' %}
+        <!-- Custom Program Name -->
+        <div>
+          <label for="custom_program_name" class="block text-sm font-semibold text-slate-700">Custom Program Name</label>
+          <p class="mt-1 text-xs text-slate-400">The custom name for this manually-tracked rewards program.</p>
+          <div class="mt-2">
+            <input type="text" name="custom_program_name" id="custom_program_name" value="{{ account.extra_metadata.get('custom_program_name', '') }}" required class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+          </div>
         </div>
-      </div>
+        {% endif %}
       {% else %}
       <!-- Username -->
       <div>

@@ -32,7 +32,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         db.create_all()
         
         # Populate initial test data
-        self.provider_manual = Provider(name="Manual Tracking", plugin_name="manual", enabled=True)
+        self.provider_manual = Provider(name="Custom Program Entry", plugin_name="manual", enabled=True)
         self.provider_auto = Provider(name="United Airlines", plugin_name="united", enabled=True)
         self.person = Person(name="TestOwner", color="#ff0000")
         

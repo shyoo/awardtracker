@@ -73,12 +73,15 @@ app = create_app()
 def start_flask():
     with app.app_context():
         db.create_all()
-        # Register plugins in database
+        # Register plugins in database, updating name if it differs (self-healing migration)
         for plugin in plugin_manager.get_all_plugins():
             provider = Provider.query.filter_by(plugin_name=plugin.plugin_id).first()
             if not provider:
                 provider = Provider(name=plugin.name, plugin_name=plugin.plugin_id)
                 db.session.add(provider)
+            else:
+                if provider.name != plugin.name:
+                    provider.name = plugin.name
         db.session.commit()
         
     try:
