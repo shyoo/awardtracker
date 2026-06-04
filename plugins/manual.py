@@ -86,6 +86,16 @@ class WellsFargoRewardsPlugin(_ManualBase):
         return "wellsfargo"
 
 
+class BiltRewardsPlugin(_ManualBase):
+    @property
+    def name(self) -> str:
+        return "Bilt Rewards"
+
+    @property
+    def plugin_id(self) -> str:
+        return "bilt"
+
+
 # ---------------------------------------------------------------------------
 # Generic manual entry provider (user-defined programs)
 # ---------------------------------------------------------------------------
@@ -93,7 +103,7 @@ class WellsFargoRewardsPlugin(_ManualBase):
 class ManualEntryPlugin(_ManualBase):
     @property
     def name(self) -> str:
-        return "Manual Entry"
+        return "Custom Program Entry"
 
     @property
     def plugin_id(self) -> str:

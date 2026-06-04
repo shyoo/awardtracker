@@ -219,6 +219,7 @@ def create_app(config_class=Config):
                 'citi': 'citi.com',
                 'capitalone': 'capitalone.com',
                 'wellsfargo': 'wellsfargo.com',
+                'bilt': 'biltrewards.com',
             }
             domain = domains.get(plugin_name.lower())
             if domain:
@@ -401,10 +402,40 @@ def create_app(config_class=Config):
             acc.group_provider_name = acc.provider.name
 
         group_mode = request.args.get('group') or request.cookies.get('group_mode', 'program')
+        
+        # Group and sort accounts dynamically, ensuring Custom Program Entry (manual) is at the absolute end
+        from collections import defaultdict
+        groups_dict = defaultdict(list)
+        for acc in accounts:
+            key = acc.group_person_name if group_mode == 'person' else acc.group_provider_name
+            groups_dict[key].append(acc)
+
+        if group_mode == 'person':
+            sorted_groups = []
+            for g_name in sorted(groups_dict.keys(), key=lambda k: k.lower()):
+                # Sort accounts under each person: Custom Program Entry (manual) is placed at the end, other providers sorted alphabetically
+                g_accounts = sorted(
+                    groups_dict[g_name],
+                    key=lambda a: (a.provider.plugin_name == 'manual', a.provider.name.lower())
+                )
+                sorted_groups.append((g_name, g_accounts))
+            grouped = sorted_groups
+        else:
+            sorted_groups = []
+            for g_name in sorted(groups_dict.keys(), key=lambda k: k.lower()):
+                is_custom_program = False
+                if groups_dict[g_name]:
+                    is_custom_program = (groups_dict[g_name][0].provider.plugin_name == 'manual')
+                sorted_groups.append((g_name, groups_dict[g_name], is_custom_program))
+            # Sort groups: Custom Program Entry (is_custom_program == True) goes to the absolute end
+            sorted_groups = sorted(sorted_groups, key=lambda x: (x[2], x[0].lower()))
+            grouped = [(x[0], x[1]) for x in sorted_groups]
+
         active_certificates = Certificate.query.order_by(Certificate.expiration_date.asc()).all()
 
         resp = make_response(render_template('dashboard.html',
                                accounts=accounts,
+                               grouped=grouped,
                                total_accounts=total_accounts,
                                total_points=total_points,
                                expiring_soon=expiring_soon,
@@ -553,7 +584,7 @@ def create_app(config_class=Config):
         return redirect(url_for('people'))
 
     # Plugin IDs that represent manually-tracked (no-scrape) accounts
-    MANUAL_PLUGIN_IDS = {'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'manual'}
+    MANUAL_PLUGIN_IDS = {'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'}
 
     @app.route('/accounts/add', methods=['GET', 'POST'])
     def add_account():
@@ -644,7 +675,12 @@ def create_app(config_class=Config):
                     flash(f'Error adding account: {str(e)}')
                     return redirect(url_for('add_account'))
 
-        providers = Provider.query.filter_by(enabled=True).order_by(Provider.name.asc()).all()
+        providers_raw = Provider.query.filter_by(enabled=True).all()
+        # Sort so that "Custom Program Entry" (plugin_name 'manual') is at the absolute end of the list
+        providers = sorted(
+            providers_raw,
+            key=lambda p: (p.plugin_name == 'manual', p.name.lower())
+        )
         people_list = Person.query.all()
         # Mark which providers are manual so the template can set data-manual attributes
         manual_plugin_ids = list(MANUAL_PLUGIN_IDS)
@@ -1102,7 +1138,7 @@ def create_app(config_class=Config):
         STANDARD_VALUATION_KEYS = {
             'marriott', 'hyatt', 'hilton', 'ihg', 'american', 'united', 'delta',
             'korean', 'alaska', 'southwest', 'virgin', 'aircanada', 'avianca',
-            'asiana', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'manual'
+            'asiana', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         }
 
         if request.method == 'POST':
@@ -1241,7 +1277,7 @@ def create_app(config_class=Config):
         ordered_standard_keys = [
             'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 
             'virgin', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 
-            'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'manual'
+            'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         ]
         
         for key in ordered_standard_keys:
@@ -1395,12 +1431,15 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         
-        # Register plugins in the database
+        # Register plugins in the database, updating name if it differs (self-healing migration)
         for plugin in plugin_manager.get_all_plugins():
             provider = Provider.query.filter_by(plugin_name=plugin.plugin_id).first()
             if not provider:
                 provider = Provider(name=plugin.name, plugin_name=plugin.plugin_id)
                 db.session.add(provider)
+            else:
+                if provider.name != plugin.name:
+                    provider.name = plugin.name
         db.session.commit()
 
         # Self-healing: clear expiration date for 0-balance accounts

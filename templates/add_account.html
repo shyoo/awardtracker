@@ -156,6 +156,19 @@ document.addEventListener("DOMContentLoaded", function() {
             usernameInput.required = false;
             passwordInput.required = false;
             if (usernameWarning) usernameWarning.classList.add("hidden");
+
+            var customNameField = document.getElementById("custom-program-name-field");
+            var customNameInput = document.getElementById("custom_program_name");
+            if (plugin === "manual") {
+                if (customNameField) customNameField.classList.remove("hidden");
+                if (customNameInput) customNameInput.required = true;
+            } else {
+                if (customNameField) customNameField.classList.add("hidden");
+                if (customNameInput) {
+                    customNameInput.required = false;
+                    customNameInput.value = "";
+                }
+            }
         } else {
             manualSection.classList.add("hidden");
             scrapingSection.classList.remove("hidden");

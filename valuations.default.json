@@ -75,8 +75,12 @@
     "cpp": 0.9,
     "name": "Wells Fargo Rewards"
   },
+  "bilt": {
+    "cpp": 1.25,
+    "name": "Bilt Rewards"
+  },
   "manual": {
     "cpp": 1.0,
-    "name": "Manual Entry"
+    "name": "Custom Program Entry"
   }
 }
