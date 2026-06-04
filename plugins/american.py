@@ -22,6 +22,7 @@ class AmericanAirlinesPlugin(ProviderPlugin):
         try:
             html = sb.get_page_source()
             soup = BeautifulSoup(html, "html.parser")
+            text_content = soup.get_text()
             
             # 1. Search for miles balance in the DOM
             # Look for spans, divs, strong tags containing the word "miles"
@@ -38,13 +39,50 @@ class AmericanAirlinesPlugin(ProviderPlugin):
                 # Prioritize first or largest number
                 balance = candidates[0][0]
                 
-            # 2. Extract elite status tier
+            # 2. Extract elite status tier (avoiding promotional/marketing texts on the page)
             status = "Member"
-            text_content = soup.get_text()
-            for tier in ["ConciergeKey", "Executive Platinum", "Platinum Pro", "Platinum", "Gold"]:
-                if tier.lower() in text_content.lower():
-                    status = tier
+            anchors = []
+            for el in soup.find_all(["span", "div", "p", "strong", "h1", "h2", "h3", "a"]):
+                text = el.get_text().strip().lower()
+                if not text:
+                    continue
+                if (
+                    ("aadvantage" in text and "#" in text)
+                    or "aadvantage number" in text
+                    or "aadv #" in text
+                    or "loyalty points" in text
+                ):
+                    anchors.append(el)
+
+            found_tier = None
+            for anchor in anchors:
+                curr = anchor
+                for _ in range(3):
+                    if not curr.parent:
+                        break
+                    curr = curr.parent
+                    if curr.name in ["body", "html"]:
+                        break
+                    container_text = curr.get_text().strip()
+                    if len(container_text) < 1500:
+                        container_text_lower = container_text.lower()
+                        # Skip containers describing status goals or progress to next tier
+                        skip_keywords = ["goal", "next", "progress", "reach", "earn", "needed", "to go", "miles to"]
+                        if any(kw in container_text_lower for kw in skip_keywords):
+                            continue
+
+                        for tier in ["ConciergeKey", "Executive Platinum", "Platinum Pro", "Platinum", "Gold"]:
+                            tier_lower = tier.lower()
+                            if tier_lower in container_text_lower:
+                                found_tier = tier
+                                break
+                    if found_tier:
+                        break
+                if found_tier:
                     break
+
+            if found_tier:
+                status = found_tier
 
             # 3. Extract explicit expiration text
             import datetime as dt
