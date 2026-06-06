@@ -294,5 +294,62 @@ class TestAPIsAndPlugins(unittest.TestCase):
         _, status_goal, _, _ = plugin._extract_data(mock_sb_goal)
         self.assertEqual(status_goal, "Member")
 
+    def test_alaska_is_auth_url(self):
+        plugin = plugin_manager.get_plugin('alaska')
+        self.assertIsNotNone(plugin)
+        
+        # Auth/MFA URLs that require interaction
+        auth_urls = [
+            "https://www.alaskaair.com/shared/myaccount/mfa",
+            "https://www.alaskaair.com/shared/myaccount/verify",
+            "https://www.alaskaair.com/shared/myaccount/verification",
+            "https://www.alaskaair.com/shared/myaccount/otp",
+            "https://www.alaskaair.com/shared/myaccount/login",
+            "https://alaskaair.auth0.com/authorize",
+            "https://www.alaskaair.com/shared/myaccount/security-questions",
+            "https://www.alaskaair.com/shared/myaccount/authenticate",
+            "https://www.alaskaair.com/shared/myaccount/challenge"
+        ]
+        for url in auth_urls:
+            self.assertTrue(plugin.is_auth_url(url), f"URL '{url}' should be detected as an auth/MFA URL")
+            
+        # Dashboard/Overview/Account URLs that are final states
+        non_auth_urls = [
+            "https://www.alaskaair.com/atmosrewards/account/overview/",
+            "https://www.alaskaair.com/mileage-plan/my-account",
+            "https://www.alaskaair.com/shared/myaccount"
+        ]
+        for url in non_auth_urls:
+            self.assertFalse(plugin.is_auth_url(url), f"URL '{url}' should not be detected as an auth/MFA URL")
+
+    def test_alaska_is_mfa_challenge(self):
+        plugin = plugin_manager.get_plugin('alaska')
+        self.assertIsNotNone(plugin)
+        
+        class MockSB:
+            def __init__(self, visible_selectors=None):
+                self.visible_selectors = visible_selectors or []
+            def is_element_visible(self, selector):
+                return selector in self.visible_selectors
+                
+        # 1. URL challenge match
+        sb_empty = MockSB()
+        self.assertTrue(plugin.is_mfa_challenge(sb_empty, "https://auth0.alaskaair.com/u/mfa-sms-challenge"))
+        self.assertTrue(plugin.is_mfa_challenge(sb_empty, "https://auth0.alaskaair.com/u/mfa-email-challenge"))
+        
+        # 2. Setup/enrollment URL (should be False unless elements are present)
+        self.assertFalse(plugin.is_mfa_challenge(sb_empty, "https://auth0.alaskaair.com/u/mfa-sms-enrollment"))
+        self.assertFalse(plugin.is_mfa_challenge(sb_empty, "https://auth0.alaskaair.com/u/mfa-sms-enrollment-verify"))
+        
+        # 3. Non-challenge URL but visible elements indicating challenge (fallback check)
+        sb_title = MockSB(visible_selectors=["#mfa-challenge-title"])
+        self.assertTrue(plugin.is_mfa_challenge(sb_title, "https://auth0.alaskaair.com/u/verify-something"))
+        
+        sb_header = MockSB(visible_selectors=["h1:contains('Confirm')"])
+        self.assertTrue(plugin.is_mfa_challenge(sb_header, "https://auth0.alaskaair.com/u/verify-something"))
+        
+        # 4. Standard login URL (False)
+        self.assertFalse(plugin.is_mfa_challenge(sb_empty, "https://auth0.alaskaair.com/u/login"))
+
 if __name__ == '__main__':
     unittest.main()

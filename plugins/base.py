@@ -77,8 +77,9 @@ def inject_control_modal(sb):
             instructions = (
                 "1. Your <strong>ID and Password have been pre-filled</strong> automatically — do not modify them.<br>"
                 f"{step2}<br>"
-                "3. If an <strong>MFA or one-time code</strong> is requested, complete that step manually.<br>"
-                "4. Once signed in, the tool will <strong>automatically navigate</strong> to your mileage overview and close the window — <strong>do not interact</strong> at that point."
+                "3. If a <strong>\"Remember Me\"</strong>, <strong>\"Remember this device\"</strong>, or <strong>\"Keep me signed in\"</strong> checkbox is available, select it to reduce future MFA prompts.<br>"
+                "4. If an <strong>MFA or one-time code</strong> is requested, complete that step manually.<br>"
+                "5. Once signed in, the tool will <strong>automatically navigate</strong> to your mileage overview and close the window — <strong>do not interact</strong> at that point."
             )
             tagline = "👉 ACTION REQUIRED: Please complete the steps above"
             tagline_color = "#facc15" # Yellow
