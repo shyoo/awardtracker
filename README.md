@@ -51,27 +51,34 @@ Provides a tracking chart that shows points history over the times.
 ## ✈️ Supported Loyalty Programs
 
 ### 💳 Credit Cards & Manual Programs
-* **Offline/Manual Tracking**: Chase Ultimate Rewards, American Express Membership Rewards, Citi ThankYou, Capital One Miles, Wells Fargo Rewards, and any custom manuals.
+* American Express Membership Rewards
+* Bilt Rewards
+* Capital One Miles
+* Chase Ultimate Rewards
+* Citi ThankYou
+* Wells Fargo Rewards
+* Any other custom manually-tracked programs
 
 ### 🛩️ Airlines
-* **United Airlines** (MileagePlus)
-* **American Airlines** (AAdvantage)
-* **Delta Air Lines** (SkyMiles)
-* **Southwest Airlines** (Rapid Rewards)
-* **Alaska Airlines** (Mileage Plan)
-* **Korean Air** (SKYPASS) — *includes automatic Mileage Validity Batch & Certificate recognition*
-* **Asiana Airlines** (Asiana Club)
-* **Virgin Atlantic** (Flying Club)
-* **Avianca** (LifeMiles)
 * **Air Canada** (Aeroplan)
+* **Alaska Airlines** (Mileage Plan)
+* **American Airlines** (AAdvantage)
+* **Asiana Airlines** (Asiana Club)
+* **Avianca** (LifeMiles)
+* **Delta Air Lines** (SkyMiles)
+* **Japan Airlines** (JAL Mileage Bank)
+* **Korean Air** (SKYPASS) — *includes automatic Mileage Validity Batch & Certificate recognition*
+* **Southwest Airlines** (Rapid Rewards)
+* **United Airlines** (MileagePlus)
+* **Virgin Atlantic** (Flying Club)
 
 > ⚠️ **Voucher & Certificate Support**: Automatic scraping of vouchers, coupons, and free-night certificates is currently supported for **Korean Air SKYPASS only**. Other programs display an informational notice on their account detail page.
 
 ### 🏨 Hotels
-* **Marriott Bonvoy**
 * **Hilton Honors**
-* **World of Hyatt**
 * **IHG One Rewards**
+* **Marriott Bonvoy**
+* **World of Hyatt**
 
 ---
 
