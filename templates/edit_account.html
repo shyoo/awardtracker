@@ -82,16 +82,36 @@
         </div>
       </div>
 
+      {% if account.provider.plugin_name == 'hyatt' %}
       <!-- Last Name -->
       <div>
         <label for="meta_last_name" class="block text-sm font-semibold text-slate-700">
-          Last Name {% if account.provider.plugin_name == 'hyatt' %}<span class="text-rose-500 font-bold">(Required for World of Hyatt)</span>{% endif %}
+          Last Name <span class="text-rose-500 font-bold">(Required for World of Hyatt)</span>
         </label>
-        <p class="mt-1 text-xs text-slate-400">Optional, but required for some providers like Hyatt.</p>
         <div class="mt-2">
-          <input type="text" name="meta_last_name" id="meta_last_name" value="{{ account.extra_metadata.get('last_name', '') }}" {% if account.provider.plugin_name == 'hyatt' %}required{% endif %} class="block w-full rounded-lg border {% if account.provider.plugin_name == 'hyatt' %}border-rose-200 focus:ring-rose-500 focus:border-rose-500{% else %}border-slate-200 focus:ring-primary focus:border-primary{% endif %} px-3 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 sm:text-sm shadow-sm transition-shadow">
+          <input type="text" name="meta_last_name" id="meta_last_name" value="{{ account.extra_metadata.get('last_name', '') }}" required class="block w-full rounded-lg border border-rose-200 focus:ring-rose-500 focus:border-rose-500 px-3 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 sm:text-sm shadow-sm transition-shadow">
         </div>
       </div>
+      {% endif %}
+
+      {% if account.provider.plugin_name == 'jal' %}
+      <!-- JAL Membership Region -->
+      <div class="rounded-lg bg-rose-50 border border-rose-100 p-4">
+        <label for="meta_region" class="block text-sm font-semibold text-rose-900">
+          Membership Region <span class="text-rose-500 font-bold">(Required for JAL)</span>
+        </label>
+        <p class="mt-1 text-xs text-rose-600">Select the region where your JAL Mileage Bank account is registered. E.g. AR for Americas (USA, Canada, etc.), JR for Japan.</p>
+        <div class="mt-2">
+          <select id="meta_region" name="meta_region" required class="block w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-slate-900 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500 sm:text-sm shadow-sm transition-shadow">
+            {% set current_region = account.extra_metadata.get('region', 'JR') %}
+            <option value="JR" {% if current_region == 'JR' %}selected{% endif %}>Japan (JR)</option>
+            <option value="AR" {% if current_region == 'AR' %}selected{% endif %}>Americas (AR)</option>
+            <option value="ER" {% if current_region == 'ER' %}selected{% endif %}>Europe / Middle East / Africa (ER)</option>
+            <option value="SR" {% if current_region == 'SR' %}selected{% endif %}>Asia / Oceania (SR)</option>
+          </select>
+        </div>
+      </div>
+      {% endif %}
       {% endif %}
 
       <!-- Exemption Bypass Toggle -->

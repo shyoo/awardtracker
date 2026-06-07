@@ -55,6 +55,10 @@
     "cpp": 1.4,
     "name": "Asiana Club"
   },
+  "jal": {
+    "cpp": 1.4,
+    "name": "JAL Mileage Bank"
+  },
   "chase": {
     "cpp": 2.05,
     "name": "Chase Ultimate Rewards"

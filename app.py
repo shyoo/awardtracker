@@ -1138,7 +1138,7 @@ def create_app(config_class=Config):
         STANDARD_VALUATION_KEYS = {
             'marriott', 'hyatt', 'hilton', 'ihg', 'american', 'united', 'delta',
             'korean', 'alaska', 'southwest', 'virgin', 'aircanada', 'avianca',
-            'asiana', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
+            'asiana', 'jal', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         }
 
         if request.method == 'POST':
@@ -1275,7 +1275,7 @@ def create_app(config_class=Config):
         custom_valuations = []
         
         ordered_standard_keys = [
-            'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 
+            'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 'jal',
             'virgin', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 
             'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         ]
