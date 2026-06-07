@@ -93,10 +93,27 @@
           <p class="mt-2 text-xs text-slate-500">Your password will be encrypted using your Master Password before being stored.</p>
         </div>
 
-        <div id="last-name-field" class="mt-6">
-          <label for="meta_last_name" id="last-name-label" class="block text-sm font-medium leading-6 text-slate-900">Last Name (Optional, required for some providers like Hyatt)</label>
+        <div id="last-name-field" class="mt-6 hidden">
+          <label for="meta_last_name" class="block text-sm font-semibold text-slate-700">
+            Last Name <span class="text-rose-500 font-bold">(Required for World of Hyatt)</span>
+          </label>
           <div class="mt-2">
-            <input type="text" name="meta_last_name" id="meta_last_name" class="block w-full rounded-md border-0 py-1.5 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
+            <input type="text" name="meta_last_name" id="meta_last_name" class="block w-full rounded-lg border border-rose-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-rose-500 focus:border-rose-500 sm:text-sm shadow-sm transition-shadow">
+          </div>
+        </div>
+
+        <div id="jal-region-field" class="mt-6 hidden rounded-lg bg-rose-50 border border-rose-100 p-4">
+          <label for="meta_region" class="block text-sm font-semibold text-rose-900">
+            Membership Region <span class="text-rose-500 font-bold">(Required for JAL)</span>
+          </label>
+          <p class="mt-1 text-xs text-rose-600">Select the region where your JAL Mileage Bank account is registered. E.g. AR for Americas (USA, Canada, etc.), JR for Japan.</p>
+          <div class="mt-2">
+            <select id="meta_region" name="meta_region" class="block w-full rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-slate-900 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500 sm:text-sm shadow-sm transition-shadow">
+              <option value="JR" selected>Japan (JR)</option>
+              <option value="AR">Americas (AR)</option>
+              <option value="ER">Europe / Middle East / Africa (ER)</option>
+              <option value="SR">Asia / Oceania (SR)</option>
+            </select>
           </div>
         </div>
       </div>
@@ -130,7 +147,8 @@ document.addEventListener("DOMContentLoaded", function() {
     var usernameInput = document.getElementById("username");
     var passwordInput = document.getElementById("password");
     var lastNameInput = document.getElementById("meta_last_name");
-    var lastNameLabel = document.getElementById("last-name-label");
+    var lastNameField = document.getElementById("last-name-field");
+    var jalRegionField = document.getElementById("jal-region-field");
 
     var usernameWarning = document.getElementById("username-korean-warning");
 
@@ -177,16 +195,26 @@ document.addEventListener("DOMContentLoaded", function() {
 
             // Hyatt last-name requirement
             if (isHyatt) {
+                lastNameField.classList.remove("hidden");
                 lastNameInput.required = true;
-                lastNameLabel.innerHTML = 'Last Name <span class="text-rose-500 font-bold">(Required for World of Hyatt)</span>';
-                lastNameInput.classList.add("ring-rose-300", "focus:ring-rose-500", "border-rose-300");
             } else {
+                lastNameField.classList.add("hidden");
                 lastNameInput.required = false;
-                lastNameLabel.innerHTML = 'Last Name (Optional, required for some providers like Hyatt)';
-                lastNameInput.classList.remove("ring-rose-300", "focus:ring-rose-500", "border-rose-300");
+                lastNameInput.value = "";
             }
 
             checkKoreanUsername();
+        }
+
+        var isJal = plugin === "jal";
+        if (jalRegionField) {
+            if (isJal && !isManual) {
+                jalRegionField.classList.remove("hidden");
+                document.getElementById("meta_region").required = true;
+            } else {
+                jalRegionField.classList.add("hidden");
+                document.getElementById("meta_region").required = false;
+            }
         }
     }
 

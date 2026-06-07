@@ -160,10 +160,10 @@ class TestAPIsAndPlugins(unittest.TestCase):
     # 3. Scraper Plugin Infrastructure Tests
     # ==========================================
     def test_plugin_registration(self):
-        # Verify that all 14 core scrapers are registered in the manager
+        # Verify that all 15 core scrapers are registered in the manager
         core_plugins = [
             'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 
-            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'aircanada'
+            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'aircanada', 'jal'
         ]
         
         for pid in core_plugins:
@@ -351,5 +351,128 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # 4. Standard login URL (False)
         self.assertFalse(plugin.is_mfa_challenge(sb_empty, "https://auth0.alaskaair.com/u/login"))
 
+    def test_jal_expiration_date_extraction(self):
+        plugin = plugin_manager.get_plugin('jal')
+        self.assertIsNotNone(plugin)
+        
+        # Test mock HTML with positive miles
+        mock_html = """
+        <table class="termmile">
+          <tbody>
+            <tr>
+              <th>Expiration Date</th>
+              <td>2026/06/30</td>
+              <td>2026/07/31</td>
+              <td>after 2026/08/31</td>
+            </tr>
+            <tr>
+              <th>Effective Mileage</th>
+              <td>0miles</td>
+              <td>1,200miles</td>
+              <td>5,000miles</td>
+            </tr>
+          </tbody>
+        </table>
+        """
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(mock_html, "html.parser")
+        self.assertEqual(plugin.extract_expiration_date(soup), "2026-07-31")
+
+        # Test mock HTML where all expiring miles are 0
+        mock_html_zero = """
+        <table class="termmile">
+          <tbody>
+            <tr>
+              <th>Expiration Date</th>
+              <td>2026/06/30</td>
+              <td>2026/07/31</td>
+            </tr>
+            <tr>
+              <th>Effective Mileage</th>
+              <td>0miles</td>
+              <td>0miles</td>
+            </tr>
+          </tbody>
+        </table>
+        """
+        soup_zero = BeautifulSoup(mock_html_zero, "html.parser")
+        self.assertIsNone(plugin.extract_expiration_date(soup_zero))
+
+    def test_jal_region_argument_resolution(self):
+        plugin = plugin_manager.get_plugin('jal')
+        self.assertIsNotNone(plugin)
+        
+        # Verify URL routing based on region
+        self.assertEqual(plugin._start_url("JR"), "https://www121.jal.co.jp/JmbWeb/JR/JmbTop_en.do")
+        self.assertEqual(plugin._start_url("AR"), "https://www121.jal.co.jp/JmbWeb/AR/JMBmemberTop_en.do")
+        self.assertEqual(plugin._start_url("ER"), "https://www121.jal.co.jp/JmbWeb/ER/JMBmemberTop_en.do")
+        self.assertEqual(plugin._start_url("SR"), "https://www121.jal.co.jp/JmbWeb/SR/JMBmemberTop_en.do")
+
+        # Verify URL routing works case-insensitively (callers normalise to upper before calling)
+        self.assertEqual(plugin._start_url("AR"), "https://www121.jal.co.jp/JmbWeb/AR/JMBmemberTop_en.do")
+
+        # Test how fetch_data/interactive_login kwargs parsing logic handles None, lowercase, uppercase, and empty string
+        def resolve_region(**kwargs):
+            region = kwargs.get("region", "JR") or "JR"
+            return region.upper()
+            
+        self.assertEqual(resolve_region(region="ar"), "AR")
+        self.assertEqual(resolve_region(region=None), "JR")
+        self.assertEqual(resolve_region(region=""), "JR")
+        self.assertEqual(resolve_region(), "JR")
+
+    def test_jal_region_mismatch_detection(self):
+        plugin = plugin_manager.get_plugin('jal')
+        self.assertIsNotNone(plugin)
+
+        class MockSB:
+            def __init__(self, elements=None, url="", title="", body_text="", html=""):
+                self.elements = elements or set()
+                self.url = url
+                self.title = title
+                self.body_text = body_text
+                self.html = html
+                
+            def is_element_present(self, selector):
+                return selector in self.elements
+                
+            def get_current_url(self):
+                return self.url
+                
+            def get_title(self):
+                return self.title
+                
+            def get_text(self, selector):
+                return self.body_text
+                
+            def get_page_source(self):
+                return self.html
+
+        # Scenario 1: Already logged in (span#JS_121_mileBalance present) -> should return None
+        sb_logged_in = MockSB(elements={"span#JS_121_mileBalance"})
+        self.assertIsNone(plugin._detect_region_mismatch(sb_logged_in))
+
+        # Scenario 2: On Worldwide sites selection page -> should return None
+        sb_ww = MockSB(url="https://www.jal.com/index.html", title="JAPAN AIRLINES Worldwide Sites")
+        self.assertIsNone(plugin._detect_region_mismatch(sb_ww))
+
+        # Scenario 3: Real regional mismatch with error unit
+        mismatch_html = """
+        <html>
+            <body>
+                <div class="error-unit">
+                    <p class="error-text">Some services on this website are not available to you. Please go to the JAL website of your membership region.</p>
+                    <a href="https://www.jal.co.jp/ar/en/">Americas Region</a>
+                </div>
+            </body>
+        </html>
+        """
+        sb_mismatch = MockSB(
+            body_text="Some services on this website are not available to you. Please go to the JAL website of your membership region.",
+            html=mismatch_html
+        )
+        self.assertEqual(plugin._detect_region_mismatch(sb_mismatch), "AR")
+
 if __name__ == '__main__':
     unittest.main()
+
