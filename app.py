@@ -340,19 +340,12 @@ def create_app(config_class=Config):
         # Expiration logic
         warning_threshold_setting = Settings.query.filter_by(key='warning_threshold').first()
         threshold_days = int(warning_threshold_setting.value) if warning_threshold_setting else 30
+        advisory_threshold_setting = Settings.query.filter_by(key='advisory_threshold').first()
+        advisory_threshold_days = int(advisory_threshold_setting.value) if advisory_threshold_setting else 90
         
         now = datetime.utcnow()
-        threshold_date = now + timedelta(days=threshold_days)
-        expiring_soon_accounts = Account.query.filter(
-            Account.expiration_date >= now,
-            Account.expiration_date <= threshold_date
-        ).count()
-        expiring_soon_certs = Certificate.query.filter(
-            Certificate.expiration_date >= now,
-            Certificate.expiration_date <= threshold_date
-        ).count()
-        expiring_soon = expiring_soon_accounts + expiring_soon_certs
-
+        expiring_soon = 0
+        flagged_items = []
 
         # Load valuations & inject dynamic attributes
         valuations = load_valuations()
@@ -365,41 +358,75 @@ def create_app(config_class=Config):
             acc.value_usd = value_usd
             total_value += acc.value_usd
             
+            acc_days_left = None
+            acc_status = 'none'
             
             if acc.provider.plugin_name == 'korean' and acc.expiration_meta and acc.expiration_meta.get('earliest_expiring_date'):
                 # Korean air specific earliest expiring date
                 try:
                     exp_date = datetime.strptime(acc.expiration_meta['earliest_expiring_date'], '%Y-%m-%d')
                     days_left = (exp_date - now).days
-                    acc.days_left = days_left
+                    acc_days_left = days_left
                     if days_left < 0:
-                        acc.expiration_status = 'expired'
-                    elif days_left <= 30:
-                        acc.expiration_status = 'critical'
-                    elif days_left <= 90:
-                        acc.expiration_status = 'warning'
+                        acc_status = 'expired'
+                    elif days_left <= threshold_days:
+                        acc_status = 'critical'
+                    elif days_left <= advisory_threshold_days:
+                        acc_status = 'warning'
                     else:
-                        acc.expiration_status = 'safe'
+                        acc_status = 'safe'
                 except Exception:
-                    acc.days_left = None
-                    acc.expiration_status = 'none'
+                    pass
             elif acc.expiration_date:
                 days_left = (acc.expiration_date - now).days
-                acc.days_left = days_left
+                acc_days_left = days_left
                 if days_left < 0:
-                    acc.expiration_status = 'expired'
-                elif days_left <= 30:
-                    acc.expiration_status = 'critical'
-                elif days_left <= 90:
-                    acc.expiration_status = 'warning'
+                    acc_status = 'expired'
+                elif days_left <= threshold_days:
+                    acc_status = 'critical'
+                elif days_left <= advisory_threshold_days:
+                    acc_status = 'warning'
                 else:
-                    acc.expiration_status = 'safe'
-            else:
-                acc.days_left = None
-                acc.expiration_status = 'none'
+                    acc_status = 'safe'
+            
+            acc.days_left = acc_days_left
+            acc.expiration_status = acc_status
+            
+            if acc_status == 'critical':
+                expiring_soon += 1
+                person_name = acc.person.name if acc.person else "Unassigned"
+                if acc.provider.plugin_name == 'korean' and acc.expiration_meta.get('earliest_expiring_amount'):
+                    flagged_items.append(f"\u2022 {acc.program_name} ({person_name}): {acc.expiration_meta['earliest_expiring_amount']:,} miles expires in {acc_days_left}d")
+                else:
+                    flagged_items.append(f"\u2022 {acc.program_name} ({person_name}): expires in {acc_days_left}d")
+            
+            # Process certificates/vouchers for this account
+            for cert in acc.certificates:
+                if cert.expiration_date:
+                    cert_days_left = (cert.expiration_date - now).days
+                    cert.days_left = cert_days_left
+                    if cert_days_left < 0:
+                        cert.expiration_status = 'expired'
+                    elif cert_days_left <= threshold_days:
+                        cert.expiration_status = 'critical'
+                        expiring_soon += 1
+                        person_name = acc.person.name if acc.person else "Unassigned"
+                        flagged_items.append(f"\u2022 Coupon: {cert.name} ({person_name}): expires in {cert_days_left}d")
+                    elif cert_days_left <= advisory_threshold_days:
+                        cert.expiration_status = 'warning'
+                    else:
+                        cert.expiration_status = 'safe'
+                else:
+                    cert.days_left = None
+                    cert.expiration_status = 'none'
 
             acc.group_person_name = acc.person.name if acc.person else 'Unassigned'
             acc.group_provider_name = acc.provider.name
+
+        if flagged_items:
+            flagged_tooltip = "Flagged Items:\n" + "\n".join(flagged_items)
+        else:
+            flagged_tooltip = f"No items expiring soon (within {threshold_days} days)."
 
         group_mode = request.args.get('group') or request.cookies.get('group_mode', 'program')
         
@@ -439,6 +466,8 @@ def create_app(config_class=Config):
                                total_accounts=total_accounts,
                                total_points=total_points,
                                expiring_soon=expiring_soon,
+                               warning_threshold=threshold_days,
+                               flagged_tooltip=flagged_tooltip,
                                total_value=total_value,
                                group_mode=group_mode,
                                active_certificates=active_certificates))
@@ -508,6 +537,8 @@ def create_app(config_class=Config):
         # Read warning threshold
         warning_threshold_setting = Settings.query.filter_by(key='warning_threshold').first()
         threshold_days = int(warning_threshold_setting.value) if warning_threshold_setting else 30
+        advisory_threshold_setting = Settings.query.filter_by(key='advisory_threshold').first()
+        advisory_threshold_days = int(advisory_threshold_setting.value) if advisory_threshold_setting else 90
         
         now = datetime.utcnow()
         if account.expiration_date:
@@ -515,9 +546,9 @@ def create_app(config_class=Config):
             account.days_left = days_left
             if days_left < 0:
                 account.expiration_status = 'expired'
-            elif days_left <= 30:
+            elif days_left <= threshold_days:
                 account.expiration_status = 'critical'
-            elif days_left <= 90:
+            elif days_left <= advisory_threshold_days:
                 account.expiration_status = 'warning'
             else:
                 account.expiration_status = 'safe'
@@ -537,6 +568,21 @@ def create_app(config_class=Config):
             chart_data = [account.balance]
             
         certificates = Certificate.query.filter_by(account_id=account.id).all()
+        for cert in certificates:
+            if cert.expiration_date:
+                cert_days_left = (cert.expiration_date - now).days
+                cert.days_left = cert_days_left
+                if cert_days_left < 0:
+                    cert.expiration_status = 'expired'
+                elif cert_days_left <= threshold_days:
+                    cert.expiration_status = 'critical'
+                elif cert_days_left <= advisory_threshold_days:
+                    cert.expiration_status = 'warning'
+                else:
+                    cert.expiration_status = 'safe'
+            else:
+                cert.days_left = None
+                cert.expiration_status = 'none'
         
         return render_template('account_detail.html',
                                account=account,
@@ -1146,6 +1192,19 @@ def create_app(config_class=Config):
             email_notifications = 'true' if request.form.get('email-notifications') == 'on' else 'false'
             telegram_notifications = 'true' if request.form.get('telegram-notifications') == 'on' else 'false'
             warning_threshold = request.form.get('warning-threshold', '30')
+            advisory_threshold = request.form.get('advisory-threshold', '90')
+            
+            # Validate thresholds relationship
+            try:
+                wt_val = int(warning_threshold)
+                at_val = int(advisory_threshold)
+                if at_val <= wt_val:
+                    flash('Advisory warning threshold must be greater than the critical warning threshold.')
+                    return redirect(url_for('settings'))
+            except ValueError:
+                flash('Threshold values must be valid integers.')
+                return redirect(url_for('settings'))
+
             auto_open_on_launch = 'true' if request.form.get('auto-open') == 'on' else 'false'
             launch_on_boot = 'true' if request.form.get('launch-on-boot') == 'on' else 'false'
             check_for_updates = 'true' if request.form.get('check-for-updates') == 'on' else 'false'
@@ -1159,6 +1218,7 @@ def create_app(config_class=Config):
                 'email_notifications': email_notifications,
                 'telegram_notifications': telegram_notifications,
                 'warning_threshold': warning_threshold,
+                'advisory_threshold': advisory_threshold,
                 'auto_open_on_launch': auto_open_on_launch,
                 'launch_on_boot': launch_on_boot,
                 'check_for_updates': check_for_updates,
@@ -1235,6 +1295,7 @@ def create_app(config_class=Config):
         email_notifications = Settings.query.filter_by(key='email_notifications').first()
         telegram_notifications = Settings.query.filter_by(key='telegram_notifications').first()
         warning_threshold = Settings.query.filter_by(key='warning_threshold').first()
+        advisory_threshold = Settings.query.filter_by(key='advisory_threshold').first()
         auto_open_on_launch = Settings.query.filter_by(key='auto_open_on_launch').first()
         launch_on_boot = Settings.query.filter_by(key='launch_on_boot').first()
         check_for_updates = Settings.query.filter_by(key='check_for_updates').first()
@@ -1248,6 +1309,7 @@ def create_app(config_class=Config):
             'email_notifications': email_notifications.value if email_notifications else 'false',
             'telegram_notifications': telegram_notifications.value if telegram_notifications else 'false',
             'warning_threshold': int(warning_threshold.value) if warning_threshold else 30,
+            'advisory_threshold': int(advisory_threshold.value) if advisory_threshold else 90,
             'auto_open_on_launch': auto_open_on_launch.value if auto_open_on_launch else 'true',
             'launch_on_boot': launch_on_boot.value if launch_on_boot else 'false',
             'check_for_updates': check_for_updates.value if check_for_updates else 'true',

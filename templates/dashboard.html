@@ -140,14 +140,15 @@
     </div>
 
     <!-- Expiring Soon Card -->
-    <div class="relative overflow-hidden rounded-xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+    <div class="custom-tooltip custom-tooltip-left relative rounded-xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow"
+         data-tooltip="{{ flagged_tooltip }}">
       <dt>
         <div class="absolute rounded-lg {% if expiring_soon > 0 %}bg-rose-500 animate-pulse{% else %}bg-slate-500{% endif %} p-3 shadow-sm">
           <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <p class="ml-16 truncate text-sm font-semibold text-slate-500">Expiring Soon (30d)</p>
+        <p class="ml-16 truncate text-sm font-semibold text-slate-500">Expiring Soon ({{ warning_threshold }}d)</p>
       </dt>
       <dd class="ml-16 flex items-baseline mt-1">
         <p class="text-2xl font-bold {% if expiring_soon > 0 %}text-rose-600{% else %}text-slate-900{% endif %}">{{ expiring_soon }}</p>
@@ -267,12 +268,7 @@
               <!-- Expiration Badges -->
               <div class="hidden sm:block">
                 {% if account.provider.plugin_name == 'korean' and account.expiration_meta and account.expiration_meta.get('earliest_expiring_amount') %}
-                    {% set bg_class = 'bg-rose-50 text-rose-700 ring-rose-600/20' %}
-                    {% if account.expiration_status == 'warning' %}
-                        {% set bg_class = 'bg-amber-50 text-amber-800 ring-amber-600/20' %}
-                    {% elif account.expiration_status == 'safe' %}
-                        {% set bg_class = 'bg-emerald-50 text-emerald-800 ring-emerald-600/20' %}
-                    {% endif %}
+                    {% set bg_class = 'bg-rose-100 text-rose-800 ring-rose-600/20 animate-pulse' if account.expiration_status == 'critical' else ('bg-rose-50 text-rose-700 ring-rose-600/20' if account.expiration_status == 'expired' else ('bg-amber-50 text-amber-800 ring-amber-600/20' if account.expiration_status == 'warning' else 'bg-emerald-50 text-emerald-800 ring-emerald-600/20')) %}
                     <span class="custom-tooltip inline-flex items-center rounded-md px-2 py-1 text-[11px] font-medium ring-1 ring-inset {{ bg_class }}" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">
                       {{ "{:,}".format(account.expiration_meta.get('earliest_expiring_amount')) }} Expiring {{ account.expiration_meta.get('earliest_expiring_date') }}
                     </span>
@@ -342,10 +338,16 @@
                     {% endif %}
                   </div>
                   <div class="flex items-center gap-2">
-                    {% if cert.expiration_date %}
-                    <span class="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-inset ring-amber-600/10">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }}</span>
+                    {% if cert.expiration_status == 'expired' %}
+                    <span class="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-800 ring-1 ring-inset ring-rose-600/10">Expired: {{ cert.expiration_date.strftime('%Y-%m-%d') }}</span>
+                    {% elif cert.expiration_status == 'critical' %}
+                    <span class="inline-flex items-center rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-800 ring-1 ring-inset ring-rose-600/10 animate-pulse">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(cert.days_left) }})</span>
+                    {% elif cert.expiration_status == 'warning' %}
+                    <span class="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-inset ring-amber-600/10">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(cert.days_left) }})</span>
+                    {% elif cert.expiration_status == 'safe' %}
+                    <span class="inline-flex items-center rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-600/10">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(cert.days_left) }})</span>
                     {% else %}
-                    <span class="inline-flex items-center rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 ring-1 ring-inset ring-green-600/10">Active</span>
+                    <span class="inline-flex items-center rounded bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-inset ring-slate-500/10">Active</span>
                     {% endif %}
                   </div>
                 </li>

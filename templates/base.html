@@ -42,9 +42,9 @@
             font-weight: 500;
             line-height: 1.25;
             text-align: center;
-            white-space: normal;
+            white-space: pre-line;
             width: max-content;
-            max-width: 260px;
+            max-width: 350px;
             z-index: 50;
             opacity: 0;
             pointer-events: none;
@@ -52,6 +52,9 @@
             border: 1px solid hsla(217, 33%, 17%, 0.8);
             backdrop-filter: blur(4px);
             transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .custom-tooltip-left::before {
+            text-align: left !important;
         }
         .custom-tooltip::after {
             content: "";

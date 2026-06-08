@@ -47,7 +47,10 @@ To keep the commit history clean on the main branch, squash all changes in the c
    ```
 3. Commit all staged modifications as a single, consolidated commit with a descriptive message (e.g., `feat(jal): add support for JAL Mileage Bank auto-sync and interactive login`).
 
-### Step C: Generate Release Notes
+### Step C: Generate Release Notes (Only if Version Bumped)
+> [!IMPORTANT]
+> This step is ONLY executed if the user answered **yes** to the version bump in Step A. If the user answered **no**, completely skip this step. Do not modify or create any release notes under `internal_docs`, and do not include or commit any files under `internal_docs` (as they are ignored by `.gitignore`).
+
 1. Create a markdown release note file under the [internal_docs](internal_docs) directory.
 2. Name the file exactly `release_notes_v<VERSION>.md` (e.g., `release_notes_v1.2.10.md`).
 3. Use the following structured format for the release notes:
@@ -102,6 +105,6 @@ git push origin <BRANCH_NAME> --force
 - [ ] User requests push -> Ask about version bump
 - [ ] Update [version.txt](version.txt) and commit if yes
 - [ ] Find merge-base with `main` and squash branch
-- [ ] Create `release_notes_v<VERSION>.md` under [internal_docs](internal_docs) and amend it
+- [ ] Create `release_notes_v<VERSION>.md` under [internal_docs](internal_docs) and amend it if version was bumped (otherwise skip)
 - [ ] Run release script asynchronously based on OS
 - [ ] Force push to remote

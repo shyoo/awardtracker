@@ -86,18 +86,67 @@
         </div>
       </div>
 
-      <!-- Expiration Warning Threshold -->
+      <!-- Expiration Warning Thresholds -->
       <div class="pt-6 border-t border-slate-100">
         <h2 class="text-base font-bold leading-7 text-slate-900 mb-2">Expiry Badge Policy</h2>
-        <div class="max-w-xs">
-          <label for="warning-threshold" class="block text-xs font-semibold text-slate-500 uppercase">Warning Threshold</label>
-          <div class="mt-2 flex rounded-md shadow-sm">
-            <input type="number" name="warning-threshold" id="warning-threshold" value="{{ settings.warning_threshold }}" min="1" max="365" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm">
-            <span class="inline-flex items-center px-3 rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-slate-500 sm:text-sm font-semibold">days</span>
+        <p class="text-xs text-slate-400 mb-4">Set up alert ranges for your award points expiration. The Advisory warning threshold must be strictly longer than the Critical warning threshold.</p>
+        
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-xl">
+          <!-- Critical Threshold -->
+          <div>
+            <label for="warning-threshold" class="block text-xs font-semibold text-slate-500 uppercase">Critical Warning Threshold</label>
+            <div class="mt-2 flex rounded-md shadow-sm">
+              <input type="number" name="warning-threshold" id="warning-threshold" value="{{ settings.warning_threshold }}" min="1" max="365" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm" required>
+              <span class="inline-flex items-center px-3 rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-slate-500 sm:text-sm font-semibold">days</span>
+            </div>
+            <p class="mt-1.5 text-[10px] text-slate-400">Triggers OS desktop push warnings and red Critical dashboard badges.</p>
           </div>
-          <p class="mt-1.5 text-[10px] text-slate-400">Accounts with expiration dates within this window will trigger OS warnings and Dashboard warning badges.</p>
+
+          <!-- Advisory Threshold -->
+          <div>
+            <label for="advisory-threshold" class="block text-xs font-semibold text-slate-500 uppercase">Advisory Warning Threshold</label>
+            <div class="mt-2 flex rounded-md shadow-sm">
+              <input type="number" name="advisory-threshold" id="advisory-threshold" value="{{ settings.advisory_threshold }}" min="2" max="365" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm" required>
+              <span class="inline-flex items-center px-3 rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-slate-500 sm:text-sm font-semibold">days</span>
+            </div>
+            <p class="mt-1.5 text-[10px] text-slate-400">Triggers orange/amber Warning dashboard badges without active desktop notifications.</p>
+          </div>
+        </div>
+        <div id="threshold-error-msg" class="hidden mt-3 text-xs font-semibold text-rose-600 animate-pulse">
+          Advisory warning threshold must be greater than the critical warning threshold.
         </div>
       </div>
+
+      <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          const form = document.querySelector('form[action="{{ url_for("settings") }}"]');
+          if (form) {
+            form.addEventListener('submit', function(e) {
+              const warningInput = document.getElementById('warning-threshold');
+              const advisoryInput = document.getElementById('advisory-threshold');
+              const errorDiv = document.getElementById('threshold-error-msg');
+              
+              if (warningInput && advisoryInput) {
+                const wt = parseInt(warningInput.value, 10);
+                const at = parseInt(advisoryInput.value, 10);
+                
+                if (!isNaN(wt) && !isNaN(at) && at <= wt) {
+                  e.preventDefault();
+                  if (errorDiv) {
+                    errorDiv.classList.remove('hidden');
+                  }
+                  advisoryInput.focus();
+                  advisoryInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  return false;
+                }
+              }
+              if (errorDiv) {
+                errorDiv.classList.add('hidden');
+              }
+            });
+          }
+        });
+      </script>
 
       <!-- Scheduled Sync Configuration -->
       <div class="pt-6 border-t border-slate-100">
