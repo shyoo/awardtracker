@@ -66,8 +66,8 @@ def calculate_expiration(plugin_id: str, balance: int, status: str, last_activit
             return add_months(last_activity_date, 24)
         return add_months(last_activity_date, 12)
 
-    elif pid in ('korean', 'asiana'):
-        # Korean Air Skypass and Asiana Club use a fixed-date system, calculated during scraping.
+    elif pid in ('korean', 'asiana', 'jal', 'ana'):
+        # Korean Air Skypass, Asiana Club, JAL Mileage Bank, and ANA Mileage Club use a fixed-date system, calculated during scraping.
         # This function acts as a pass-through if we already fetched the exact date.
         return last_activity_date
 
@@ -120,6 +120,12 @@ def get_program_rule_description(plugin_id: str, status: str = None) -> str:
         
     if pid == 'asiana':
         return "Asiana Club miles earned are valid strictly for 10 years (Silver/Gold) or 12 years (Diamond and above) from the date of accrual. Activity does not extend them."
+
+    if pid == 'jal':
+        return "JAL Mileage Bank miles are valid for 36 months from the month they were earned. Activity does not extend them."
+
+    if pid == 'ana':
+        return "ANA Mileage Club miles are valid for 36 months from the month they were earned. Activity does not extend them."
         
     return "Expiration rules vary by loyalty program."
 

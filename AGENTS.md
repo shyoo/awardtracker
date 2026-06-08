@@ -19,6 +19,8 @@ Welcome! This document outlines the mandatory development workflows, branching s
 
 * **No Premature Pushing**: Do **not** push any commits or branches to the remote repository (`origin`) until the user explicitly requests it.
 * **Keep Changes Local**: Keep all code modifications, test executions, and commits entirely local during active development and iteration.
+* **Check Active Session Requests Only**: Do **not** use push requests or approvals from previous tasks (which may appear in checkpoint summaries or historic logs from past sessions) as authorization to push in the current session. Explicit permission to push must be given by the user *in the current active session* specifically for the *current branch*.
+* **User Verification First**: You must wait until the user has manually verified the fixes/features in their active environment before pushing to remote. Pushing should only occur after verification and an explicit request to push.
 
 ---
 
