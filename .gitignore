@@ -9,6 +9,8 @@ scratch/
 profiles/
 venv/
 venv-universal/
+codesign_keys.json
+release_build.log
 *.log
 awardtracker.db
 scraper_debug.log
