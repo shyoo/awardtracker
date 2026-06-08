@@ -8,6 +8,11 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+LOG_FILE="release_build.log"
+rm -f "$LOG_FILE"
+# Redirect stdout and stderr to both console and log file
+exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$LOG_FILE" >&2)
+
 echo -e "${CYAN}==================================================${NC}"
 echo -e "${CYAN}      Award Tracker Release Builder Tool (macOS)   ${NC}"
 echo -e "${CYAN}==================================================${NC}"
@@ -20,9 +25,12 @@ fi
 
 # 1.4. Parse command line arguments
 UNIVERSAL_BUILD=false
+CODESIGN_BUILD=false
 for arg in "$@"; do
     if [ "$arg" == "--universal" ]; then
         UNIVERSAL_BUILD=true
+    elif [ "$arg" == "--codesign" ]; then
+        CODESIGN_BUILD=true
     fi
 done
 
@@ -146,6 +154,27 @@ else
     fi
 fi
 
+# Load and validate codesign configuration if codesigning is requested
+if [ "$CODESIGN_BUILD" = true ]; then
+    if [ ! -f "codesign_keys.json" ]; then
+        echo -e "${RED}Error: Code signing requested (--codesign) but 'codesign_keys.json' not found.${NC}"
+        exit 1
+    fi
+
+    # Read values from codesign_keys.json using python (venv is active now)
+    IDENTITY=$(python -c "import json; print(json.load(open('codesign_keys.json')).get('identity', ''))" 2>/dev/null)
+    KEYCHAIN_PROFILE=$(python -c "import json; print(json.load(open('codesign_keys.json')).get('keychain_profile', ''))" 2>/dev/null)
+
+    if [ -z "$IDENTITY" ] || [ -z "$KEYCHAIN_PROFILE" ]; then
+        echo -e "${RED}Error: 'codesign_keys.json' is missing 'identity' or 'keychain_profile'.${NC}"
+        exit 1
+    fi
+
+    echo -e "${GREEN}Code signing config loaded successfully:${NC}"
+    echo -e "  Identity: $IDENTITY"
+    echo -e "  Keychain Profile: $KEYCHAIN_PROFILE"
+fi
+
 # 1.6. Validate Universal2 compatibility if requested
 if [ "$UNIVERSAL_BUILD" = true ] && [ "$(uname)" == "Darwin" ]; then
     export AWARDTRACKER_BUILD_UNIVERSAL=1
@@ -260,6 +289,114 @@ if [ ! -d "$APP_PATH" ]; then
     exit 1
 fi
 
+if [ "$CODESIGN_BUILD" = true ]; then
+    echo -e "\n${YELLOW}Step 1.5: Codesigning and Notarizing Binaries...${NC}"
+    
+    # Create temporary entitlements.plist to allow JIT/unsigned executable memory (required for Python/PyInstaller)
+    ENTITLEMENTS_PATH="dist/entitlements.plist"
+    cat <<EOF > "$ENTITLEMENTS_PATH"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>
+EOF
+    
+    # 1. Sign standalone binary if present
+    if [ -f "$BIN_PATH" ]; then
+        echo -e "${YELLOW}Codesigning standalone binary...${NC}"
+        if ! codesign --force --options=runtime --entitlements "$ENTITLEMENTS_PATH" --timestamp --sign "$IDENTITY" "$BIN_PATH"; then
+            echo -e "${RED}Error: Codesigning standalone binary failed.${NC}"
+            echo -e "${YELLOW}Available codesigning identities in your keychain:${NC}"
+            security find-identity -p basic -v
+            exit 1
+        fi
+    fi
+    
+    # 2. Sign nested binaries inside the app bundle
+    echo -e "${YELLOW}Codesigning nested binaries inside app bundle...${NC}"
+    while read -r file_path; do
+        if file "$file_path" | grep -q -E "Mach-O"; then
+            # Skip the main executable for now; sign it separately at the end
+            if [ "$file_path" != "$APP_PATH/Contents/MacOS/awardtracker" ]; then
+                # Check if it is a helper executable or a dynamic library
+                if file "$file_path" | grep -q -E "executable"; then
+                    if ! codesign --force --options=runtime --entitlements "$ENTITLEMENTS_PATH" --timestamp --sign "$IDENTITY" "$file_path"; then
+                        echo -e "${RED}Error: Codesigning nested executable $file_path failed.${NC}"
+                        echo -e "${YELLOW}Available codesigning identities in your keychain:${NC}"
+                        security find-identity -p basic -v
+                        exit 1
+                    fi
+                else
+                    if ! codesign --force --options=runtime --timestamp --sign "$IDENTITY" "$file_path"; then
+                        echo -e "${RED}Error: Codesigning nested library $file_path failed.${NC}"
+                        echo -e "${YELLOW}Available codesigning identities in your keychain:${NC}"
+                        security find-identity -p basic -v
+                        exit 1
+                    fi
+                fi
+            fi
+        fi
+    done < <(find "$APP_PATH" -type f)
+    
+    # 3. Sign the main executable inside the app bundle
+    APP_BIN_PATH="$APP_PATH/Contents/MacOS/awardtracker"
+    if [ -f "$APP_BIN_PATH" ]; then
+        echo -e "${YELLOW}Codesigning main app executable...${NC}"
+        if ! codesign --force --options=runtime --entitlements "$ENTITLEMENTS_PATH" --timestamp --sign "$IDENTITY" "$APP_BIN_PATH"; then
+            echo -e "${RED}Error: Codesigning main app executable failed.${NC}"
+            echo -e "${YELLOW}Available codesigning identities in your keychain:${NC}"
+            security find-identity -p basic -v
+            exit 1
+        fi
+    fi
+    
+    # 4. Sign the main app bundle
+    echo -e "${YELLOW}Codesigning main app bundle...${NC}"
+    if ! codesign --force --options=runtime --entitlements "$ENTITLEMENTS_PATH" --timestamp --sign "$IDENTITY" "$APP_PATH"; then
+        echo -e "${RED}Error: Codesigning main app bundle failed.${NC}"
+        echo -e "${YELLOW}Available codesigning identities in your keychain:${NC}"
+        security find-identity -p basic -v
+        exit 1
+    fi
+    
+    # Clean up temporary entitlements
+    rm -f "$ENTITLEMENTS_PATH"
+    
+    echo -e "${YELLOW}Packaging app bundle into temporary ZIP for notarization...${NC}"
+    APP_ZIP="dist/AwardTracker-App.zip"
+    rm -f "$APP_ZIP"
+    # Use ditto to preserve resource forks and metadata
+    ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
+    
+    echo -e "${YELLOW}Submitting app bundle to Apple notarization service (notarytool)...${NC}"
+    NOTARY_OUTPUT=$(xcrun notarytool submit "$APP_ZIP" --keychain-profile "$KEYCHAIN_PROFILE" --wait 2>&1)
+    NOTARY_RESULT=$?
+    echo "$NOTARY_OUTPUT"
+    
+    SUBMISSION_ID=$(echo "$NOTARY_OUTPUT" | grep -i "id:" | head -n 1 | awk '{print $NF}')
+    rm -f "$APP_ZIP"
+    
+    if [ $NOTARY_RESULT -ne 0 ] || [[ ! "$NOTARY_OUTPUT" =~ "Accepted" ]]; then
+        echo -e "${RED}Error: App bundle notarization failed or was rejected by Apple.${NC}"
+        if [ -n "$SUBMISSION_ID" ]; then
+            echo -e "${YELLOW}Fetching notarization logs for submission ID: $SUBMISSION_ID...${NC}"
+            xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$KEYCHAIN_PROFILE"
+        fi
+        exit 1
+    fi
+    
+    echo -e "${GREEN}App bundle notarized successfully. Stapling ticket...${NC}"
+    xcrun stapler staple "$APP_PATH"
+fi
+
 # Read version from version.txt
 VERSION_SUFFIX=""
 if [ -f "version.txt" ]; then
@@ -325,6 +462,35 @@ rm -rf "$DMG_TEMP"
 if [ $RESULT -eq 0 ] && [ -f "$DMG_OUT" ]; then
     DMG_SIZE=$(du -h "$DMG_OUT" | cut -f1)
     echo -e "${GREEN}Setup DMG generated successfully at: $DMG_OUT ($DMG_SIZE)${NC}"
+    
+    if [ "$CODESIGN_BUILD" = true ]; then
+        echo -e "${YELLOW}Codesigning setup DMG installer...${NC}"
+        if ! codesign --force --timestamp --sign "$IDENTITY" "$DMG_OUT"; then
+            echo -e "${RED}Error: Codesigning setup DMG installer failed.${NC}"
+            echo -e "${YELLOW}Available codesigning identities in your keychain:${NC}"
+            security find-identity -p basic -v
+            exit 1
+        fi
+        
+        echo -e "${YELLOW}Submitting setup DMG to Apple notarization service (notarytool)...${NC}"
+        NOTARY_DMG_OUTPUT=$(xcrun notarytool submit "$DMG_OUT" --keychain-profile "$KEYCHAIN_PROFILE" --wait 2>&1)
+        NOTARY_DMG_RESULT=$?
+        echo "$NOTARY_DMG_OUTPUT"
+        
+        SUBMISSION_DMG_ID=$(echo "$NOTARY_DMG_OUTPUT" | grep -i "id:" | head -n 1 | awk '{print $NF}')
+        
+        if [ $NOTARY_DMG_RESULT -ne 0 ] || [[ ! "$NOTARY_DMG_OUTPUT" =~ "Accepted" ]]; then
+            echo -e "${RED}Error: DMG notarization failed or was rejected by Apple.${NC}"
+            if [ -n "$SUBMISSION_DMG_ID" ]; then
+                echo -e "${YELLOW}Fetching notarization logs for submission ID: $SUBMISSION_DMG_ID...${NC}"
+                xcrun notarytool log "$SUBMISSION_DMG_ID" --keychain-profile "$KEYCHAIN_PROFILE"
+            fi
+            exit 1
+        fi
+        
+        echo -e "${GREEN}DMG notarized successfully. Stapling ticket...${NC}"
+        xcrun stapler staple "$DMG_OUT"
+    fi
 else
     echo -e "${RED}Error: Failed to generate DMG installer.${NC}"
     exit 1
