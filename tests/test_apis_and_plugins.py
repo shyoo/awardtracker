@@ -294,6 +294,55 @@ class TestAPIsAndPlugins(unittest.TestCase):
         _, status_goal, _, _ = plugin._extract_data(mock_sb_goal)
         self.assertEqual(status_goal, "Member")
 
+    def test_aircanada_status_extraction(self):
+        plugin = plugin_manager.get_plugin('aircanada')
+        self.assertIsNotNone(plugin)
+
+        # Scenario 1: Standard member with "Aeroplan 25K" in progress tracker/goals
+        html_promo = """
+        <html>
+            <body>
+                <div class="user-header">
+                    <span>Welcome back, User</span>
+                </div>
+                <div class="elite-progress-meter">
+                    <h3>Your path to Elite status</h3>
+                    <p>Earn 25,000 points to reach Aeroplan 25K status.</p>
+                </div>
+            </body>
+        </html>
+        """
+        _, status_promo, _ = plugin._extract_data(html_promo)
+        self.assertEqual(status_promo, "Member")
+
+        # Scenario 2: Actual Elite 25K member
+        html_elite = """
+        <html>
+            <body>
+                <div class="user-header-card">
+                    <div class="profile-summary">
+                        <span>Elite 25K</span>
+                    </div>
+                </div>
+            </body>
+        </html>
+        """
+        _, status_elite, _ = plugin._extract_data(html_elite)
+        self.assertEqual(status_elite, "Elite 25K")
+
+        # Scenario 3: Standard member with no status tags
+        html_standard = """
+        <html>
+            <body>
+                <div class="user-header">
+                    <span>Welcome back</span>
+                </div>
+            </body>
+        </html>
+        """
+        _, status_standard, _ = plugin._extract_data(html_standard)
+        self.assertEqual(status_standard, "Member")
+
     def test_alaska_is_auth_url(self):
         plugin = plugin_manager.get_plugin('alaska')
         self.assertIsNotNone(plugin)

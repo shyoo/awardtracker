@@ -105,20 +105,36 @@ class AirCanadaPlugin(ProviderPlugin):
         # --- Extract Elite Status ---
         # Look for typical Aeroplan Elite Tiers: Elite 25K, Elite 35K, Elite 50K, Elite 75K, Super Elite
         elite_texts = soup.find_all(string=re.compile(r"Elite\s*(?:25K|35K|50K|75K|100K)|Super\s*Elite|Altitude|Aeroplan\s*(?:25K|35K|50K|75K|100K)", re.I))
+        found_status = None
         for et in elite_texts:
             et_str = et.strip()
-            if len(et_str) < 60:
+            if len(et_str) < 100:
+                # Check parents/ancestors up to 4 levels to see if this text is part of a progress tracker or marketing widget
+                curr = et.parent
+                is_promo = False
+                for _ in range(4):
+                    if not curr:
+                        break
+                    container_text = curr.get_text().strip().lower()
+                    if any(kw in container_text for kw in [
+                        "goal", "next", "progress", "reach", "earn", "needed", "to go", 
+                        "points to", "miles to", "select", "choose", "path", "qualify", 
+                        "qualification", "requirement", "track", "achieve", "how to"
+                    ]):
+                        is_promo = True
+                        break
+                    curr = curr.parent
+                
+                if is_promo:
+                    continue
+                    
                 m = re.search(r"(Elite\s*(?:25K|35K|50K|75K|100K)|Super\s*Elite|Altitude\s*\w+|Aeroplan\s*(?:25K|35K|50K|75K|100K))", et_str, re.I)
                 if m:
-                    status = m.group(1).title()
+                    found_status = m.group(1).title()
                     break
                     
-        # Double check if any text on the page contains elite status
-        if status == "Member":
-            page_text = soup.get_text()
-            m = re.search(r"\b(Elite\s*(?:25K|35K|50K|75K|100K)|Super\s*Elite|Aeroplan\s*(?:25K|35K|50K|75K|100K))\b", page_text, re.I)
-            if m:
-                status = m.group(1).title()
+        if found_status:
+            status = found_status
                 
         return balance, status, exp_date
 
