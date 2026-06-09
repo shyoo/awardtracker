@@ -160,9 +160,9 @@ class TestAPIsAndPlugins(unittest.TestCase):
     # 3. Scraper Plugin Infrastructure Tests
     # ==========================================
     def test_plugin_registration(self):
-        # Verify that all 16 core scrapers are registered in the manager
+        # Verify that all 17 core scrapers are registered in the manager
         core_plugins = [
-            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 
+            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'wyndham',
             'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'aircanada', 'jal', 'ana'
         ]
         

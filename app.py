@@ -204,6 +204,7 @@ def create_app(config_class=Config):
                 'hilton': 'hilton.com',
                 'marriott': 'marriott.com',
                 'ihg': 'ihg.com',
+                'wyndham': 'wyndhamhotels.com',
                 'alaska': 'alaskaair.com',
                 'korean': 'koreanair.com',
                 'delta': 'delta.com',
@@ -1184,7 +1185,7 @@ def create_app(config_class=Config):
     @app.route('/settings', methods=['GET', 'POST'])
     def settings():
         STANDARD_VALUATION_KEYS = {
-            'marriott', 'hyatt', 'hilton', 'ihg', 'american', 'united', 'delta',
+            'marriott', 'hyatt', 'hilton', 'ihg', 'wyndham', 'american', 'united', 'delta',
             'korean', 'alaska', 'southwest', 'virgin', 'aircanada', 'avianca',
             'asiana', 'jal', 'ana', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         }
@@ -1340,7 +1341,7 @@ def create_app(config_class=Config):
         
         ordered_standard_keys = [
             'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 'jal', 'ana',
-            'virgin', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 
+            'virgin', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 'wyndham',
             'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         ]
         

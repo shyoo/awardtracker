@@ -15,6 +15,10 @@
     "cpp": 0.8,
     "name": "IHG One Rewards"
   },
+  "wyndham": {
+    "cpp": 0.7,
+    "name": "Wyndham Rewards"
+  },
   "american": {
     "cpp": 1.5,
     "name": "American Airlines AAdvantage"

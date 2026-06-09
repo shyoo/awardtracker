@@ -66,6 +66,15 @@ class TestExpirationCalculations(unittest.TestCase):
         self.assertIsNone(calculate_expiration('ihg', 1000, 'Platinum Elite', dt, has_exemption=False))
         self.assertIsNone(calculate_expiration('ihg', 1000, 'Diamond Elite', dt, has_exemption=False))
 
+    def test_wyndham_rules(self):
+        # Wyndham Rewards points expire after 18 months of inactivity, regardless of tier
+        dt = datetime(2026, 5, 20, 10, 30, 0)
+        expected = datetime(2027, 11, 20, 10, 30, 0)
+        self.assertEqual(calculate_expiration('wyndham', 1000, 'Blue', dt, has_exemption=False), expected)
+        # Elite tiers do NOT prevent expiration for Wyndham
+        self.assertEqual(calculate_expiration('wyndham', 1000, 'Diamond', dt, has_exemption=False), expected)
+        self.assertEqual(calculate_expiration('wyndham', 1000, 'Platinum', dt, has_exemption=False), expected)
+
     def test_avianca_elite_rules(self):
         # Standard Avianca expires in 12 months
         dt = datetime(2026, 5, 20)

@@ -44,6 +44,11 @@ def calculate_expiration(plugin_id: str, balance: int, status: str, last_activit
     if pid in ('american', 'alaska', 'marriott', 'hilton', 'hyatt'):
         return add_months(last_activity_date, 24)
 
+    elif pid == 'wyndham':
+        # Wyndham Rewards points expire after 18 months of account inactivity,
+        # regardless of elite tier. Any earning or redemption transaction extends them.
+        return add_months(last_activity_date, 18)
+
     elif pid == 'aircanada':
         # Aeroplan Elite status holders never expire
         st = (status or "").lower()
@@ -96,7 +101,10 @@ def get_program_rule_description(plugin_id: str, status: str = None) -> str:
     
     if pid == 'hyatt':
         return "Points expire after 24 months of inactivity. Any earning or redemption transaction extends them."
-    
+
+    if pid == 'wyndham':
+        return "Points expire after 18 months of inactivity, regardless of elite tier. Any earning or redemption transaction extends them."
+
     if pid == 'aircanada':
         st = (status or "").lower()
         if any(tier in st for tier in ('elite', 'altitude', 'super elite', '25k', '35k', '50k', '75k', '100k')):

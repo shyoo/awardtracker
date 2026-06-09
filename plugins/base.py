@@ -57,6 +57,8 @@ def inject_control_modal(sb):
             provider_name = "World of Hyatt"
         elif "ihg.com" in current_url:
             provider_name = "IHG One Rewards"
+        elif "wyndhamhotels.com" in current_url or "wyndhamrewards.com" in current_url:
+            provider_name = "Wyndham Rewards"
         elif "southwest.com" in current_url:
             provider_name = "Southwest Airlines"
         elif "virginatlantic.com" in current_url:
