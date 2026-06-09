@@ -160,10 +160,10 @@ class TestAPIsAndPlugins(unittest.TestCase):
     # 3. Scraper Plugin Infrastructure Tests
     # ==========================================
     def test_plugin_registration(self):
-        # Verify that all 15 core scrapers are registered in the manager
+        # Verify that all 16 core scrapers are registered in the manager
         core_plugins = [
             'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 
-            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'aircanada', 'jal'
+            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'aircanada', 'jal', 'ana'
         ]
         
         for pid in core_plugins:
@@ -522,6 +522,144 @@ class TestAPIsAndPlugins(unittest.TestCase):
         )
         self.assertEqual(plugin._detect_region_mismatch(sb_mismatch), "AR")
 
+    def test_ana_mileage_parsing(self):
+        plugin = plugin_manager.get_plugin('ana')
+        self.assertIsNotNone(plugin)
+
+        # 1. Test standard parsing of mileage and status
+        html = """
+        <html>
+            <body>
+                <div class="mileage-info">
+                    <span>Available Miles:</span>
+                    <strong>45,670</strong>
+                    <span>Status: Platinum Member</span>
+                </div>
+            </body>
+        </html>
+        """
+        result = plugin._parse_mileage_html(html)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["balance"], 45670)
+        self.assertEqual(result["status"], "Platinum")
+
+        # 2. Test fallback parsing
+        html_fallback = """
+        <html>
+            <body>
+                <div>マイル잔액: 120,500</div>
+            </body>
+        </html>
+        """
+        result_fallback = plugin._parse_mileage_html(html_fallback)
+        self.assertIsNotNone(result_fallback)
+        self.assertEqual(result_fallback["balance"], 120500)
+        self.assertEqual(result_fallback["status"], "Member")
+
+    def test_ana_mileage_parsing_js_userdata_mile(self):
+        plugin = plugin_manager.get_plugin('ana')
+        self.assertIsNotNone(plugin)
+
+        html = """
+        <html>
+            <body>
+                <div class="js-userdata-mile">125,400</div>
+            </body>
+        </html>
+        """
+        result = plugin._parse_mileage_html(html)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["balance"], 125400)
+        self.assertEqual(result["status"], "Member")
+
+    def test_ana_page_not_found_handling(self):
+        from plugins.base import PluginError
+        plugin = plugin_manager.get_plugin('ana')
+        self.assertIsNotNone(plugin)
+
+        class MockSB:
+            def __init__(self, title, html):
+                self._title = title
+                self._html = html
+            def get_title(self):
+                return self._title
+            def get_page_source(self):
+                return self._html
+
+        # Scenario 1: Title match for Page Not Found
+        sb_title = MockSB("We are unable to find the specified page.│ANA", "<html></html>")
+        with self.assertRaises(PluginError) as context:
+            plugin._check_page_not_found(sb_title)
+        self.assertIn("Page Not Found", str(context.exception))
+
+        # Scenario 2: Body text match for Page Not Found
+        sb_body = MockSB("Normal Title", "<html><body>The page cannot be found.</body></html>")
+        with self.assertRaises(PluginError) as context:
+            plugin._check_page_not_found(sb_body)
+        self.assertIn("The page cannot be found", str(context.exception))
+
+        # Scenario 3: Valid page
+        sb_valid = MockSB("ANA Mileage Club", "<html><body>Welcome to AMC</body></html>")
+        # Should not raise any error
+        plugin._check_page_not_found(sb_valid)
+
+    def test_ana_terms_and_notices_handling(self):
+        from plugins.base import InteractionRequiredError
+        plugin = plugin_manager.get_plugin('ana')
+        self.assertIsNotNone(plugin)
+
+        class MockSB:
+            def __init__(self, url):
+                self._url = url
+            def get_current_url(self):
+                return self._url
+
+        # Scenario 1: Terms page URL -> should raise InteractionRequiredError
+        sb_terms = MockSB("https://www.ana.co.jp/en/jp/notice/amc/jfm_afs_kiyaku/")
+        with self.assertRaises(InteractionRequiredError) as context:
+            plugin._check_terms_and_notices(sb_terms)
+        self.assertIn("ANA terms of service update notice detected", str(context.exception))
+
+        # Scenario 2: Generic notice page under amc -> should raise InteractionRequiredError
+        sb_notice = MockSB("https://www.ana.co.jp/en/jp/notice/amc/some_other_page/")
+        with self.assertRaises(InteractionRequiredError) as context:
+            plugin._check_terms_and_notices(sb_notice)
+        self.assertIn("ANA terms of service update notice detected", str(context.exception))
+
+        # Scenario 3: Standard page -> should not raise any error
+        sb_valid = MockSB("https://www.ana.co.jp/en/jp/amc/")
+        plugin._check_terms_and_notices(sb_valid)
+
+    def test_ana_expiration_date_extraction(self):
+        plugin = plugin_manager.get_plugin('ana')
+        self.assertIsNotNone(plugin)
+
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        # 1. Scraped specific date format
+        html_scraped = """
+        <html>
+            <body>
+                <div>Your miles will expire on 2026/11/30.</div>
+            </body>
+        </html>
+        """
+        mock_sb = MockSB(html_scraped)
+        result = {"balance": 1000, "status": "Member", "expiration_date": None}
+        plugin._fetch_expiration(mock_sb, result)
+        self.assertEqual(result["expiration_date"], "2026-11-30T00:00:00Z")
+
+        # 2. Fallback default 36 months calculation
+        mock_sb_empty = MockSB("<html></html>")
+        result_empty = {"balance": 1000, "status": "Member", "expiration_date": None}
+        plugin._fetch_expiration(mock_sb_empty, result_empty)
+        self.assertIsNotNone(result_empty["expiration_date"])
+        # Should be formatted as ISO string
+        self.assertTrue(result_empty["expiration_date"].endswith("T00:00:00Z"))
+
 if __name__ == '__main__':
     unittest.main()
-
