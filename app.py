@@ -4,6 +4,7 @@ from extensions import db, migrate
 from models import Provider, Account, AccountHistory, Certificate, Settings, Person
 from security import security_manager
 from plugins.manager import plugin_manager
+from plugins.base import safe_call_plugin_method
 from scheduler import scheduler, app_log
 from datetime import datetime, timedelta
 import os
@@ -222,6 +223,7 @@ def create_app(config_class=Config):
                 'capitalone': 'capitalone.com',
                 'wellsfargo': 'wellsfargo.com',
                 'bilt': 'biltrewards.com',
+                'eva': 'evaair.com',
             }
             domain = domains.get(plugin_name.lower())
             if domain:
@@ -785,7 +787,7 @@ def create_app(config_class=Config):
             
             password = security_manager.decrypt(account.password_encrypted)
             profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
-            data = plugin.fetch_data(account.username, password, profile_dir=profile_dir, **account.extra_metadata)
+            data = safe_call_plugin_method(plugin.fetch_data, account.username, password, profile_dir=profile_dir, **account.extra_metadata)
             
             # Update account
             account.balance = data.get('balance', account.balance)
@@ -913,7 +915,7 @@ def create_app(config_class=Config):
 
             password = security_manager.decrypt(account.password_encrypted)
             profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
-            data = plugin.fetch_data(account.username, password, profile_dir=profile_dir, **account.extra_metadata)
+            data = safe_call_plugin_method(plugin.fetch_data, account.username, password, profile_dir=profile_dir, **account.extra_metadata)
             
             account.balance = data.get('balance', account.balance)
             account.status = data.get('status', account.status)
@@ -1067,7 +1069,7 @@ def create_app(config_class=Config):
             app_log.info(f"Starting interactive login for account {account.display_name}...")
             password = security_manager.decrypt(account.password_encrypted)
             profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
-            plugin.interactive_login(account.username, password, profile_dir=profile_dir, **account.extra_metadata)
+            safe_call_plugin_method(plugin.interactive_login, account.username, password, profile_dir=profile_dir, **account.extra_metadata)
             app_log.info(f"Interactive login completed for {account.display_name}.")
             account.last_fetch_status = "SUCCESS"
             account.last_error = "Interactive Login succeeded. Please click 'Sync Now' to synchronize your points."
