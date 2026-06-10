@@ -12,12 +12,33 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "delta"
 
+    def _dismiss_cookie_banners(self, sb) -> None:
+        try:
+            sb.execute_script("""
+                ['onetrust-banner-sdk','onetrust-consent-sdk','ot-pc-content'].forEach(id => {
+                    const el = document.getElementById(id); if (el) el.remove();
+                });
+                const ov = document.querySelector('.onetrust-pc-dark-filter');
+                if (ov) ov.remove();
+            """)
+        except Exception:
+            pass
+        for sel in ["button#onetrust-accept-btn-handler", "button#accept-recommended-btn-handler",
+                    "button#accept-all", "button:contains('Accept All')"]:
+            try:
+                if sb.is_element_visible(sel):
+                    sb.click(sel)
+                    sb.sleep(0.5)
+            except Exception:
+                pass
+
     def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
         with SB(uc=True, user_data_dir=profile_dir) as sb:
             try:
                 # Delta login page
                 sb.open("https://www.delta.com/skymiles/login")
                 sb.sleep(3)
+                self._dismiss_cookie_banners(sb)
                 
                 # Check if we are already logged in
                 current_url = sb.get_current_url()
@@ -40,6 +61,7 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
                             if "profilepicker" in current_url:
                                 print("Profile picker page detected. Attempting to select profile.")
                                 sb.sleep(3) # Give it a moment to render
+                                self._dismiss_cookie_banners(sb)
                                 try:
                                     clicked = False
                                     # Find all buttons and click the first visible one that isn't a utility button
@@ -60,16 +82,34 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
                                         print(f"Found potential profile button/link: '{b.text}'")
                                         
                                         # Delta sometimes uses a div/button combo for the card. We'll just click it.
-                                        b.click()
+                                        try:
+                                            b.click()
+                                        except Exception:
+                                            try:
+                                                sb.execute_script("arguments[0].click();", b)
+                                            except Exception as js_e:
+                                                print(f"Failed JavaScript click on profile button: {js_e}")
                                         clicked = True
                                         break
                                 
                                     sb.sleep(2)
                                     # Often there's a submit/continue button after selection
                                     if sb.is_element_visible('button:contains("Continue")'):
-                                        sb.click('button:contains("Continue")')
+                                        try:
+                                            sb.click('button:contains("Continue")')
+                                        except Exception:
+                                            try:
+                                                sb.execute_script("arguments[0].click();", sb.find_element('button:contains("Continue")'))
+                                            except Exception:
+                                                pass
                                     elif sb.is_element_visible('button[type="submit"]'):
-                                        sb.click('button[type="submit"]')
+                                        try:
+                                            sb.click('button[type="submit"]')
+                                        except Exception:
+                                            try:
+                                                sb.execute_script("arguments[0].click();", sb.find_element('button[type="submit"]'))
+                                            except Exception:
+                                                pass
                                     
                                     sb.sleep(2)
                                 except Exception as inner_e:
@@ -83,6 +123,7 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
                     print("Navigating to overview page directly...")
                     sb.open("https://www.delta.com/myskymiles/overview")
                     sb.sleep(5)
+                    self._dismiss_cookie_banners(sb)
                 
                 # Now we should be on the dashboard or similar
                 sb.sleep(5)  # Allow data to load
@@ -144,6 +185,7 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
         with SB(uc=True, user_data_dir=profile_dir) as sb:
             sb.open("https://www.delta.com/")
             sb.sleep(2)
+            self._dismiss_cookie_banners(sb)
             
             # Wait for user to log in and land on the profile dashboard
             # Example Delta dashboard URL fragment
