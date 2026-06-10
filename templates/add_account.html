@@ -197,9 +197,11 @@ document.addEventListener("DOMContentLoaded", function() {
             if (isHyatt) {
                 lastNameField.classList.remove("hidden");
                 lastNameInput.required = true;
+                lastNameInput.disabled = false;
             } else {
                 lastNameField.classList.add("hidden");
                 lastNameInput.required = false;
+                lastNameInput.disabled = true;
                 lastNameInput.value = "";
             }
 
@@ -208,12 +210,15 @@ document.addEventListener("DOMContentLoaded", function() {
 
         var isJal = plugin === "jal";
         if (jalRegionField) {
+            var regionSelect = document.getElementById("meta_region");
             if (isJal && !isManual) {
                 jalRegionField.classList.remove("hidden");
-                document.getElementById("meta_region").required = true;
+                regionSelect.required = true;
+                regionSelect.disabled = false;
             } else {
                 jalRegionField.classList.add("hidden");
-                document.getElementById("meta_region").required = false;
+                regionSelect.required = false;
+                regionSelect.disabled = true;
             }
         }
     }

@@ -661,5 +661,24 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # Should be formatted as ISO string
         self.assertTrue(result_empty["expiration_date"].endswith("T00:00:00Z"))
 
+    def test_safe_call_plugin_method(self):
+        from plugins.base import safe_call_plugin_method
+        
+        # Test function without **kwargs
+        def dummy_func_no_kwargs(username, password, region=None):
+            return f"{username}-{password}-{region}"
+            
+        # Test function with **kwargs
+        def dummy_func_with_kwargs(username, password, **kwargs):
+            return f"{username}-{password}-{kwargs.get('region')}-{kwargs.get('extra')}"
+            
+        # Call dummy_func_no_kwargs with extra keys in kwargs
+        res1 = safe_call_plugin_method(dummy_func_no_kwargs, "user1", "pass1", region="US", extra_key="ignored")
+        self.assertEqual(res1, "user1-pass1-US")
+        
+        # Call dummy_func_with_kwargs with extra keys in kwargs
+        res2 = safe_call_plugin_method(dummy_func_with_kwargs, "user2", "pass2", region="UK", extra="value", extra_key="value2")
+        self.assertEqual(res2, "user2-pass2-UK-value")
+
 if __name__ == '__main__':
     unittest.main()

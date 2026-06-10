@@ -49,6 +49,7 @@ def sync_all_accounts():
     from models import Account, AccountHistory, Certificate
     from security import security_manager
     from plugins.manager import plugin_manager
+    from plugins.base import safe_call_plugin_method
     
     app = create_app()
     with app.app_context():
@@ -87,7 +88,7 @@ def sync_all_accounts():
             try:
                 password = security_manager.decrypt(account.password_encrypted)
                 profile_dir = os.path.join(write_dir, 'browser_profiles', str(account.id))
-                data = plugin.fetch_data(account.username, password, profile_dir=profile_dir, **account.extra_metadata)
+                data = safe_call_plugin_method(plugin.fetch_data, account.username, password, profile_dir=profile_dir, **account.extra_metadata)
                 
                 # Update account
                 account.balance = data.get('balance', account.balance)
