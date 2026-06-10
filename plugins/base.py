@@ -191,6 +191,28 @@ try:
 except Exception:
     pass
 
+def safe_call_plugin_method(method, *args, **kwargs):
+    """
+    Safely call a plugin method (like fetch_data or interactive_login) by only
+    passing the keyword arguments that the method signature actually accepts,
+    unless the method signature has a **kwargs parameter.
+    """
+    try:
+        sig = inspect.signature(method)
+        # Check if the method accepts arbitrary kwargs (VAR_KEYWORD)
+        has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+        if has_var_keyword:
+            return method(*args, **kwargs)
+        
+        # Otherwise, filter kwargs to only include parameters that are explicitly defined
+        # in the method's signature.
+        accepted_params = set(sig.parameters.keys())
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k in accepted_params}
+        return method(*args, **filtered_kwargs)
+    except Exception:
+        # Fallback to calling directly if inspect fails
+        return method(*args, **kwargs)
+
 class ProviderPlugin(ABC):
     @property
     @abstractmethod
