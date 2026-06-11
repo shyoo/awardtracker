@@ -27,7 +27,7 @@ class TestExpirationCalculations(unittest.TestCase):
     def test_universal_exemption(self):
         # Universal exemption always forces None (Never Expires)
         dt = datetime(2026, 5, 20)
-        for pid in ['american', 'alaska', 'marriott', 'hilton', 'hyatt', 'ihg', 'avianca', 'korean', 'delta', 'aircanada']:
+        for pid in ['american', 'alaska', 'marriott', 'hilton', 'hyatt', 'ihg', 'avianca', 'korean', 'delta', 'aircanada', 'eva']:
             self.assertIsNone(calculate_expiration(pid, 1000, 'Member', dt, has_exemption=True))
 
     def test_aircanada_aeroplan_rules(self):
@@ -84,11 +84,17 @@ class TestExpirationCalculations(unittest.TestCase):
         dt = datetime(2036, 12, 31)
         self.assertEqual(calculate_expiration('korean', 5000, 'SKYPASS Member', dt, has_exemption=False), dt)
 
+    def test_eva_air_rules(self):
+        # EVA Air is calculated strictly on page during scraping, calculate_expiration acts as a pass-through
+        dt = datetime(2029, 5, 31)
+        self.assertEqual(calculate_expiration('eva', 5000, 'Green', dt, has_exemption=False), dt)
+
     def test_program_descriptions(self):
         # Descriptions must provide policy detail for tooltips
         self.assertTrue("never expire" in get_program_rule_description('delta').lower())
         self.assertTrue("24 months" in get_program_rule_description('american').lower())
         self.assertTrue("korean air" in get_program_rule_description('korean').lower() or "december 31" in get_program_rule_description('korean').lower())
+        self.assertTrue("infinity mileagelands" in get_program_rule_description('eva').lower() or "36 months" in get_program_rule_description('eva').lower())
 
 if __name__ == '__main__':
     unittest.main()

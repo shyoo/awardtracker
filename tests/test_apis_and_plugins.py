@@ -776,6 +776,63 @@ class TestAPIsAndPlugins(unittest.TestCase):
         res2 = safe_call_plugin_method(dummy_func_with_kwargs, "user2", "pass2", region="UK", extra="value", extra_key="value2")
         self.assertEqual(res2, "user2-pass2-UK-value")
 
+    def test_eva_plugin_registration(self):
+        plugin = plugin_manager.get_plugin('eva')
+        self.assertIsNotNone(plugin, "Scraper plugin 'eva' was not registered.")
+        self.assertEqual(plugin.name, "EVA Air")
+        self.assertEqual(plugin.plugin_id, "eva")
+        self.assertTrue(hasattr(plugin, 'fetch_data'))
+        self.assertTrue(hasattr(plugin, 'interactive_login'))
+
+    def test_eva_mileage_parsing(self):
+        plugin = plugin_manager.get_plugin('eva')
+        self.assertIsNotNone(plugin)
+
+        # 1. Test standard parsing of mileage and status
+        html = """
+        <html>
+            <body>
+                <div class="container-3">
+                    <h3>Self Award Miles</h3>
+                    <p class="margin-b-2">
+                        <span class="color-green text-2 text-medium vertical-baseline margin-r-6">45,670</span>
+                    </p>
+                </div>
+                <div>
+                    <img src="member-card-Silver-Card.png" alt="Silver Card">
+                </div>
+                <div id="div_Mile">
+                    <h3>Miles expiring within 36 months</h3>
+                    <span>2026년6월-2029년5월</span>
+                </div>
+            </body>
+        </html>
+        """
+        result = plugin._parse_account_html(html)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["balance"], 45670)
+        self.assertEqual(result["status"], "Silver")
+        self.assertTrue(result["expiration_date"].startswith("2029-05"))
+
+        # 2. Test fallback expiration date logic
+        html_no_exp = """
+        <html>
+            <body>
+                <span class="color-green text-2 text-medium vertical-baseline margin-r-6">1,200</span>
+                <img src="member-card-Green-Card.png" alt="Green Card">
+                <div id="div_Mile">
+                    <h3>There is no mile which will be expired within 36 months</h3>
+                </div>
+            </body>
+        </html>
+        """
+        result_no_exp = plugin._parse_account_html(html_no_exp)
+        self.assertIsNotNone(result_no_exp)
+        self.assertEqual(result_no_exp["balance"], 1200)
+        self.assertEqual(result_no_exp["status"], "Green")
+        self.assertIsNotNone(result_no_exp["expiration_date"])
+        self.assertTrue(result_no_exp["expiration_date"].endswith("T00:00:00Z"))
+
     def test_sync_all_skips_interactive_login_required(self):
         from unittest.mock import patch
         
