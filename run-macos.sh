@@ -17,4 +17,4 @@ else
 fi
 
 # Run the app
-python3 tray.py
+python3 main.py

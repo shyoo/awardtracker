@@ -20,6 +20,12 @@ class AsianaAirlinesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "asiana"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        return last_activity_date
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "Asiana Club miles earned are valid strictly for 10 years (Silver/Gold) or 12 years (Diamond and above) from the date of accrual. Activity does not extend them."
+
     def _cache_path(self, profile_dir: str) -> str:
         """Path to the cached mileage data JSON file for this profile."""
         return os.path.join(profile_dir, "asiana_cache.json")

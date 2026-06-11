@@ -14,7 +14,7 @@ added_files = [
 ]
 
 a = Analysis(
-    ['tray.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     datas=added_files,

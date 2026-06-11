@@ -17,6 +17,27 @@ class AirCanadaPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "aircanada"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        st = (status or "").lower()
+        if any(tier in st for tier in ('elite', 'altitude', 'super elite', '25k', '35k', '50k', '75k', '100k')):
+            return None
+        from .base import add_months
+        return add_months(last_activity_date, 18)
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        st = (status or "").lower()
+        if any(tier in st for tier in ('elite', 'altitude', 'super elite', '25k', '35k', '50k', '75k', '100k')):
+            return f"Points never expire for Elite members (your status: {status or 'Standard'})."
+        return "Points expire after 18 months of inactivity. Primary credit card holders or Elite status prevents expiration."
+
+    def get_never_expires_reason(self, status: str, has_exemption: bool = False) -> str:
+        if has_exemption:
+            return " (Exempt)"
+        st = (status or "").lower()
+        if any(tier in st for tier in ('elite', 'altitude', 'super elite', '25k', '35k', '50k', '75k', '100k')):
+            return " (Elite)"
+        return ""
+
     def _extract_data(self, html: str) -> Tuple[Optional[int], Optional[str], Optional[datetime]]:
         """
         Parses Aeroplan points balance, Elite status, and Expiration Date from dashboard HTML.

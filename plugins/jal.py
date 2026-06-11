@@ -22,6 +22,12 @@ class JAPANAirlinesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "jal"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        return last_activity_date
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "JAL Mileage Bank miles are valid for 36 months from the month they were earned. Activity does not extend them."
+
     # -------------------------------------------------------------------------
     # Helpers
     # -------------------------------------------------------------------------

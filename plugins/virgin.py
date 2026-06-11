@@ -15,6 +15,9 @@ class VirginAtlanticPlugin(ProviderPlugin):
     @property
     def plugin_id(self) -> str:
         return "virgin"
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "Miles in this program never expire."
     
     def _extract_data(self, html: str) -> Tuple[Optional[int], Optional[str]]:
         """

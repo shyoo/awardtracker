@@ -16,6 +16,12 @@ class KoreanAirPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "korean"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        return last_activity_date
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "Miles earned on or after July 1, 2008 expire strictly on December 31 of the 10th year following the earn date. Activity does not extend them."
+
     def _cache_path(self, profile_dir: str) -> str:
         """Path to the cached mileage data JSON file for this profile."""
         return os.path.join(profile_dir, "korean_cache.json")
