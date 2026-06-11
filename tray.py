@@ -121,7 +121,7 @@ def run_background_sync():
         send_desktop_notification("Award Tracker", "Synchronizing all accounts in background...")
         
     try:
-        sync_all_accounts()
+        sync_all_accounts(is_scheduled=False)
         if notify_enabled:
             send_desktop_notification("Award Tracker", "Account synchronization completed successfully!")
     except Exception as e:
