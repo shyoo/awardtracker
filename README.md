@@ -67,6 +67,7 @@ Provides a tracking chart that shows points history over the times.
 * **Asiana Airlines** (Asiana Club)
 * **Avianca** (LifeMiles)
 * **Delta Air Lines** (SkyMiles)
+* **EVA Air** (Infinity Mileagelands)
 * **Japan Airlines** (JAL Mileage Bank)
 * **Korean Air** (SKYPASS) — *includes automatic Mileage Validity Batch & Certificate recognition*
 * **Southwest Airlines** (Rapid Rewards)

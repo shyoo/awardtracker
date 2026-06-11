@@ -223,6 +223,7 @@ def create_app(config_class=Config):
                 'capitalone': 'capitalone.com',
                 'wellsfargo': 'wellsfargo.com',
                 'bilt': 'biltrewards.com',
+                'eva': 'evaair.com',
             }
             domain = domains.get(plugin_name.lower())
             if domain:

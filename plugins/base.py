@@ -65,6 +65,9 @@ def inject_control_modal(sb):
         elif "aircanada.com" in current_url or "aeroplan" in current_url:
             provider_name = "Air Canada Aeroplan"
             custom_tip = "Complete any verification or security prompts if requested by Air Canada."
+        elif "evaair.com" in current_url or "flyeva" in current_url:
+            provider_name = "EVA Air"
+            custom_tip = "Complete the CAPTCHA image manually, then enter your email verification code if prompted."
 
         title = f"{provider_name} Assistant"
         
