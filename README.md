@@ -62,6 +62,7 @@ Provides a tracking chart that shows points history over the times.
 ### 🛩️ Airlines
 * **Air Canada** (Aeroplan)
 * **Alaska Airlines** (Mileage Plan)
+* **All Nippon Airways** (ANA Mileage Club)
 * **American Airlines** (AAdvantage)
 * **Asiana Airlines** (Asiana Club)
 * **Avianca** (LifeMiles)
@@ -199,7 +200,7 @@ Welcome to Award Tracker! Follow these steps to get started:
 
 ### 3. Adding Your First Account
 1. Open the dashboard (via tray menu).
-2. Click **Manage People & Colors** to add family profiles (e.g. "John", "Sarah") and choose distinct colors for them.
+2. Click **Manage People Profiles** to add family profiles (e.g. "John", "Sarah") and choose distinct colors for them.
 3. Click **Add Account**:
    * **Automated Scrapers**: Select a provider (e.g. *United Airlines*), enter your username, password, select the profile owner, and click **Save**.
    * **Manually-Tracked Programs**: Select *Manual Tracking* as the provider, enter your *Custom Program Name* (e.g. *Best Buy points*), and save.
