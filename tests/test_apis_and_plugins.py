@@ -400,6 +400,102 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # 4. Standard login URL (False)
         self.assertFalse(plugin.is_mfa_challenge(sb_empty, "https://auth0.alaskaair.com/u/login"))
 
+    def test_alaska_fetch_data_mfa_triggers_interaction_required(self):
+        from unittest.mock import patch, MagicMock
+        from plugins.base import InteractionRequiredError
+        
+        plugin = plugin_manager.get_plugin('alaska')
+        self.assertIsNotNone(plugin)
+        
+        # Scenario 1: Lands on an auth URL
+        mock_sb_instance1 = MagicMock()
+        mock_sb_instance1.get_current_url.return_value = "https://auth0.alaskaair.com/u/login"
+        mock_sb_instance1.is_element_visible.return_value = False
+        
+        mock_sb_context1 = MagicMock()
+        mock_sb_context1.__enter__.return_value = mock_sb_instance1
+        
+        with patch('plugins.alaska.SB', return_value=mock_sb_context1):
+            with self.assertRaises(InteractionRequiredError):
+                plugin.fetch_data("user", "pass")
+                
+        # Scenario 2: Lands on a non-auth URL but is_mfa_challenge returns True (e.g. mfa dialog elements are visible)
+        mock_sb_instance2 = MagicMock()
+        mock_sb_instance2.get_current_url.return_value = "https://www.alaskaair.com/atmosrewards/account/overview/"
+        mock_sb_instance2.is_element_visible.side_effect = lambda selector: selector == "#mfa-challenge-title"
+        
+        mock_sb_context2 = MagicMock()
+        mock_sb_context2.__enter__.return_value = mock_sb_instance2
+        
+        with patch('plugins.alaska.SB', return_value=mock_sb_context2):
+            with self.assertRaises(InteractionRequiredError):
+                plugin.fetch_data("user", "pass")
+
+        # Scenario 3: Lands on overview page initially, but redirects to an auth URL during the dashboard load loop
+        mock_sb_instance3 = MagicMock()
+        # Calls:
+        # 1. line 69: get_current_url() -> overview
+        # 2. line 126: (uses previous current_url)
+        # 3. line 131 (inside loop): get_current_url() -> challenge
+        mock_sb_instance3.get_current_url.side_effect = [
+            "https://www.alaskaair.com/atmosrewards/account/overview/",
+            "https://auth0.alaskaair.com/u/mfa-sms-challenge"
+        ]
+        mock_sb_instance3.is_element_visible.return_value = False
+        
+        mock_sb_context3 = MagicMock()
+        mock_sb_context3.__enter__.return_value = mock_sb_instance3
+        
+        with patch('plugins.alaska.SB', return_value=mock_sb_context3):
+            with self.assertRaises(InteractionRequiredError):
+                plugin.fetch_data("user", "pass")
+
+        # Scenario 4: Auto-login is attempted, and immediately after credentials submission, it detects the MFA challenge
+        mock_sb_instance4 = MagicMock()
+        # Calls:
+        # 1. line 69: get_current_url() -> login page
+        # 2. line 97 (inside auto-login): get_current_url() -> challenge page
+        mock_sb_instance4.get_current_url.side_effect = [
+            "https://auth0.alaskaair.com/u/login",
+            "https://auth0.alaskaair.com/u/mfa-sms-challenge"
+        ]
+        # Make elements visible so wait_for_element_visible and is_element_visible succeed
+        mock_sb_instance4.is_element_visible.return_value = True
+        
+        mock_sb_context4 = MagicMock()
+        mock_sb_context4.__enter__.return_value = mock_sb_instance4
+        
+        with patch('plugins.alaska.SB', return_value=mock_sb_context4):
+            with self.assertRaises(InteractionRequiredError):
+                plugin.fetch_data("user", "pass")
+
+        # Scenario 5: Browser window is closed/disconnected during the dashboard load loop, raising WebDriverException
+        mock_sb_instance5 = MagicMock()
+        mock_sb_instance5.get_current_url.side_effect = [
+            "https://www.alaskaair.com/atmosrewards/account/overview/",  # line 69
+            "https://www.alaskaair.com/atmosrewards/account/overview/",  # line 122 (uses previous)
+        ]
+        # In the dashboard load loop (line 137), raise InvalidSessionIdException (simulating window close)
+        from selenium.common.exceptions import InvalidSessionIdException
+        mock_sb_instance5.is_element_visible.return_value = False
+        
+        # Make the first get_current_url inside the loop raise InvalidSessionIdException
+        def get_current_url_mock():
+            if len(mock_get_url_calls) == 0:
+                mock_get_url_calls.append(1)
+                return "https://www.alaskaair.com/atmosrewards/account/overview/"
+            raise InvalidSessionIdException("Message: invalid session id")
+            
+        mock_get_url_calls = []
+        mock_sb_instance5.get_current_url = get_current_url_mock
+        
+        mock_sb_context5 = MagicMock()
+        mock_sb_context5.__enter__.return_value = mock_sb_instance5
+        
+        with patch('plugins.alaska.SB', return_value=mock_sb_context5):
+            with self.assertRaises(InteractionRequiredError):
+                plugin.fetch_data("user", "pass")
+
     def test_jal_expiration_date_extraction(self):
         plugin = plugin_manager.get_plugin('jal')
         self.assertIsNotNone(plugin)
@@ -680,5 +776,148 @@ class TestAPIsAndPlugins(unittest.TestCase):
         res2 = safe_call_plugin_method(dummy_func_with_kwargs, "user2", "pass2", region="UK", extra="value", extra_key="value2")
         self.assertEqual(res2, "user2-pass2-UK-value")
 
+    def test_sync_all_skips_interactive_login_required(self):
+        from unittest.mock import patch
+        
+        with patch('app.create_app') as mock_create_app, \
+             patch('plugins.base.safe_call_plugin_method') as mock_safe_call:
+            
+            # Setup mock app return
+            mock_create_app.return_value = self.app
+            
+            # Setup mock fetch_data return
+            mock_safe_call.return_value = {
+                'balance': 15000,
+                'status': 'Gold',
+                'last_activity_date': datetime(2026, 1, 1)
+            }
+            
+            # Create two accounts: one normal, one requiring interactive login
+            # Both must be non-manual (is_manual=False) to be processed by sync_all_accounts
+            normal_account = Account(
+                provider_id=self.provider_auto.id,
+                person_id=self.person.id,
+                username="normal_user",
+                password_encrypted=security_manager.encrypt("normal_pass"),
+                is_manual=False,
+                balance=1000,
+                status="Silver"
+            )
+            
+            mfa_account = Account(
+                provider_id=self.provider_auto.id,
+                person_id=self.person.id,
+                username="mfa_user",
+                password_encrypted=security_manager.encrypt("mfa_pass"),
+                is_manual=False,
+                balance=2000,
+                status="Platinum",
+                last_fetch_status="FAILED",
+                last_error="Additional security verification needed. Please solve MFA."
+            )
+            
+            db.session.add_all([normal_account, mfa_account])
+            db.session.commit()
+            
+            # Assert mfa_account actually has interactive_login_required == True
+            self.assertTrue(mfa_account.interactive_login_required)
+            self.assertFalse(normal_account.interactive_login_required)
+            
+            # Run sync_all_accounts
+            from scheduler import sync_all_accounts
+            sync_all_accounts()
+            
+            # Refresh from db and assert state
+            db.session.refresh(normal_account)
+            db.session.refresh(mfa_account)
+            
+            # normal_account should have been synced (balance changed to 15000, status to Gold)
+            self.assertEqual(normal_account.balance, 15000)
+            self.assertEqual(normal_account.status, "Gold")
+            self.assertEqual(normal_account.last_fetch_status, "SUCCESS")
+            
+            # mfa_account should NOT have been synced (balance and status unchanged, last_error remains same)
+            self.assertEqual(mfa_account.balance, 2000)
+            self.assertEqual(mfa_account.status, "Platinum")
+            self.assertEqual(mfa_account.last_fetch_status, "FAILED")
+            self.assertIn("security verification", mfa_account.last_error)
+            
+            # Verify safe_call was only called for the normal account (once)
+            self.assertEqual(mock_safe_call.call_count, 1)
+
+    def test_dashboard_renders_interactive_login_passed_sync_pending(self):
+        # Create an account in the interactive-login-succeeded-but-sync-pending state
+        account = Account(
+            provider_id=self.provider_auto.id,
+            person_id=self.person.id,
+            username="pending_sync_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            is_manual=False,
+            balance=1000,
+            status="Silver",
+            last_fetch_status="SUCCESS",
+            last_error="Interactive Login succeeded. Please click 'Sync Now' to synchronize your points."
+        )
+        db.session.add(account)
+        db.session.commit()
+        
+        # Request the index page
+        res = self.client.get('/')
+        self.assertEqual(res.status_code, 200)
+        
+        # Verify it renders the specific status text
+        self.assertIn(b"Interactive sign-in passed, but sync is pending", res.data)
+
+    def test_dashboard_renders_generic_sync_failure_both_options(self):
+        # Create an account with a generic/vague failure
+        account = Account(
+            provider_id=self.provider_auto.id,
+            person_id=self.person.id,
+            username="vague_fail_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            is_manual=False,
+            balance=1000,
+            status="Silver",
+            last_fetch_status="FAILED",
+            last_error="Connection timed out"
+        )
+        db.session.add(account)
+        db.session.commit()
+        
+        # Request the index page
+        res = self.client.get('/')
+        self.assertEqual(res.status_code, 200)
+        
+        # Should render the Sync Now button (title="Sync Now")
+        self.assertIn(b"title=\"Sync Now\"", res.data)
+        
+        # Should render the Interactive Login Lock button (title="Interactive Login")
+        self.assertIn(b"title=\"Interactive Login\"", res.data)
+        
+        # Should render the instruction warning text for vague failures
+        self.assertIn(b"Sync failed.", res.data)
+        self.assertIn(b"Please try syncing again. If it repeatedly fails or is blocked by an undetected MFA/CAPTCHA challenge", res.data)
+
+    def test_eva_air_requires_interactive_login_on_new_account(self):
+        # Create a new provider for EVA Air
+        provider_eva = Provider(name="EVA Air", plugin_name="eva", enabled=True)
+        db.session.add(provider_eva)
+        db.session.commit()
+        
+        # Create a new account under EVA Air
+        account = Account(
+            provider_id=provider_eva.id,
+            person_id=self.person.id,
+            username="eva_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            is_manual=False
+        )
+        db.session.add(account)
+        db.session.commit()
+        
+        # Since it hasn't succeeded yet (last_fetch_status is None), it should require interactive login
+        self.assertTrue(account.interactive_login_required)
+
 if __name__ == '__main__':
     unittest.main()
+

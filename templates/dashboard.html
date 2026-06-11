@@ -241,6 +241,8 @@
                   <div class="flex items-center gap-1" id="sync-status-{{ account.id }}">
                       {% if account.is_manual %}
                           <span class="text-indigo-500 font-medium">Updated {{ time_ago(account.last_updated) }}</span>
+                      {% elif account.last_fetch_status == 'SUCCESS' and account.last_error and 'interactive login succeeded' in account.last_error.lower() %}
+                          <span class="text-amber-600 font-medium" title="{{ account.last_error }}">Interactive sign-in passed, but sync is pending</span>
                       {% elif account.last_fetch_status == 'SUCCESS' %}
                           <span class="text-emerald-600 font-medium">Synced ({{ time_ago(account.last_updated) }})</span>
                       {% elif account.last_fetch_status == 'FAILED' %}
@@ -250,13 +252,22 @@
                       {% endif %}
                   </div>
                 </div>
-                {% if account.last_fetch_status == 'FAILED' and account.last_error and ('security' in account.last_error.lower() or 'interactive' in account.last_error.lower() or 'mfa' in account.last_error.lower() or 'captcha' in account.last_error.lower() or 'verification' in account.last_error.lower() or 'password field not visible' in account.last_error.lower()) %}
+                {% if account.interactive_login_required %}
                 <div class="mt-2 text-[11px] text-amber-700 font-medium bg-amber-50 border border-amber-200/60 rounded-lg px-2.5 py-1.5 flex items-start gap-2 max-w-xl shadow-sm">
                   <svg class="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <div>
+                    <span class="font-bold">MFA / Additional security screening required.</span> Please click the orange lock icon on the right to perform an <strong class="text-amber-800">Interactive Login</strong>, and check the checkbox of <strong class="text-amber-800">"Don't require verification code again."</strong> during sign-in to prevent this next time.
+                  </div>
+                </div>
+                {% elif account.last_fetch_status == 'FAILED' %}
+                <div class="mt-2 text-[11px] text-rose-700 font-medium bg-rose-50 border border-rose-200/60 rounded-lg px-2.5 py-1.5 flex items-start gap-2 max-w-xl shadow-sm">
+                  <svg class="h-4 w-4 text-rose-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                   <div>
-                    <span class="font-bold">MFA / Additional security screening required.</span> Please click the orange warning icon on the right to perform an <strong class="text-amber-800">Interactive Login</strong>, and check the checkbox of <strong class="text-amber-800">"Don't require verification code again."</strong> during sign-in to prevent this next time.
+                    <span class="font-bold">Sync failed.</span> Please try syncing again. If it repeatedly fails or is blocked by an undetected MFA/CAPTCHA challenge, click the orange lock icon on the right to perform an <strong class="text-rose-800">Interactive Login</strong>.
                   </div>
                 </div>
                 {% endif %}
@@ -303,13 +314,15 @@
                   </button>
                   {% else %}
                   <!-- Auto-sync account: Sync Now button -->
+                  {% if not account.interactive_login_required %}
                   <button type="button" onclick="syncSingleAccount({{ account.id }})" class="p-1.5 text-slate-400 hover:text-primary hover:bg-slate-100 rounded-md transition-colors" title="Sync Now">
                       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                   </button>
-                  {% if account.last_fetch_status == 'FAILED' %}
-                  <form action="{{ url_for('interactive_login', account_id=account.id) }}" method="POST" class="inline" title="Interactive Login" onsubmit="showInteractiveLoginOverlay(event, '{{ account.provider.name }}')">
-                      <button type="submit" class="p-1.5 text-orange-500 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-colors">
-                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                  {% endif %}
+                  {% if account.interactive_login_required or account.last_fetch_status == 'FAILED' %}
+                  <form action="{{ url_for('interactive_login', account_id=account.id) }}" method="POST" class="inline" title="{% if account.interactive_login_required %}Interactive Login Required{% else %}Interactive Login{% endif %}" onsubmit="showInteractiveLoginOverlay(event, '{{ account.provider.name }}')">
+                      <button type="submit" class="p-1.5 text-orange-600 hover:text-orange-700 hover:bg-orange-100 border border-orange-200 bg-orange-50/50 rounded-md transition-colors" title="{% if account.interactive_login_required %}Interactive Login Required{% else %}Interactive Login{% endif %}">
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
                       </button>
                   </form>
                   {% endif %}
@@ -589,7 +602,11 @@
     if (e.key === 'Escape') closeUpdateBalanceModal();
   });
 
+  const activeSyncs = {};
   async function syncSingleAccount(accountId) {
+    if (activeSyncs[accountId]) return;
+    activeSyncs[accountId] = true;
+    
     const overlay = document.getElementById('sync-overlay-' + accountId);
     if(overlay) {
         overlay.classList.remove('hidden');
@@ -606,17 +623,27 @@
             }, 600);
         } else {
             document.getElementById('sync-status-' + accountId).innerHTML = `<span class="text-rose-600 font-medium" title="${data.message}">Sync Failed</span>`;
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
         }
     } catch (e) {
         document.getElementById('sync-status-' + accountId).innerHTML = `<span class="text-rose-600 font-medium">Sync Error</span>`;
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
     } finally {
+        activeSyncs[accountId] = false;
         if(overlay) overlay.classList.add('hidden');
         if(overlay) overlay.classList.remove('flex');
     }
   }
 
+  let isSyncingAll = false;
   document.getElementById('syncAllBtn')?.addEventListener('click', async () => {
+      if (isSyncingAll) return;
       if(accountIds.length === 0) return;
+      isSyncingAll = true;
       
       const modal = document.getElementById('syncModal');
       const text = document.getElementById('syncProgressText');
@@ -628,37 +655,41 @@
       
       let successCount = 0;
       let failCount = 0;
-
-      for (let i = 0; i < accountIds.length; i++) {
-          const accId = accountIds[i];
-          text.innerText = `Syncing account ${i+1} of ${accountIds.length}...`;
-          bar.style.width = `${((i) / accountIds.length) * 100}%`;
-          
-          const overlay = document.getElementById('sync-overlay-' + accId);
-          if(overlay) { overlay.classList.remove('hidden'); overlay.classList.add('flex'); }
-
-          try {
-              const res = await fetch(`/api/accounts/${accId}/sync`, { method: 'POST' });
-              const data = await res.json();
-              if(data.status === 'success') {
-                  successCount++;
-                  document.getElementById('sync-status-' + accId).innerHTML = `<span class="text-emerald-600 font-medium">Synced (just now)</span>`;
-                  document.getElementById('balance-' + accId).innerText = data.balance.toLocaleString();
-              } else {
-                  failCount++;
-                  document.getElementById('sync-status-' + accId).innerHTML = `<span class="text-rose-600 font-medium" title="${data.message}">Sync Failed</span>`;
-              }
-          } catch(e) {
-              failCount++;
-          } finally {
-              if(overlay) overlay.classList.add('hidden');
-              if(overlay) overlay.classList.remove('flex');
-          }
-      }
       
-      bar.style.width = '100%';
-      text.innerText = `Done! ${successCount} succeeded, ${failCount} failed.`;
-      doneBtn.classList.remove('hidden');
+      try {
+          for (let i = 0; i < accountIds.length; i++) {
+              const accId = accountIds[i];
+              text.innerText = `Syncing account ${i+1} of ${accountIds.length}...`;
+              bar.style.width = `${((i) / accountIds.length) * 100}%`;
+              
+              const overlay = document.getElementById('sync-overlay-' + accId);
+              if(overlay) { overlay.classList.remove('hidden'); overlay.classList.add('flex'); }
+
+              try {
+                  const res = await fetch(`/api/accounts/${accId}/sync`, { method: 'POST' });
+                  const data = await res.json();
+                  if(data.status === 'success') {
+                      successCount++;
+                      document.getElementById('sync-status-' + accId).innerHTML = `<span class="text-emerald-600 font-medium">Synced (just now)</span>`;
+                      document.getElementById('balance-' + accId).innerText = data.balance.toLocaleString();
+                  } else {
+                      failCount++;
+                      document.getElementById('sync-status-' + accId).innerHTML = `<span class="text-rose-600 font-medium" title="${data.message}">Sync Failed</span>`;
+                  }
+              } catch(e) {
+                  failCount++;
+              } finally {
+                  if(overlay) overlay.classList.add('hidden');
+                  if(overlay) overlay.classList.remove('flex');
+              }
+          }
+          
+          bar.style.width = '100%';
+          text.innerText = `Done! ${successCount} succeeded, ${failCount} failed.`;
+          doneBtn.classList.remove('hidden');
+      } finally {
+          isSyncingAll = false;
+      }
   });
 
   function closeSyncModal() {
