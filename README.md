@@ -125,7 +125,7 @@ If you are a developer and want to clone and compile the application standalone 
 5. Run the dev server manually:
    * **Windows**:
      ```powershell
-     venv\Scripts\python.exe tray.py
+     venv\Scripts\python.exe main.py
      ```
      *(Or simply double-click the `run-win.bat` file in the root folder!)*
    * **macOS/Linux**:

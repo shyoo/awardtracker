@@ -15,6 +15,21 @@ class AviancaLifemilesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "avianca"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        st = (status or "").lower()
+        if any(tier in st for tier in ('elite', 'silver', 'gold', 'diamond', 'red')):
+            months = 24
+        else:
+            months = 12
+        from .base import add_months
+        return add_months(last_activity_date, months)
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        st = (status or "").lower()
+        if any(tier in st for tier in ('elite', 'silver', 'gold', 'diamond', 'red')):
+            return f"Miles expire after 24 months of inactivity for Elite members (your status: {status or 'Standard'}). Note: Only earning activity resets the clock; redemptions do not."
+        return "Miles expire after 12 months of inactivity. Note: Only earning (accrual) activity resets the clock; redemptions do not."
+
     def _extract_data(self, html: str) -> Tuple[Optional[int], Optional[str]]:
         """
         Parses LifeMiles balance and tier status from page HTML.

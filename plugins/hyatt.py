@@ -17,6 +17,13 @@ class WorldofHyattPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "hyatt"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        from .base import add_months
+        return add_months(last_activity_date, 24)
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "Points expire after 24 months of inactivity. Any earning or redemption transaction extends them."
+
     def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str]]:
         """Extracts points balance and status from the Hyatt dashboard."""
         balance, status = None, None

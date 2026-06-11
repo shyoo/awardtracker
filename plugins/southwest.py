@@ -15,6 +15,9 @@ class SouthwestPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "southwest"
 
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "Miles in this program never expire."
+
     def _extract_data_from_page(self, sb) -> Tuple[Optional[int], Optional[str]]:
         """Parses balance and tier status from page HTML."""
         try:

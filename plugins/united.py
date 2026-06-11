@@ -13,6 +13,9 @@ class UnitedAirlinesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "united"
 
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "Miles in this program never expire."
+
     def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str]]:
         """Extracts miles balance and elite status from United MyUnited page."""
         balance, status = None, None

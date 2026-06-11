@@ -13,6 +13,27 @@ class IHGRewardsPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "ihg"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        st = (status or "").lower()
+        if any(tier in st for tier in ('silver', 'gold', 'platinum', 'diamond')):
+            return None
+        from .base import add_months
+        return add_months(last_activity_date, 12)
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        st = (status or "").lower()
+        if any(tier in st for tier in ('silver', 'gold', 'platinum', 'diamond')):
+            return f"Points never expire for Elite members (your status: {status or 'Club'})."
+        return "Points expire after 12 months of inactivity. Elite status prevents expiration."
+
+    def get_never_expires_reason(self, status: str, has_exemption: bool = False) -> str:
+        if has_exemption:
+            return " (Exempt)"
+        st = (status or "").lower()
+        if any(tier in st for tier in ('silver', 'gold', 'platinum', 'diamond')):
+            return " (Elite)"
+        return ""
+
     def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str]]:
         """Extracts points balance and status from the IHG Account DOM."""
         balance, status = None, None

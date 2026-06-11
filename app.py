@@ -97,7 +97,7 @@ def set_app_autostart(enabled: bool):
                     # Resolve script path
                     script_path = os.path.abspath(sys.argv[0])
                     if script_path.endswith('app.py'):
-                        script_path = script_path.replace('app.py', 'tray.py')
+                        script_path = script_path.replace('app.py', 'main.py')
                     command = f'"{exe_path}" "{script_path}" --startup'
                     
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
@@ -127,7 +127,7 @@ def set_app_autostart(enabled: bool):
                 else:
                     script_path = os.path.abspath(sys.argv[0])
                     if script_path.endswith('app.py'):
-                        script_path = script_path.replace('app.py', 'tray.py')
+                        script_path = script_path.replace('app.py', 'main.py')
                     arguments = [sys.executable, script_path, "--startup"]
                 
                 # Create a robust Launch Agent plist

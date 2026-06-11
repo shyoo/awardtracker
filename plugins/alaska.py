@@ -12,6 +12,13 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "alaska"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        from .base import add_months
+        return add_months(last_activity_date, 24)
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "Accounts are locked after 24 months of inactivity. Balance is preserved, but account reactivation is required."
+
     def is_auth_url(self, url: str) -> bool:
         url_lower = url.lower()
         auth_keywords = [

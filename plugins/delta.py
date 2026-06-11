@@ -12,6 +12,9 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "delta"
 
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "Miles in this program never expire."
+
     def _dismiss_cookie_banners(self, sb) -> None:
         try:
             sb.execute_script("""

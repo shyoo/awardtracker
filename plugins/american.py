@@ -14,6 +14,13 @@ class AmericanAirlinesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "american"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        from .base import add_months
+        return add_months(last_activity_date, 24)
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "Miles expire after 24 months of inactivity. Any earning or redemption transaction extends them."
+
     def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str], Optional[Any], Optional[Any]]:
         """Extracts AAdvantage miles balance, status tier, expiration_date, and last_activity_date from AA profile summary."""
         balance, status = None, None

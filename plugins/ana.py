@@ -25,6 +25,12 @@ class ANAPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "ana"
 
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        return last_activity_date
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        return "ANA Mileage Club miles are valid for 36 months from the month they were earned. Activity does not extend them."
+
     def _cache_path(self, profile_dir: str) -> str:
         """Path to the cached mileage data JSON file for this profile."""
         return os.path.join(profile_dir, "ana_cache.json")

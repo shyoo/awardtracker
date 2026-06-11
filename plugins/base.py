@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
+from datetime import datetime
 import time
 import inspect
 from seleniumbase import BaseCase
@@ -214,6 +215,23 @@ def safe_call_plugin_method(method, *args, **kwargs):
 
     return method(*args, **filtered_kwargs)
 
+def add_months(source_date, months):
+    """
+    Robust month addition helper in pure Python.
+    Correctly handles leap years and variable month lengths.
+    """
+    if source_date is None:
+        return None
+    month = source_date.month - 1 + months
+    year = source_date.year + month // 12
+    month = month % 12 + 1
+    day = min(source_date.day, [
+        31,
+        29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
+        31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    ][month - 1])
+    return datetime(year, month, day, source_date.hour, source_date.minute, source_date.second)
+
 class ProviderPlugin(ABC):
     @property
     @abstractmethod
@@ -240,6 +258,28 @@ class ProviderPlugin(ABC):
         Opens a visible browser so the user can manually bypass MFA/Captchas.
         """
         pass
+
+    def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
+        """
+        Calculates the exact expiration date based on program-specific rules.
+        Returns datetime or None (Never Expires).
+        """
+        return None
+
+    def get_expiration_policy_description(self, status: str = None) -> str:
+        """
+        Returns a human-readable description of the program's expiration policy.
+        """
+        return "Expiration rules vary by loyalty program."
+
+    def get_never_expires_reason(self, status: str, has_exemption: bool = False) -> str:
+        """
+        Returns a short reason to append to the "Never Expires" UI text.
+        For example: " (Elite)" or " (Exempt)".
+        """
+        if has_exemption:
+            return " (Exempt)"
+        return ""
 
 class PluginError(Exception):
     pass
