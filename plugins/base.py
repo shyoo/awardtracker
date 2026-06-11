@@ -70,12 +70,12 @@ def inject_control_modal(sb):
         if interactive:
             border_color = "#fc5d08"  # Premium Award Tracker Orange
             bg_color = "#1c1c1c"
-            step2 = "2. Click the <strong>\"Sign In\"</strong>, <strong>\"Submit\"</strong>, or <strong>\"Continue\"</strong> button <strong>manually</strong> — the tool will NOT click this for you."
+            step2 = "<span style='color: #fc5d08; font-weight: bold;'>2. Click the \"Sign In\", \"Submit\", or \"Continue\" button manually — the tool will NOT click this for you.</span>"
             if custom_tip:
                 step2 += f"<br><span style='color: #facc15;'>👉 {custom_tip}</span>"
 
             instructions = (
-                "1. Your <strong>ID and Password have been pre-filled</strong> automatically — do not modify them.<br>"
+                "1. Your <strong>ID and Password will be pre-filled</strong> automatically — do not modify them.<br>"
                 f"{step2}<br>"
                 "3. If a <strong>\"Remember Me\"</strong>, <strong>\"Remember this device\"</strong>, or <strong>\"Keep me signed in\"</strong> checkbox is available, select it to reduce future MFA prompts.<br>"
                 "4. If an <strong>MFA or one-time code</strong> is requested, complete that step manually.<br>"
@@ -202,16 +202,17 @@ def safe_call_plugin_method(method, *args, **kwargs):
         # Check if the method accepts arbitrary kwargs (VAR_KEYWORD)
         has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
         if has_var_keyword:
-            return method(*args, **kwargs)
-        
-        # Otherwise, filter kwargs to only include parameters that are explicitly defined
-        # in the method's signature.
-        accepted_params = set(sig.parameters.keys())
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in accepted_params}
-        return method(*args, **filtered_kwargs)
+            filtered_kwargs = kwargs
+        else:
+            # Otherwise, filter kwargs to only include parameters that are explicitly defined
+            # in the method's signature.
+            accepted_params = set(sig.parameters.keys())
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k in accepted_params}
     except Exception:
-        # Fallback to calling directly if inspect fails
-        return method(*args, **kwargs)
+        # Fallback to passing all kwargs if inspect fails
+        filtered_kwargs = kwargs
+
+    return method(*args, **filtered_kwargs)
 
 class ProviderPlugin(ABC):
     @property

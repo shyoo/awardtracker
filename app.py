@@ -1518,10 +1518,11 @@ if __name__ == '__main__':
         except Exception as e:
             app_log.error(f"Self-healing zero-balance cleanup failed: {e}")
 
-        # Run startup backup check in a daemon thread (non-blocking)
-        import threading as _threading
-        from scheduler import check_startup_backup
-        _threading.Thread(target=check_startup_backup, daemon=True).start()
-
-    scheduler.start()
+        # Run startup backup check and start scheduler in the worker process only
+        if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+            import threading as _threading
+            from scheduler import check_startup_backup
+            _threading.Thread(target=check_startup_backup, daemon=True).start()
+            scheduler.start()
+            app_log.info("Background scheduler and startup backup check started in Flask worker process.")
     app.run(debug=True, port=port, use_reloader=True)

@@ -73,6 +73,23 @@ class Account(db.Model):
             return custom
         return self.provider.name
 
+    @property
+    def interactive_login_required(self):
+        # EVA Air is known to always require interactive login on first/new sign-ins
+        if self.provider and self.provider.plugin_name == 'eva':
+            if self.last_fetch_status != 'SUCCESS':
+                return True
+
+        if self.last_fetch_status != 'FAILED' or not self.last_error:
+            return False
+        err = self.last_error.lower()
+        keywords = [
+            'security', 'interactive', 'mfa', 'captcha', 'verification', 
+            'password field not visible', 'closed', 'invalid session id', 
+            'disconnected', 'nosuchwindow', 'no such window'
+        ]
+        return any(x in err for x in keywords)
+
     provider = db.relationship('Provider', backref=db.backref('accounts', lazy=True))
     person = db.relationship('Person', backref=db.backref('accounts', lazy=True))
     history = db.relationship('AccountHistory', backref=db.backref('account', lazy=True), cascade='all, delete-orphan')

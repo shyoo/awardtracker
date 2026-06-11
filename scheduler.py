@@ -76,6 +76,11 @@ def sync_all_accounts():
                 
             set_setting(db, 'scheduled_sync_current_index', str(idx + 1))
             set_setting(db, 'scheduled_sync_current_account', account.display_name)
+            
+            if account.interactive_login_required:
+                app_log.info(f"Skipping account {idx+1}/{total_count}: {account.display_name} because it requires Interactive Login.")
+                continue
+
             app_log.info(f"Syncing account {idx+1}/{total_count}: {account.display_name}")
             
             provider = account.provider
