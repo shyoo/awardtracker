@@ -1459,6 +1459,26 @@ def create_app(config_class=Config):
                 db.session.rollback()
                 app_log.error(f"Migration failed: {migrate_err}")
 
+    # Self-healing: Reset stuck scheduled sync status to idle on startup
+    try:
+        with app.app_context():
+            from models import Settings
+            status_setting = Settings.query.filter_by(key='scheduled_sync_status').first()
+            if status_setting and status_setting.value in ('running', 'pending_consent'):
+                status_setting.value = 'idle'
+                
+                curr_acc_setting = Settings.query.filter_by(key='scheduled_sync_current_account').first()
+                if curr_acc_setting:
+                    curr_acc_setting.value = ''
+                else:
+                    curr_acc_setting = Settings(key='scheduled_sync_current_account', value='')
+                    db.session.add(curr_acc_setting)
+                
+                db.session.commit()
+                app_log.info("Startup self-healing: Reset stuck scheduled sync status to 'idle'.")
+    except Exception as e:
+        app_log.error(f"Startup self-healing sync status reset failed: {e}")
+
     return app
 
 if __name__ == '__main__':

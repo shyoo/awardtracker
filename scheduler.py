@@ -35,7 +35,7 @@ def set_setting(db, key, value):
 
 scheduler = BackgroundScheduler()
 
-def sync_all_accounts():
+def sync_all_accounts(is_scheduled=True):
     """
     This function will be called sequentially to sync all accounts.
     It runs outside the request context, so we need to setup an app context.
@@ -193,8 +193,13 @@ def sync_all_accounts():
             set_setting(db, 'scheduled_sync_last_run', datetime.utcnow().isoformat())
             set_setting(db, 'scheduled_sync_snooze_until', '')
             set_setting(db, 'scheduled_sync_current_account', 'Completed')
-            from notifier import send_desktop_notification
-            send_desktop_notification("Scheduled Sync Completed", "Automated background synchronization finished successfully!")
+            
+            # Send notification if this was a scheduled sync and scheduled sync is still enabled
+            enabled = get_setting('scheduled_sync_enabled', 'false')
+            frequency = get_setting('scheduled_sync_frequency', 'never')
+            if is_scheduled and enabled == 'true' and frequency != 'never':
+                from notifier import send_desktop_notification
+                send_desktop_notification("Scheduled Sync Completed", "Automated background synchronization finished successfully!")
         elif status == 'idle':
             # This was canceled
             set_setting(db, 'scheduled_sync_current_account', 'Canceled')
