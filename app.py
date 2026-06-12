@@ -1106,9 +1106,32 @@ def create_app(config_class=Config):
     @app.route('/api/sync-all/cancel', methods=['POST'])
     def sync_all_cancel():
         from scheduler import set_setting
+        from plugins.base import active_drivers, cancel_active_driver
         # Signal cancellation by setting status to idle
         set_setting(db, 'scheduled_sync_status', 'idle')
+        
+        # Kill all active drivers to unblock any stuck execution threads
+        for account_id in list(active_drivers.keys()):
+            try:
+                cancel_active_driver(account_id)
+            except Exception:
+                pass
+                
         return jsonify({'status': 'success'})
+
+    @app.route('/api/accounts/<int:account_id>/cancel', methods=['POST'])
+    def api_cancel_account_sync(account_id):
+        from flask import jsonify
+        from plugins.base import cancel_active_driver
+        
+        app_log.info(f"Received cancel request for account ID {account_id}")
+        success = cancel_active_driver(account_id)
+        if success:
+            app_log.info(f"Successfully cancelled active sync/login for account ID {account_id}")
+            return jsonify({'status': 'success', 'message': 'Cancellation request sent.'})
+        else:
+            app_log.warning(f"No active sync/login found to cancel for account ID {account_id}")
+            return jsonify({'status': 'error', 'message': 'No active driver found for this account.'})
 
     @app.route('/accounts/<int:account_id>/interactive', methods=['POST'])
     def interactive_login(account_id):
