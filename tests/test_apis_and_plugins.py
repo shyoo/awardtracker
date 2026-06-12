@@ -1269,5 +1269,42 @@ class TestAPIsAndPlugins(unittest.TestCase):
             except Exception:
                 pass
 
+    def test_active_driver_registration_and_cancellation(self):
+        from plugins.base import (
+            active_drivers,
+            register_active_driver,
+            unregister_active_driver
+        )
+        from unittest.mock import MagicMock
+        
+        account_id = 9999
+        mock_sb = MagicMock()
+        mock_driver = MagicMock()
+        mock_sb.driver = mock_driver
+        
+        # Test registration
+        register_active_driver(account_id, mock_sb)
+        self.assertIn(account_id, active_drivers)
+        self.assertEqual(active_drivers[account_id], mock_sb)
+        
+        # Test cancel endpoint when driver is active
+        res = self.client.post(f'/api/accounts/{account_id}/cancel')
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.data)
+        self.assertEqual(data['status'], 'success')
+        
+        # Verify driver.quit was called
+        mock_driver.quit.assert_called_once()
+        
+        # Unregister manually (since safe_call_plugin_method would do this in real run)
+        unregister_active_driver(account_id)
+        self.assertNotIn(account_id, active_drivers)
+        
+        # Test cancel endpoint when NO driver is active
+        res_error = self.client.post(f'/api/accounts/{account_id}/cancel')
+        self.assertEqual(res_error.status_code, 200)
+        data_error = json.loads(res_error.data)
+        self.assertEqual(data_error['status'], 'error')
+
 if __name__ == '__main__':
     unittest.main()

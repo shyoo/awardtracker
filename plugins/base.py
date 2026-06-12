@@ -3,7 +3,34 @@ from typing import Dict, Any, List
 from datetime import datetime
 import time
 import inspect
+import threading
 from seleniumbase import BaseCase
+
+active_drivers = {}
+active_drivers_lock = threading.Lock()
+
+def register_active_driver(account_id, sb):
+    with active_drivers_lock:
+        active_drivers[account_id] = sb
+
+def unregister_active_driver(account_id):
+    with active_drivers_lock:
+        if account_id in active_drivers:
+            del active_drivers[account_id]
+
+def cancel_active_driver(account_id) -> bool:
+    with active_drivers_lock:
+        sb = active_drivers.get(account_id)
+    if sb:
+        try:
+            if hasattr(sb, 'driver') and sb.driver:
+                sb.driver.quit()
+            elif hasattr(sb, 'quit'):
+                sb.quit()
+            return True
+        except Exception:
+            return True
+    return False
 
 def is_hidden_node(node) -> bool:
     """Helper to check if a BeautifulSoup text node is within an invisible/metadata element."""
@@ -186,6 +213,14 @@ def _apply_selenium_patches():
                         
                     debug_logger._log_context.in_patched_call = True
                     try:
+                        # Register driver to active registry
+                        try:
+                            account_id = getattr(debug_logger._log_context, 'account_id', None)
+                            if account_id:
+                                register_active_driver(account_id, self)
+                        except Exception:
+                            pass
+
                         # Log the call
                         try:
                             arg_str = ""
@@ -301,22 +336,26 @@ def safe_call_plugin_method(method, *args, **kwargs):
         filtered_kwargs = kwargs
 
     try:
-        res = method(*args, **filtered_kwargs)
         try:
-            import debug_logger
-            if isinstance(res, dict) and 'balance' in res:
-                debug_logger.update_balance_in_context(res['balance'])
-                debug_logger.log_action(f"Finished sync run successfully. Balance: {res['balance']}")
-        except Exception:
-            pass
-        return res
-    except Exception as e:
-        try:
-            import debug_logger
-            debug_logger.log_action(f"Sync run failed with exception: {e}", level="ERROR")
-        except Exception:
-            pass
-        raise e
+            res = method(*args, **filtered_kwargs)
+            try:
+                import debug_logger
+                if isinstance(res, dict) and 'balance' in res:
+                    debug_logger.update_balance_in_context(res['balance'])
+                    debug_logger.log_action(f"Finished sync run successfully. Balance: {res['balance']}")
+            except Exception:
+                pass
+            return res
+        except Exception as e:
+            try:
+                import debug_logger
+                debug_logger.log_action(f"Sync run failed with exception: {e}", level="ERROR")
+            except Exception:
+                pass
+            raise e
+    finally:
+        if account_id:
+            unregister_active_driver(account_id)
 
 def add_months(source_date, months):
     """
