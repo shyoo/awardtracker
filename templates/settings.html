@@ -13,7 +13,9 @@
   <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h2 class="text-base font-bold leading-7 text-slate-900">Application Information</h2>
+        <h2 class="text-base font-bold leading-7 text-slate-900 flex items-center gap-2 select-none">
+          <span>ℹ️</span> Application Information
+        </h2>
         <p class="mt-1 text-xs text-slate-400">Award Tracker is running locally as a premium desktop reward monitoring client.</p>
         
         <div class="mt-2.5 flex items-center gap-2.5 text-xs font-semibold select-none flex-wrap">
@@ -52,7 +54,9 @@
   <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
     <div class="sm:flex sm:items-center sm:justify-between">
       <div>
-        <h2 class="text-base font-bold leading-7 text-slate-900">Manage People Profiles</h2>
+        <h2 class="text-base font-bold leading-7 text-slate-900 flex items-center gap-2 select-none">
+          <span>👥</span> Manage People Profiles
+        </h2>
         <p class="mt-1 text-xs text-slate-400">Create, edit, and assign custom badge colors to family members or owners to organize reward accounts.</p>
       </div>
       <div class="mt-4 sm:mt-0">
@@ -67,31 +71,36 @@
   <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
     <form class="space-y-6" action="{{ url_for('settings') }}" method="POST">
       <div>
-        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3">Notification Alert Channels</h2>
-        <p class="mt-1 text-xs text-slate-400">Specify which alert channels are active globally for expiring accounts and sync failure alerts.</p>
-        
-        <div class="mt-6 space-y-4">
-          <!-- OS Native -->
-          <div class="relative flex items-start">
-            <div class="flex h-6 items-center">
-              <input id="native-notifications" name="native-notifications" type="checkbox" {% if settings.native_notifications == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
-            </div>
-            <div class="ml-3 text-sm leading-6">
-              <label for="native-notifications" class="font-bold text-slate-700">OS Native Toast Notifications</label>
-              <p class="text-xs text-slate-400">Trigger immediate OS push notifications locally on the desktop via powershell/notify-send.</p>
+        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2 select-none">
+          <span>🔔</span> Notification Alert Channels
+        </h2>
+        <div class="pl-6">
+          <p class="mt-1 text-xs text-slate-400">Specify which alert channels are active globally for expiring accounts and sync failure alerts.</p>
+          
+          <div class="mt-6 space-y-4">
+            <!-- OS Native -->
+            <div class="relative flex items-start">
+              <div class="flex h-6 items-center">
+                <input id="native-notifications" name="native-notifications" type="checkbox" {% if settings.native_notifications == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              </div>
+              <div class="ml-3 text-sm leading-6">
+                <label for="native-notifications" class="font-bold text-slate-700">OS Native Toast Notifications</label>
+                <p class="text-xs text-slate-400">Trigger immediate OS push notifications locally on the desktop via powershell/notify-send.</p>
+              </div>
             </div>
           </div>
-          
-
         </div>
       </div>
 
       <!-- Expiration Warning Thresholds -->
       <div class="pt-6 border-t border-slate-100">
-        <h2 class="text-base font-bold leading-7 text-slate-900 mb-2">Expiry Badge Policy</h2>
-        <p class="text-xs text-slate-400 mb-4">Set up alert ranges for your award points expiration. The Advisory warning threshold must be strictly longer than the Critical warning threshold.</p>
-        
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-xl">
+        <h2 class="text-base font-bold leading-7 text-slate-900 mb-2 flex items-center gap-2 select-none">
+          <span>📅</span> Expiry Badge Policy
+        </h2>
+        <div class="pl-6">
+          <p class="text-xs text-slate-400 mb-4">Set up alert ranges for your award points expiration. The Advisory warning threshold must be strictly longer than the Critical warning threshold.</p>
+          
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-xl">
           <!-- Critical Threshold -->
           <div>
             <label for="warning-threshold" class="block text-xs font-semibold text-slate-500 uppercase">Critical Warning Threshold</label>
@@ -112,8 +121,9 @@
             <p class="mt-1.5 text-[10px] text-slate-400">Triggers orange/amber Warning dashboard badges without active desktop notifications.</p>
           </div>
         </div>
-        <div id="threshold-error-msg" class="hidden mt-3 text-xs font-semibold text-rose-600 animate-pulse">
-          Advisory warning threshold must be greater than the critical warning threshold.
+          <div id="threshold-error-msg" class="hidden mt-3 text-xs font-semibold text-rose-600 animate-pulse">
+            Advisory warning threshold must be greater than the critical warning threshold.
+          </div>
         </div>
       </div>
 
@@ -145,38 +155,79 @@
               }
             });
           }
+
+          // Handle dynamic states for debug mode settings
+          const debugModeCheck = document.getElementById('debug-mode');
+          const privacyCheck = document.getElementById('debug-mask-privacy');
+          const includeSnapshotsCheck = document.getElementById('include_snapshots');
+          const snapshotWarnMsg = document.getElementById('snapshot-warn-msg');
+
+          if (debugModeCheck && privacyCheck) {
+            function updatePrivacyState() {
+              if (debugModeCheck.checked) {
+                privacyCheck.disabled = false;
+                privacyCheck.closest('.relative').style.opacity = '1';
+              } else {
+                privacyCheck.disabled = true;
+                privacyCheck.closest('.relative').style.opacity = '0.5';
+              }
+            }
+            debugModeCheck.addEventListener('change', updatePrivacyState);
+            updatePrivacyState();
+          }
+
+          if (debugModeCheck && includeSnapshotsCheck) {
+            function updateSnapshotsCheckboxState() {
+              if (debugModeCheck.checked) {
+                includeSnapshotsCheck.disabled = false;
+                includeSnapshotsCheck.closest('.relative').style.opacity = '1';
+                if (snapshotWarnMsg) snapshotWarnMsg.classList.add('hidden');
+              } else {
+                includeSnapshotsCheck.disabled = true;
+                includeSnapshotsCheck.checked = false;
+                includeSnapshotsCheck.closest('.relative').style.opacity = '0.5';
+                if (snapshotWarnMsg) snapshotWarnMsg.classList.remove('hidden');
+              }
+            }
+            debugModeCheck.addEventListener('change', updateSnapshotsCheckboxState);
+            updateSnapshotsCheckboxState();
+          }
         });
       </script>
 
       <!-- Scheduled Sync Configuration -->
       <div class="pt-6 border-t border-slate-100">
-        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4">Scheduled Sync Configuration</h2>
-        <p class="mt-1 text-xs text-slate-400 mb-6">Manage how and when the application runs background synchronization batches for all reward accounts.</p>
-        
-        <div class="space-y-4">
-          <!-- Enforce Consent Required -->
-          <div class="relative flex items-start">
-            <div class="flex h-6 items-center">
-              <input id="scheduled-sync-consent" name="scheduled-sync-consent" type="checkbox" {% if settings.scheduled_sync_consent_required == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
-            </div>
-            <div class="ml-3 text-sm leading-6">
-              <label for="scheduled-sync-consent" class="font-bold text-slate-700">Enforce Explicit User Consent</label>
-              <p class="text-xs text-slate-400">When enabled, prompt for consent on the dashboard before starting a scheduled sync batch. Shows a manual approval and snooze UI.</p>
-            </div>
-          </div>
+        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2 select-none">
+          <span>🔄</span> Scheduled Sync Configuration
+        </h2>
+        <div class="pl-6">
+          <p class="mt-1 text-xs text-slate-400 mb-6">Manage how and when the application runs background synchronization batches for all reward accounts.</p>
           
-          <!-- Sync Frequency Dropdown -->
-          <div class="max-w-xs pt-2">
-            <label for="scheduled-sync-frequency" class="block text-xs font-semibold text-slate-500 uppercase">Synchronization Frequency</label>
-            <div class="mt-2">
-              <select id="scheduled-sync-frequency" name="scheduled-sync-frequency" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 bg-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm">
-                <option value="never" {% if settings.scheduled_sync_frequency == 'never' %}selected{% endif %}>Never (Disabled)</option>
-                <option value="hourly" {% if settings.scheduled_sync_frequency == 'hourly' %}selected{% endif %}>Every Hour</option>
-                <option value="daily" {% if settings.scheduled_sync_frequency == 'daily' %}selected{% endif %}>Every Day</option>
-                <option value="every_3_days" {% if settings.scheduled_sync_frequency == 'every_3_days' %}selected{% endif %}>Every 3 Days</option>
-                <option value="weekly" {% if settings.scheduled_sync_frequency == 'weekly' %}selected{% endif %}>Every Week</option>
-                <option value="monthly" {% if settings.scheduled_sync_frequency == 'monthly' %}selected{% endif %}>Every Month</option>
-              </select>
+          <div class="space-y-4">
+            <!-- Enforce Consent Required -->
+            <div class="relative flex items-start">
+              <div class="flex h-6 items-center">
+                <input id="scheduled-sync-consent" name="scheduled-sync-consent" type="checkbox" {% if settings.scheduled_sync_consent_required == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              </div>
+              <div class="ml-3 text-sm leading-6">
+                <label for="scheduled-sync-consent" class="font-bold text-slate-700">Enforce Explicit User Consent</label>
+                <p class="text-xs text-slate-400">When enabled, prompt for consent on the dashboard before starting a scheduled sync batch. Shows a manual approval and snooze UI.</p>
+              </div>
+            </div>
+            
+            <!-- Sync Frequency Dropdown -->
+            <div class="max-w-xs pt-2">
+              <label for="scheduled-sync-frequency" class="block text-xs font-semibold text-slate-500 uppercase">Synchronization Frequency</label>
+              <div class="mt-2">
+                <select id="scheduled-sync-frequency" name="scheduled-sync-frequency" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 bg-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm">
+                  <option value="never" {% if settings.scheduled_sync_frequency == 'never' %}selected{% endif %}>Never (Disabled)</option>
+                  <option value="hourly" {% if settings.scheduled_sync_frequency == 'hourly' %}selected{% endif %}>Every Hour</option>
+                  <option value="daily" {% if settings.scheduled_sync_frequency == 'daily' %}selected{% endif %}>Every Day</option>
+                  <option value="every_3_days" {% if settings.scheduled_sync_frequency == 'every_3_days' %}selected{% endif %}>Every 3 Days</option>
+                  <option value="weekly" {% if settings.scheduled_sync_frequency == 'weekly' %}selected{% endif %}>Every Week</option>
+                  <option value="monthly" {% if settings.scheduled_sync_frequency == 'monthly' %}selected{% endif %}>Every Month</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -184,40 +235,44 @@
 
       <!-- System Integration Policies -->
       <div class="pt-6 border-t border-slate-100">
-        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4">System Integration</h2>
-        <p class="mt-1 text-xs text-slate-400 mb-6">Manage how the application integrates with your operating system and web browser environment.</p>
-        
-        <div class="space-y-4">
-          <!-- Auto-Open On Manual Launch -->
-          <div class="relative flex items-start">
-            <div class="flex h-6 items-center">
-              <input id="auto-open" name="auto-open" type="checkbox" {% if settings.auto_open_on_launch == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
-            </div>
-            <div class="ml-3 text-sm leading-6">
-              <label for="auto-open" class="font-bold text-slate-700">Auto-open dashboard on manual launch</label>
-              <p class="text-xs text-slate-400">Automatically open your default browser to the login or setup page when starting Award Tracker manually.</p>
-            </div>
-          </div>
+        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2 select-none">
+          <span>💻</span> System Integration
+        </h2>
+        <div class="pl-6">
+          <p class="mt-1 text-xs text-slate-400 mb-6">Manage how the application integrates with your operating system and web browser environment.</p>
           
-          <!-- Launch On Boot -->
-          <div class="relative flex items-start">
-            <div class="flex h-6 items-center">
-              <input id="launch-on-boot" name="launch-on-boot" type="checkbox" {% if settings.launch_on_boot == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+          <div class="space-y-4">
+            <!-- Auto-Open On Manual Launch -->
+            <div class="relative flex items-start">
+              <div class="flex h-6 items-center">
+                <input id="auto-open" name="auto-open" type="checkbox" {% if settings.auto_open_on_launch == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              </div>
+              <div class="ml-3 text-sm leading-6">
+                <label for="auto-open" class="font-bold text-slate-700">Auto-open dashboard on manual launch</label>
+                <p class="text-xs text-slate-400">Automatically open your default browser to the login or setup page when starting Award Tracker manually.</p>
+              </div>
             </div>
-            <div class="ml-3 text-sm leading-6">
-              <label for="launch-on-boot" class="font-bold text-slate-700">Launch Award Tracker automatically on computer boot</label>
-              <p class="text-xs text-slate-400">Run the application silently as a background tray service in the taskbar when Windows starts (does not automatically open dashboard browser in this case).</p>
+            
+            <!-- Launch On Boot -->
+            <div class="relative flex items-start">
+              <div class="flex h-6 items-center">
+                <input id="launch-on-boot" name="launch-on-boot" type="checkbox" {% if settings.launch_on_boot == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              </div>
+              <div class="ml-3 text-sm leading-6">
+                <label for="launch-on-boot" class="font-bold text-slate-700">Launch Award Tracker automatically on computer boot</label>
+                <p class="text-xs text-slate-400">Run the application silently as a background tray service in the taskbar when Windows starts (does not automatically open dashboard browser in this case).</p>
+              </div>
             </div>
-          </div>
-          
-          <!-- Check for Updates -->
-          <div class="relative flex items-start">
-            <div class="flex h-6 items-center">
-              <input id="check-for-updates" name="check-for-updates" type="checkbox" {% if settings.check_for_updates == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
-            </div>
-            <div class="ml-3 text-sm leading-6">
-              <label for="check-for-updates" class="font-bold text-slate-700">Check for updates automatically</label>
-              <p class="text-xs text-slate-400">Regularly query GitHub Releases to notify you when a new version of Award Tracker is available.</p>
+            
+            <!-- Check for Updates -->
+            <div class="relative flex items-start">
+              <div class="flex h-6 items-center">
+                <input id="check-for-updates" name="check-for-updates" type="checkbox" {% if settings.check_for_updates == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              </div>
+              <div class="ml-3 text-sm leading-6">
+                <label for="check-for-updates" class="font-bold text-slate-700">Check for updates automatically</label>
+                <p class="text-xs text-slate-400">Regularly query GitHub Releases to notify you when a new version of Award Tracker is available.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -225,10 +280,13 @@
       
       <!-- Data & Backup -->
       <div class="pt-6 border-t border-slate-100">
-        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4">Data & Backup</h2>
-        <p class="mt-1 text-xs text-slate-400 mb-6">Configure automatic daily backups of your Award Tracker database. Backups are created once per day and pruned after the selected retention window.</p>
+        <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2 select-none">
+          <span>💾</span> Data & Backup
+        </h2>
+        <div class="pl-6">
+          <p class="mt-1 text-xs text-slate-400 mb-6">Configure automatic daily backups of your Award Tracker database. Backups are created once per day and pruned after the selected retention window.</p>
 
-        <div class="max-w-xs">
+          <div class="max-w-xs">
           <label for="db-backup-frequency" class="block text-xs font-semibold text-slate-500 uppercase">Backup Retention Window</label>
           <div class="mt-2">
             <select id="db-backup-frequency" name="db-backup-frequency" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 bg-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm">
@@ -243,13 +301,17 @@
           </p>
         </div>
       </div>
+    </div>
 
       <!-- Point Valuations Configuration Card -->
       <div class="pt-6 border-t border-slate-100">
-        <h2 class="text-base font-bold leading-7 text-slate-900">Point Valuations & Custom CPP Overrides</h2>
-        <p class="mt-1 text-xs text-slate-400 mb-6">Override the cents-per-point (CPP) valuation rate used to calculate the equivalent USD value of your point balances.</p>
+        <h2 class="text-base font-bold leading-7 text-slate-900 flex items-center gap-2 select-none">
+          <span>🪙</span> Point Valuations & Custom CPP Overrides
+        </h2>
+        <div class="pl-6">
+          <p class="mt-1 text-xs text-slate-400 mb-6">Override the cents-per-point (CPP) valuation rate used to calculate the equivalent USD value of your point balances.</p>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
           
           <!-- Standard Valuations -->
           <div class="bg-slate-50/50 rounded-xl border border-slate-100 p-5">
@@ -265,8 +327,12 @@
               <div class="flex items-center justify-between gap-4 p-2 bg-white rounded-lg border border-slate-100 hover:border-slate-200 transition-colors shadow-sm">
                 <div class="flex items-center gap-2">
                   <div class="h-6 w-6 rounded bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 overflow-hidden shrink-0">
-                    <img src="/static/logos/{{ val.key }}.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" class="h-full w-full object-cover">
+                    {% if get_logo_url(val.key) %}
+                    <img src="{{ get_logo_url(val.key) }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" class="h-full w-full object-cover">
                     <span class="hidden select-none">{{ val.name[0] }}</span>
+                    {% else %}
+                    <span class="flex select-none">{{ val.name[0] }}</span>
+                    {% endif %}
                   </div>
                   <span class="text-xs font-semibold text-slate-700 leading-tight">{{ val.name }}</span>
                 </div>
@@ -335,6 +401,7 @@
 
         </div>
       </div>
+    </div>
 
       <script>
         function addCustomValuationRow() {
@@ -441,13 +508,148 @@
     </form>
   </div>
 
+  <!-- Scraper Diagnostics & Debugging Card -->
+  <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
+    <div class="border-b border-slate-100 pb-4 mb-6">
+      <h2 class="text-base font-bold leading-7 text-slate-900 flex items-center gap-2 select-none">
+        <span>⚙️</span> Diagnostics & Debugging
+      </h2>
+      <p class="mt-1 text-xs text-slate-400">Configure debug settings, mask sensitive data, and export diagnostic packages for troubleshooting.</p>
+    </div>
+
+    <!-- Scraper Debug Settings Form -->
+    <form action="{{ url_for('settings') }}" method="POST" class="space-y-6">
+      <input type="hidden" name="form_id" value="debug_settings">
+      <div>
+        <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-1.5 select-none">
+          <span>🔧</span> Debug Configuration
+        </h3>
+        <div class="pl-6">
+          <p class="text-xs text-slate-400 mb-4">Toggle debug mode to capture page interactions and customize details logged during synchronization.</p>
+          
+          <div class="space-y-4">
+            <!-- Enable Debug Mode -->
+            <div class="relative flex items-start">
+              <div class="flex h-6 items-center">
+                <input id="debug-mode" name="debug-mode" type="checkbox" {% if settings.debug_mode == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              </div>
+              <div class="ml-3 text-sm leading-6">
+                <label for="debug-mode" class="font-bold text-slate-700 flex items-center gap-2">
+                  Enable Diagnostic Debug Mode
+                  {% if settings.debug_mode == 'true' %}
+                  <span class="flex h-2 w-2 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  {% endif %}
+                </label>
+                <p class="text-xs text-slate-400">Log detailed browser actions, navigation URLs, and save page screenshots and HTML source code on errors or transitions.</p>
+              </div>
+            </div>
+            
+            <!-- Privacy Masking -->
+            <div class="relative flex items-start">
+              <div class="flex h-6 items-center">
+                <input id="debug-mask-privacy" name="debug-mask-privacy" type="checkbox" {% if settings.debug_mask_privacy == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              </div>
+              <div class="ml-3 text-sm leading-6">
+                <label for="debug-mask-privacy" class="font-bold text-slate-700">Mask Sensitive Information (Recommended)</label>
+                <p class="text-xs text-slate-400">Replace passwords, usernames, email addresses, and mileage values with "***" in plain-text logs and HTML source code.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end">
+        <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors">
+          Save Debug Settings
+        </button>
+      </div>
+    </form>
+
+    <!-- Horizontal Divider -->
+    <hr class="border-slate-100 my-8">
+
+    <!-- Diagnostic Report Export Section -->
+    <div>
+      <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-1.5 select-none">
+        <span>📦</span> Export Diagnostic Bug Report
+      </h3>
+      <div class="pl-6">
+        <p class="text-xs text-slate-400 mb-4">Create a ZIP archive containing log files and screenshots to upload to GitHub issues for easier debugging.</p>
+        
+        <form action="{{ url_for('export_logs_zip') }}" method="POST" class="space-y-4">
+          <div class="space-y-3">
+            <!-- Include Logs -->
+            <div class="relative flex items-start">
+              <div class="flex h-6 items-center">
+                <input id="include_logs" name="include_logs" type="checkbox" checked class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              </div>
+              <div class="ml-3 text-sm leading-6">
+                <label for="include_logs" class="font-bold text-slate-700">Include general logs (awardtracker_debug.log and run.log)</label>
+              </div>
+            </div>
+
+            <!-- Include Snapshots -->
+            <div class="relative flex items-start">
+              <div class="flex h-6 items-center">
+                <input id="include_snapshots" name="include_snapshots" type="checkbox" {% if settings.debug_mode != 'true' %}disabled{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              </div>
+              <div class="ml-3 text-sm leading-6">
+                <label for="include_snapshots" class="font-bold text-slate-700">Include HTML source code & page screenshots</label>
+                <p id="snapshot-warn-msg" class="text-[10px] text-slate-400 mt-0.5 {% if settings.debug_mode == 'true' %}hidden{% endif %}">Snapshots are only saved when Debug Mode is enabled.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Time filter selection -->
+          <div class="max-w-xs pt-3">
+            <label for="time_filter" class="block text-xs font-semibold text-slate-500 uppercase">Diagnostic Time Window</label>
+            <div class="mt-2">
+              <select id="time_filter" name="time_filter" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 bg-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm font-semibold">
+                <option value="last_sync" selected>Last attempted sync only</option>
+                <option value="10m">Last 10 minutes</option>
+                <option value="1h">Last 1 hour</option>
+                <option value="1d">Last 1 day (24 hours)</option>
+                <option value="all">All time (no filter)</option>
+              </select>
+            </div>
+            <p class="mt-1 text-[10px] text-slate-400">Filters logs and snapshots to the specified timeframe to prevent excessively large ZIP downloads.</p>
+          </div>
+
+          <div class="rounded-xl bg-slate-50 border border-slate-100 p-4 mt-4">
+            <h4 class="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1 select-none">
+              <span>⚠️</span> Important Notice:
+            </h4>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              While username/password and points are automatically masked inside text logs and HTML source code, binary screenshots cannot be modified.
+              Before uploading this ZIP file to GitHub, we highly recommend you open the ZIP and manually delete or edit any screenshots if you wish to protect your privacy.
+            </p>
+          </div>
+
+          <div class="pt-4 flex items-center justify-end">
+            <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-400 transition-colors">
+              <svg class="mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              Download Diagnostic Zip
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
 
 
   <!-- Scraper Debug Logs Card -->
   <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 mb-4">
       <div>
-        <h2 class="text-base font-bold leading-7 text-slate-900">Scraper Debug Logs</h2>
+        <h2 class="text-base font-bold leading-7 text-slate-900 flex items-center gap-2 select-none">
+          <span>📋</span> Debug Logs
+        </h2>
         <p class="mt-1 text-xs text-slate-400">Monitor background account crawls, API requests, and web driver automation diagnostics.</p>
       </div>
       <div>
@@ -468,7 +670,7 @@
            class="h-80 overflow-y-auto text-[11px] text-slate-300 font-mono whitespace-pre-wrap leading-relaxed scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
            style="scroll-behavior: smooth;">
         <div class="flex items-center justify-center h-full">
-          <span class="text-slate-500 animate-pulse font-semibold">Streaming scraper log file...</span>
+          <span class="text-slate-500 animate-pulse font-semibold">Streaming log file...</span>
         </div>
       </div>
     </div>

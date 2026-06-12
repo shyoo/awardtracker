@@ -21,7 +21,7 @@
           <div>
             <label for="name" class="block text-sm font-medium leading-6 text-slate-900">Name</label>
             <div class="mt-2">
-              <input type="text" name="name" id="name" required class="block w-full rounded-md border-0 py-1.5 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary sm:text-sm sm:leading-6">
+              <input type="text" name="name" id="name" required class="block w-full rounded-md border-0 py-1.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary sm:text-sm sm:leading-6">
             </div>
           </div>
           
@@ -51,7 +51,7 @@
           <li class="p-6">
             <div class="flex items-center justify-between gap-4">
               <form action="{{ url_for('edit_person', person_id=p.id) }}" method="POST" class="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-                <input type="text" name="name" value="{{ p.name }}" required class="block w-full max-w-xs rounded-md border-0 py-1.5 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary sm:text-sm sm:leading-6">
+                <input type="text" name="name" value="{{ p.name }}" required class="block w-full max-w-xs rounded-md border-0 py-1.5 px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-primary sm:text-sm sm:leading-6">
                 
                 <div class="flex items-center gap-2">
                   <input type="color" name="color" id="edit_color_{{ p.id }}" value="{{ p.color or '#6366f1' }}" class="h-8 w-8 rounded-md border-0 p-0 cursor-pointer shadow-sm">

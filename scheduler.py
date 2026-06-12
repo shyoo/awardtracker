@@ -9,7 +9,8 @@ from datetime import datetime
 from config import write_dir
 
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
-log_file = os.path.join(write_dir, 'scraper_debug.log')
+log_file = os.path.join(write_dir, 'logs', 'awardtracker_debug.log')
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
 log_handler = RotatingFileHandler(log_file, mode='a', maxBytes=5*1024*1024, backupCount=2, encoding='utf-8', delay=0)
 log_handler.setFormatter(log_formatter)
 log_handler.setLevel(logging.INFO)
@@ -93,7 +94,16 @@ def sync_all_accounts(is_scheduled=True):
             try:
                 password = security_manager.decrypt(account.password_encrypted)
                 profile_dir = os.path.join(write_dir, 'browser_profiles', str(account.id))
-                data = safe_call_plugin_method(plugin.fetch_data, account.username, password, profile_dir=profile_dir, **account.extra_metadata)
+                data = safe_call_plugin_method(
+                    plugin.fetch_data,
+                    account.username,
+                    password,
+                    profile_dir=profile_dir,
+                    _account_id=account.id,
+                    _provider_name=account.provider.name,
+                    _current_balance=account.balance,
+                    **account.extra_metadata
+                )
                 
                 # Update account
                 account.balance = data.get('balance', account.balance)
@@ -185,6 +195,12 @@ def sync_all_accounts(is_scheduled=True):
                 account.last_updated = datetime.utcnow()
                 db.session.commit()
                 app_log.error(f"Sync failed for {account.display_name}: {str(e)}")
+            finally:
+                try:
+                    import debug_logger
+                    debug_logger.clear_run_context()
+                except Exception:
+                    pass
         
         # Reset state on finish or cancel
         status = get_setting('scheduled_sync_status', 'idle')

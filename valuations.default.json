@@ -83,6 +83,14 @@
     "cpp": 1.25,
     "name": "Bilt Rewards"
   },
+  "ana": {
+    "cpp": 1.5,
+    "name": "ANA Mileage Club"
+  },
+  "eva": {
+    "cpp": 1.4,
+    "name": "EVA Air"
+  },
   "manual": {
     "cpp": 1.0,
     "name": "Custom Program Entry"

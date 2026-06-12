@@ -16,7 +16,7 @@ Cloud-based rewards aggregators request your loyalty account login credentials a
 Award Tracker runs entirely on your local machine:
 * **AES-256 Local Cryptography**: All passwords and account identifiers are encrypted locally inside a SQLite database using Fernet symmetric encryption.
 * **Master Password Unlock Key**: The encryption key is derived directly from a master password *only you* know. We store no cloud backups and have no password recovery option—meaning your data is completely secure and fully under your control.
-* **Local Selenium Scrapers**: Scraper tasks run directly on your own computer using standard local network addresses, mirroring normal browser navigation to avoid account lockouts.
+* **Local Selenium Engines**: Automation tasks run directly on your own computer using standard local network addresses, mirroring normal browser navigation to avoid account lockouts.
 
 ---
 
@@ -91,7 +91,7 @@ If you are a developer and want to clone and compile the application standalone 
 ### 1. Prerequisites
 * **Python 3.14+** (Ensure Python is added to your system `PATH`)
 * **Git**
-* **Google Chrome** (Required for SeleniumBase web scrapers)
+* **Google Chrome** (Required for SeleniumBase web automation)
 
 ### 2. Local Installation Steps
 1. Clone this repository:
@@ -203,7 +203,7 @@ Welcome to Award Tracker! Follow these steps to get started:
 1. Open the dashboard (via tray menu).
 2. Click **Manage People Profiles** to add family profiles (e.g. "John", "Sarah") and choose distinct colors for them.
 3. Click **Add Account**:
-   * **Automated Scrapers**: Select a provider (e.g. *United Airlines*), enter your username, password, select the profile owner, and click **Save**.
+   * **Automated Sync**: Select a provider (e.g. *United Airlines*), enter your username, password, select the profile owner, and click **Save**.
    * **Manually-Tracked Programs**: Select *Manual Tracking* as the provider, enter your *Custom Program Name* (e.g. *Best Buy points*), and save.
 4. Click the **Sync Now** button (🔄) on the card to run a background sync and pull your balances automatically!
 
@@ -218,5 +218,18 @@ After a successful interactive login, click **Sync Now** to refresh your balance
 
 ### 5. Database Backup
 Award Tracker automatically backs up your database daily. To configure the retention window, go to **Settings → Data & Backup** and choose between **Never**, **3**, **7** (default), or **30** days. Backup files are stored in:
-* **Windows**: `%APPDATA%\AwardTracker\backups\`
+* **Windows**: `%APPDATA%/AwardTracker/backups/`
 * **macOS**: `~/Library/Application Support/AwardTracker/backups/`
+
+### 6. Debug Mode & Diagnostic Bug Reports
+
+If you experience synchronization issues or sync tasks fail repeatedly due to structural updates on loyalty sites, you can activate **Debug Mode** to gather details for troubleshooting:
+* **Enable Debug Mode**: Navigate to **Settings → Diagnostics & Debugging** and check **Enable Diagnostic Debug Mode**. 
+* **Privacy Masking (Enabled by default)**: Toggling **Mask Sensitive Information** automatically intercepts and replaces your usernames, passwords, and points balances with `***` across all screenshots, rendered HTML source files, and text logs.
+* **Granular Logs & Snapshots**: When Debug Mode is active, Award Tracker creates run-specific folders under `%APPDATA%/AwardTracker/logs/{YYYY-MM-DD}/{timestamp}-{account_id}-{provider}/` containing:
+  - `run.log`: A granular step-by-step trace of SeleniumBase actions, including the current browser URL for each step.
+  - Sequential screenshots (`.png`) and HTML source dumps (`.html`) of the browser window.
+* **Exporting Bug Reports**: Scroll down to **Export Diagnostic Bug Report** in Settings. Select a time window (e.g. *Last attempted sync*, *Last 1 hour*, or *All time*) and export categories:
+  - **Include general debug logs**: Packages `awardtracker_debug.log` and all run-specific `run.log` files.
+  - **Include HTML source code & page screenshots**: Packages all page screenshots and markup dumps (only available if Debug Mode was enabled, unchecked by default to save bandwidth).
+  - Click **Download Diagnostic Zip** to download a compressed report that you can upload directly to GitHub issues for easier developer debugging.

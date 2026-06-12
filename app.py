@@ -58,6 +58,33 @@ def save_valuations(valuations):
     except Exception:
         return False
 
+DEFAULT_STANDARD_VALUATIONS = {
+    'marriott': {'name': 'Marriott Bonvoy', 'cpp': 0.8},
+    'hyatt': {'name': 'World of Hyatt', 'cpp': 2.3},
+    'hilton': {'name': 'Hilton Honors', 'cpp': 0.6},
+    'ihg': {'name': 'IHG One Rewards', 'cpp': 0.8},
+    'american': {'name': 'American Airlines AAdvantage', 'cpp': 1.5},
+    'united': {'name': 'United Airlines MileagePlus', 'cpp': 1.2},
+    'delta': {'name': 'Delta SkyMiles', 'cpp': 1.2},
+    'korean': {'name': 'Korean Air Skypass', 'cpp': 1.8},
+    'alaska': {'name': 'Alaska Airlines Mileage Plan', 'cpp': 1.4},
+    'southwest': {'name': 'Southwest Rapid Rewards', 'cpp': 1.3},
+    'virgin': {'name': 'Virgin Atlantic Flying Club', 'cpp': 1.2},
+    'aircanada': {'name': 'Air Canada Aeroplan', 'cpp': 1.4},
+    'avianca': {'name': 'Avianca LifeMiles', 'cpp': 1.2},
+    'asiana': {'name': 'Asiana Club', 'cpp': 1.4},
+    'jal': {'name': 'JAL Mileage Bank', 'cpp': 1.4},
+    'ana': {'name': 'ANA Mileage Club', 'cpp': 1.5},
+    'eva': {'name': 'EVA Air', 'cpp': 1.4},
+    'chase': {'name': 'Chase Ultimate Rewards', 'cpp': 2.05},
+    'amex': {'name': 'Amex Membership Rewards', 'cpp': 2.0},
+    'citi': {'name': 'Citi ThankYou Rewards', 'cpp': 1.9},
+    'capitalone': {'name': 'Capital One Miles', 'cpp': 1.85},
+    'wellsfargo': {'name': 'Wells Fargo Rewards', 'cpp': 0.9},
+    'bilt': {'name': 'Bilt Rewards', 'cpp': 1.25},
+    'manual': {'name': 'Custom Program Entry', 'cpp': 1.0}
+}
+
 
 def get_account_cpp_and_value(account, valuations):
     """
@@ -69,10 +96,12 @@ def get_account_cpp_and_value(account, valuations):
         val = valuations.get(prog_name.lower())
         if val is None:
             val = valuations.get('manual', {})
-        cpp = val.get('cpp', 1.0)
+        cpp = val.get('cpp', DEFAULT_STANDARD_VALUATIONS.get('manual', {}).get('cpp', 1.0))
     else:
-        val = valuations.get(account.provider.plugin_name, {})
-        cpp = val.get('cpp', 0.0)
+        plugin_name = account.provider.plugin_name
+        val = valuations.get(plugin_name, {})
+        default_val = DEFAULT_STANDARD_VALUATIONS.get(plugin_name, {})
+        cpp = val.get('cpp', default_val.get('cpp', 0.0))
 
     value_usd = (account.balance * cpp) / 100.0
     return cpp, value_usd
@@ -194,6 +223,14 @@ def create_app(config_class=Config):
     # Initialize Flask extensions here
     db.init_app(app)
     migrate.init_app(app, db)
+
+    @app.teardown_request
+    def teardown_request_log_context(exception=None):
+        try:
+            import debug_logger
+            debug_logger.clear_run_context()
+        except Exception:
+            pass
 
     @app.context_processor
     def inject_helpers():
@@ -787,7 +824,16 @@ def create_app(config_class=Config):
             
             password = security_manager.decrypt(account.password_encrypted)
             profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
-            data = safe_call_plugin_method(plugin.fetch_data, account.username, password, profile_dir=profile_dir, **account.extra_metadata)
+            data = safe_call_plugin_method(
+                plugin.fetch_data,
+                account.username,
+                password,
+                profile_dir=profile_dir,
+                _account_id=account.id,
+                _provider_name=account.provider.name,
+                _current_balance=account.balance,
+                **account.extra_metadata
+            )
             
             # Update account
             account.balance = data.get('balance', account.balance)
@@ -915,7 +961,16 @@ def create_app(config_class=Config):
 
             password = security_manager.decrypt(account.password_encrypted)
             profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
-            data = safe_call_plugin_method(plugin.fetch_data, account.username, password, profile_dir=profile_dir, **account.extra_metadata)
+            data = safe_call_plugin_method(
+                plugin.fetch_data,
+                account.username,
+                password,
+                profile_dir=profile_dir,
+                _account_id=account.id,
+                _provider_name=account.provider.name,
+                _current_balance=account.balance,
+                **account.extra_metadata
+            )
             
             account.balance = data.get('balance', account.balance)
             account.status = data.get('status', account.status)
@@ -1069,7 +1124,16 @@ def create_app(config_class=Config):
             app_log.info(f"Starting interactive login for account {account.display_name}...")
             password = security_manager.decrypt(account.password_encrypted)
             profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
-            safe_call_plugin_method(plugin.interactive_login, account.username, password, profile_dir=profile_dir, **account.extra_metadata)
+            safe_call_plugin_method(
+                plugin.interactive_login,
+                account.username,
+                password,
+                profile_dir=profile_dir,
+                _account_id=account.id,
+                _provider_name=account.provider.name,
+                _current_balance=account.balance,
+                **account.extra_metadata
+            )
             app_log.info(f"Interactive login completed for {account.display_name}.")
             account.last_fetch_status = "SUCCESS"
             account.last_error = "Interactive Login succeeded. Please click 'Sync Now' to synchronize your points."
@@ -1188,49 +1252,69 @@ def create_app(config_class=Config):
         STANDARD_VALUATION_KEYS = {
             'marriott', 'hyatt', 'hilton', 'ihg', 'american', 'united', 'delta',
             'korean', 'alaska', 'southwest', 'virgin', 'aircanada', 'avianca',
-            'asiana', 'jal', 'ana', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
+            'asiana', 'jal', 'ana', 'eva', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         }
 
         if request.method == 'POST':
-            native_notifications = 'true' if request.form.get('native-notifications') == 'on' else 'false'
-            email_notifications = 'true' if request.form.get('email-notifications') == 'on' else 'false'
-            telegram_notifications = 'true' if request.form.get('telegram-notifications') == 'on' else 'false'
-            warning_threshold = request.form.get('warning-threshold', '30')
-            advisory_threshold = request.form.get('advisory-threshold', '90')
-            
-            # Validate thresholds relationship
-            try:
-                wt_val = int(warning_threshold)
-                at_val = int(advisory_threshold)
-                if at_val <= wt_val:
-                    flash('Advisory warning threshold must be greater than the critical warning threshold.')
-                    return redirect(url_for('settings'))
-            except ValueError:
-                flash('Threshold values must be valid integers.')
+            form_id = request.form.get('form_id')
+            if form_id == 'debug_settings':
+                debug_mode = 'true' if request.form.get('debug-mode') == 'on' else 'false'
+                debug_mask_privacy = 'true' if request.form.get('debug-mask-privacy') == 'on' else 'false'
+                
+                settings_dict = {
+                    'debug_mode': debug_mode,
+                    'debug_mask_privacy': debug_mask_privacy
+                }
+                for key, val in settings_dict.items():
+                    setting = Settings.query.filter_by(key=key).first()
+                    if setting:
+                        setting.value = val
+                    else:
+                        setting = Settings(key=key, value=val)
+                        db.session.add(setting)
+                db.session.commit()
+                flash('Debug settings saved successfully.')
                 return redirect(url_for('settings'))
+            else:
+                native_notifications = 'true' if request.form.get('native-notifications') == 'on' else 'false'
+                email_notifications = 'true' if request.form.get('email-notifications') == 'on' else 'false'
+                telegram_notifications = 'true' if request.form.get('telegram-notifications') == 'on' else 'false'
+                warning_threshold = request.form.get('warning-threshold', '30')
+                advisory_threshold = request.form.get('advisory-threshold', '90')
+                
+                # Validate thresholds relationship
+                try:
+                    wt_val = int(warning_threshold)
+                    at_val = int(advisory_threshold)
+                    if at_val <= wt_val:
+                        flash('Advisory warning threshold must be greater than the critical warning threshold.')
+                        return redirect(url_for('settings'))
+                except ValueError:
+                    flash('Threshold values must be valid integers.')
+                    return redirect(url_for('settings'))
 
-            auto_open_on_launch = 'true' if request.form.get('auto-open') == 'on' else 'false'
-            launch_on_boot = 'true' if request.form.get('launch-on-boot') == 'on' else 'false'
-            check_for_updates = 'true' if request.form.get('check-for-updates') == 'on' else 'false'
-            scheduled_sync_consent_required = 'true' if request.form.get('scheduled-sync-consent') == 'on' else 'false'
-            scheduled_sync_frequency = request.form.get('scheduled-sync-frequency', 'never')
-            scheduled_sync_enabled = 'true' if scheduled_sync_frequency != 'never' else 'false'
-            db_backup_frequency = request.form.get('db-backup-frequency', '7')
+                auto_open_on_launch = 'true' if request.form.get('auto-open') == 'on' else 'false'
+                launch_on_boot = 'true' if request.form.get('launch-on-boot') == 'on' else 'false'
+                check_for_updates = 'true' if request.form.get('check-for-updates') == 'on' else 'false'
+                scheduled_sync_consent_required = 'true' if request.form.get('scheduled-sync-consent') == 'on' else 'false'
+                scheduled_sync_frequency = request.form.get('scheduled-sync-frequency', 'never')
+                scheduled_sync_enabled = 'true' if scheduled_sync_frequency != 'never' else 'false'
+                db_backup_frequency = request.form.get('db-backup-frequency', '7')
 
-            settings_dict = {
-                'native_notifications': native_notifications,
-                'email_notifications': email_notifications,
-                'telegram_notifications': telegram_notifications,
-                'warning_threshold': warning_threshold,
-                'advisory_threshold': advisory_threshold,
-                'auto_open_on_launch': auto_open_on_launch,
-                'launch_on_boot': launch_on_boot,
-                'check_for_updates': check_for_updates,
-                'scheduled_sync_enabled': scheduled_sync_enabled,
-                'scheduled_sync_consent_required': scheduled_sync_consent_required,
-                'scheduled_sync_frequency': scheduled_sync_frequency,
-                'db_backup_frequency': db_backup_frequency
-            }
+                settings_dict = {
+                    'native_notifications': native_notifications,
+                    'email_notifications': email_notifications,
+                    'telegram_notifications': telegram_notifications,
+                    'warning_threshold': warning_threshold,
+                    'advisory_threshold': advisory_threshold,
+                    'auto_open_on_launch': auto_open_on_launch,
+                    'launch_on_boot': launch_on_boot,
+                    'check_for_updates': check_for_updates,
+                    'scheduled_sync_enabled': scheduled_sync_enabled,
+                    'scheduled_sync_consent_required': scheduled_sync_consent_required,
+                    'scheduled_sync_frequency': scheduled_sync_frequency,
+                    'db_backup_frequency': db_backup_frequency
+                }
             
             for key, val in settings_dict.items():
                 setting = Settings.query.filter_by(key=key).first()
@@ -1307,6 +1391,8 @@ def create_app(config_class=Config):
         scheduled_sync_consent_required = Settings.query.filter_by(key='scheduled_sync_consent_required').first()
         scheduled_sync_frequency = Settings.query.filter_by(key='scheduled_sync_frequency').first()
         db_backup_frequency = Settings.query.filter_by(key='db_backup_frequency').first()
+        debug_mode = Settings.query.filter_by(key='debug_mode').first()
+        debug_mask_privacy = Settings.query.filter_by(key='debug_mask_privacy').first()
 
         settings_data = {
             'native_notifications': native_notifications.value if native_notifications else 'true',
@@ -1320,7 +1406,9 @@ def create_app(config_class=Config):
             'scheduled_sync_enabled': scheduled_sync_enabled.value if scheduled_sync_enabled else 'false',
             'scheduled_sync_consent_required': scheduled_sync_consent_required.value if scheduled_sync_consent_required else 'true',
             'scheduled_sync_frequency': scheduled_sync_frequency.value if scheduled_sync_frequency else 'daily',
-            'db_backup_frequency': db_backup_frequency.value if db_backup_frequency else '7'
+            'db_backup_frequency': db_backup_frequency.value if db_backup_frequency else '7',
+            'debug_mode': debug_mode.value if debug_mode else 'false',
+            'debug_mask_privacy': debug_mask_privacy.value if debug_mask_privacy else 'true'
         }
 
         # Load valuations & split into standard / custom
@@ -1341,18 +1429,21 @@ def create_app(config_class=Config):
         custom_valuations = []
         
         ordered_standard_keys = [
-            'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 'jal', 'ana',
+            'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 'jal', 'ana', 'eva',
             'virgin', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 
             'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         ]
         
         for key in ordered_standard_keys:
             val = valuations.get(key, {})
+            default_val = DEFAULT_STANDARD_VALUATIONS.get(key, {})
             standard_valuations.append({
                 'key': key,
-                'name': val.get('name', key.capitalize()),
-                'cpp': val.get('cpp', 0.0 if key != 'manual' else 1.0)
+                'name': val.get('name', default_val.get('name', key.capitalize())),
+                'cpp': val.get('cpp', default_val.get('cpp', 0.0))
             })
+            
+        standard_valuations.sort(key=lambda x: x['name'].lower())
             
         seen_custom_keys = set()
         for key, val in valuations.items():
@@ -1387,11 +1478,8 @@ def create_app(config_class=Config):
 
     @app.route('/settings/logs')
     def view_logs():
-        if getattr(sys, 'frozen', False):
-            write_dir = os.path.dirname(sys.executable)
-        else:
-            write_dir = os.path.dirname(os.path.abspath(__file__))
-        log_path = os.path.join(write_dir, 'scraper_debug.log')
+        from config import write_dir
+        log_path = os.path.join(write_dir, 'logs', 'awardtracker_debug.log')
         if not os.path.exists(log_path):
             return "No log file found yet."
             
@@ -1407,15 +1495,142 @@ def create_app(config_class=Config):
     @app.route('/settings/logs/download')
     def download_logs():
         from flask import send_file
-        if getattr(sys, 'frozen', False):
-            write_dir = os.path.dirname(sys.executable)
-        else:
-            write_dir = os.path.dirname(os.path.abspath(__file__))
-        log_path = os.path.join(write_dir, 'scraper_debug.log')
+        from config import write_dir
+        log_path = os.path.join(write_dir, 'logs', 'awardtracker_debug.log')
         if os.path.exists(log_path):
             return send_file(log_path, as_attachment=True)
         flash("Log file not found.")
         return redirect(url_for('settings'))
+
+    @app.route('/settings/logs/export-zip', methods=['POST'])
+    def export_logs_zip():
+        from flask import send_file
+        import zipfile
+        import io
+        import re
+        from datetime import datetime, timedelta
+        from config import write_dir
+        
+        include_logs = request.form.get('include_logs') == 'on'
+        include_snapshots = request.form.get('include_snapshots') == 'on'
+        time_filter = request.form.get('time_filter', 'last_sync')
+        
+        if not include_logs and not include_snapshots:
+            flash("Please select at least one log category to include in the ZIP archive.")
+            return redirect(url_for('settings'))
+            
+        now = datetime.now()
+        cutoff_dt = None
+        if time_filter == '10m':
+            cutoff_dt = now - timedelta(minutes=10)
+        elif time_filter == '1h':
+            cutoff_dt = now - timedelta(hours=1)
+        elif time_filter == '1d':
+            cutoff_dt = now - timedelta(days=1)
+            
+        logs_dir = os.path.join(write_dir, 'logs')
+        latest_run_path = None
+        latest_run_dt = None
+        
+        # Locate the latest run directory if needed for last_sync
+        if os.path.exists(logs_dir):
+            run_dirs = []
+            for root_path, sub_dirs, _ in os.walk(logs_dir):
+                for sd in sub_dirs:
+                    if re.match(r'^\d{8}_\d{6}-\d+-', sd):
+                        full_path = os.path.join(root_path, sd)
+                        timestamp_part = sd.split('-')[0]
+                        run_dirs.append((timestamp_part, full_path))
+            if run_dirs:
+                run_dirs.sort(key=lambda x: x[0], reverse=True)
+                latest_timestamp_str = run_dirs[0][0]
+                latest_run_path = run_dirs[0][1]
+                try:
+                    # Parse local timestamp: YYYYMMDD_HHMMSS
+                    latest_run_dt = datetime.strptime(latest_timestamp_str, '%Y%m%d_%H%M%S')
+                except Exception:
+                    pass
+                    
+        if time_filter == 'last_sync':
+            cutoff_dt = latest_run_dt
+
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Include awardtracker_debug.log
+            if include_logs:
+                log_path = os.path.join(logs_dir, 'awardtracker_debug.log')
+                if os.path.exists(log_path):
+                    if cutoff_dt:
+                        # Read and filter log lines by timestamp
+                        filtered_lines = []
+                        try:
+                            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                for line in f:
+                                    match = re.match(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', line)
+                                    if match:
+                                        try:
+                                            line_time = datetime.strptime(match.group(1), '%Y-%m-%d %H:%M:%S')
+                                            if line_time >= cutoff_dt:
+                                                filtered_lines.append(line)
+                                        except Exception:
+                                            if filtered_lines:
+                                                filtered_lines.append(line)
+                                    else:
+                                        if filtered_lines:
+                                            filtered_lines.append(line)
+                            zip_file.writestr('awardtracker_debug.log', "".join(filtered_lines))
+                        except Exception:
+                            # Fallback to writing full log on exception
+                            zip_file.write(log_path, arcname='awardtracker_debug.log')
+                    else:
+                        zip_file.write(log_path, arcname='awardtracker_debug.log')
+                    
+            # Include HTML files, screenshots, and run.log files under logs_dir
+            if os.path.exists(logs_dir):
+                if time_filter == 'last_sync':
+                    if latest_run_path:
+                        for root, dirs, files in os.walk(latest_run_path):
+                            for file in files:
+                                is_run_log = (file == 'run.log')
+                                is_snapshot = (file.endswith('.html') or file.endswith('.png'))
+                                
+                                if (is_run_log and include_logs) or (is_snapshot and include_snapshots):
+                                    file_path = os.path.join(root, file)
+                                    rel_path = os.path.relpath(file_path, logs_dir)
+                                    zip_file.write(file_path, arcname=os.path.join('snapshots', rel_path))
+                else:
+                    cutoff_timestamp = cutoff_dt.timestamp() if cutoff_dt else None
+                    for root, dirs, files in os.walk(logs_dir):
+                        if root == logs_dir:
+                            continue
+                        for file in files:
+                            is_run_log = (file == 'run.log')
+                            is_snapshot = (file.endswith('.html') or file.endswith('.png'))
+                            
+                            if (is_run_log and include_logs) or (is_snapshot and include_snapshots):
+                                file_path = os.path.join(root, file)
+                                if cutoff_timestamp:
+                                    try:
+                                        mtime = os.path.getmtime(file_path)
+                                        if mtime < cutoff_timestamp:
+                                            continue
+                                    except Exception:
+                                        continue
+                                rel_path = os.path.relpath(file_path, logs_dir)
+                                zip_file.write(file_path, arcname=os.path.join('snapshots', rel_path))
+                            
+        memory_file.seek(0)
+        
+        # Dynamic timestamp for filename
+        now_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"awardtracker_diagnostic_{now_str}.zip"
+        
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=filename
+        )
 
     # Make sure tables exist first
     try:
