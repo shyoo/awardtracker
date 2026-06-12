@@ -51,7 +51,7 @@ To keep the commit history clean on the main branch, squash all changes in the c
 
 ### Step C: Generate Release Notes (Only if Version Bumped)
 > [!IMPORTANT]
-> This step is ONLY executed if the user answered **yes** to the version bump in Step A. If the user answered **no**, completely skip this step. Do not modify or create any release notes under `internal_docs`, and do not include or commit any files under `internal_docs` (as they are ignored by `.gitignore`).
+> This step is ONLY executed if the user answered **yes** to the version bump in Step A. If the user answered **no**, completely skip this step. Do not modify or create any release notes under `internal_docs`, and do not include or commit any files under `internal_docs` (as they are ignored by `.gitignore` and must remain strictly local/untracked).
 
 1. Create a markdown release note file under the [internal_docs](internal_docs) directory.
 2. Name the file exactly `release_notes_v<VERSION>.md` (e.g., `release_notes_v1.2.10.md`).
@@ -72,14 +72,7 @@ To keep the commit history clean on the main branch, squash all changes in the c
    ## 📁 Commits in this Release
    * `<COMMIT_HASH>` `<COMMIT_TITLE>`
    ```
-4. Stage the release notes:
-   ```bash
-   git add internal_docs/release_notes_v<VERSION>.md
-   ```
-5. Amend the commit to bundle the release notes into the single squashed commit:
-   ```bash
-   git commit --amend --no-edit
-   ```
+4. **DO NOT** stage or commit the release notes. They must remain strictly local and untracked.
 
 ### Step D: Run Release Script Asynchronously
 Execute the compilation build script as a background asynchronous process:
@@ -270,6 +263,6 @@ def wait_for_chrome_exit(self, profile_dir: str) -> None:
 - [ ] User requests push -> Ask about version bump
 - [ ] Update [version.txt](version.txt) and commit if yes
 - [ ] Find merge-base with `main` and squash branch
-- [ ] Create `release_notes_v<VERSION>.md` under [internal_docs](internal_docs) and amend it if version was bumped (otherwise skip)
+- [ ] Create `release_notes_v<VERSION>.md` under [internal_docs](internal_docs) locally (but do NOT stage or commit it) if version was bumped (otherwise skip)
 - [ ] Run release script asynchronously based on OS
 - [ ] Force push to remote

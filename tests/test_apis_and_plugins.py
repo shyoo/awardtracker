@@ -46,6 +46,12 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # Clear SecurityManager session key
         security_manager.fernet = None
         
+        try:
+            import debug_logger
+            debug_logger.clear_run_context()
+        except Exception:
+            pass
+            
         db.session.remove()
         db.drop_all()
         self.app_context.pop()
@@ -126,6 +132,36 @@ class TestAPIsAndPlugins(unittest.TestCase):
         enabled = Settings.query.filter_by(key='scheduled_sync_enabled').first()
         self.assertEqual(enabled.value, 'false')
 
+    def test_debug_settings_post(self):
+        # Post request to modify debug settings only
+        post_data = {
+            'form_id': 'debug_settings',
+            'debug-mode': 'on',
+            'debug-mask-privacy': 'on'
+        }
+        res_post = self.client.post('/settings', data=post_data, follow_redirects=True)
+        self.assertEqual(res_post.status_code, 200)
+
+        # Query Settings model directly to verify values are correctly committed
+        debug_mode = Settings.query.filter_by(key='debug_mode').first()
+        self.assertEqual(debug_mode.value, 'true')
+
+        debug_mask_privacy = Settings.query.filter_by(key='debug_mask_privacy').first()
+        self.assertEqual(debug_mask_privacy.value, 'true')
+
+        # Disable debug settings
+        post_data_off = {
+            'form_id': 'debug_settings'
+        }
+        res_post_off = self.client.post('/settings', data=post_data_off, follow_redirects=True)
+        self.assertEqual(res_post_off.status_code, 200)
+
+        debug_mode_off = Settings.query.filter_by(key='debug_mode').first()
+        self.assertEqual(debug_mode_off.value, 'false')
+
+        debug_mask_privacy_off = Settings.query.filter_by(key='debug_mask_privacy').first()
+        self.assertEqual(debug_mask_privacy_off.value, 'false')
+
     def test_add_manual_account_endpoint(self):
         # Post request to add a manually tracked account with a custom program name
         post_data = {
@@ -160,10 +196,10 @@ class TestAPIsAndPlugins(unittest.TestCase):
     # 3. Scraper Plugin Infrastructure Tests
     # ==========================================
     def test_plugin_registration(self):
-        # Verify that all 16 core scrapers are registered in the manager
+        # Verify that all 17 core scrapers are registered in the manager
         core_plugins = [
             'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 
-            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'aircanada', 'jal', 'ana'
+            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'aircanada', 'jal', 'ana', 'eva'
         ]
         
         for pid in core_plugins:
@@ -175,6 +211,32 @@ class TestAPIsAndPlugins(unittest.TestCase):
             self.assertTrue(hasattr(plugin, 'plugin_id'))
             self.assertTrue(hasattr(plugin, 'fetch_data'))
             self.assertTrue(hasattr(plugin, 'interactive_login'))
+
+    def test_plugin_default_valuations_exist(self):
+        # Ensure all registered plugins have default valuations in DEFAULT_STANDARD_VALUATIONS and valuations.default.json
+        from app import DEFAULT_STANDARD_VALUATIONS
+        
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        default_val_path = os.path.join(project_root, 'valuations.default.json')
+        with open(default_val_path, 'r') as f:
+            default_json = json.load(f)
+            
+        all_plugins = plugin_manager.get_all_plugins()
+        for plugin in all_plugins:
+            pid = plugin.plugin_id
+            
+            # Check that it exists in DEFAULT_STANDARD_VALUATIONS in app.py
+            self.assertIn(
+                pid, 
+                DEFAULT_STANDARD_VALUATIONS, 
+                f"Scraper plugin '{pid}' is registered but missing from DEFAULT_STANDARD_VALUATIONS in app.py. Please add it."
+            )
+            # Check that it exists in valuations.default.json
+            self.assertIn(
+                pid, 
+                default_json, 
+                f"Scraper plugin '{pid}' is registered but missing from valuations.default.json. Please add it."
+            )
 
     def test_virgin_plugin_kwargs(self):
         import inspect
@@ -776,6 +838,20 @@ class TestAPIsAndPlugins(unittest.TestCase):
         res2 = safe_call_plugin_method(dummy_func_with_kwargs, "user2", "pass2", region="UK", extra="value", extra_key="value2")
         self.assertEqual(res2, "user2-pass2-UK-value")
 
+        # Test function returning dict (triggering balance update checking)
+        def dummy_func_returning_dict(username, password):
+            return {"balance": 9999, "status": "Platinum"}
+
+        res3 = safe_call_plugin_method(
+            dummy_func_returning_dict,
+            "user3",
+            "pass3",
+            _account_id=987,
+            _provider_name="Delta",
+            _current_balance=1000
+        )
+        self.assertEqual(res3["balance"], 9999)
+
     def test_eva_plugin_registration(self):
         plugin = plugin_manager.get_plugin('eva')
         self.assertIsNotNone(plugin, "Scraper plugin 'eva' was not registered.")
@@ -975,6 +1051,223 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # Since it hasn't succeeded yet (last_fetch_status is None), it should require interactive login
         self.assertTrue(account.interactive_login_required)
 
+    def test_selenium_patch_nested_calls_guard(self):
+        from seleniumbase import BaseCase
+        import debug_logger
+        from unittest.mock import patch, MagicMock
+
+        # Create a mock/dummy BaseCase instance
+        class DummyBaseCase(BaseCase):
+            def __init__(self):
+                # Mock attributes that SeleniumBase methods access, to avoid errors
+                self.driver = MagicMock()
+                self.timeout = 10
+                self.headless = True
+
+        sb = DummyBaseCase()
+
+        with patch('debug_logger.is_debug_mode', return_value=True), \
+             patch('debug_logger.save_snapshot') as mock_save_snapshot, \
+             patch('debug_logger.log_action') as mock_log_action:
+             
+            # Ensure the context has required attributes
+            debug_logger._log_context.account_id = 1
+            debug_logger._log_context.provider_name = "TestProvider"
+            debug_logger._log_context.run_dir = "dummy_dir"
+            debug_logger._log_context.step_counter = 0
+            debug_logger._log_context.in_logger = False
+            debug_logger._log_context.in_patched_call = False
+            debug_logger._log_context.sensitive_data = {}
+
+            try:
+                # Scenario 1: in_patched_call is True
+                debug_logger._log_context.in_patched_call = True
+                # Call a patched method (e.g. click). Since it's nested (in_patched_call is True),
+                # it should run the original method directly and NOT log anything or call save_snapshot.
+                try:
+                    sb.click("selector")
+                except Exception:
+                    pass
+                
+                self.assertEqual(mock_log_action.call_count, 0)
+                self.assertEqual(mock_save_snapshot.call_count, 0)
+
+                # Scenario 2: in_patched_call is False (outermost call)
+                debug_logger._log_context.in_patched_call = False
+                mock_log_action.reset_mock()
+                mock_save_snapshot.reset_mock()
+                
+                try:
+                    sb.click("selector")
+                except Exception:
+                    pass
+                
+                # Should have logged the call and attempt to snapshot
+                self.assertGreater(mock_log_action.call_count, 0)
+                self.assertGreater(mock_save_snapshot.call_count, 0)
+                
+            finally:
+                debug_logger.clear_run_context()
+
+    def test_sensitive_masking_filter_app_log(self):
+        import logging
+        import debug_logger
+        
+        app_log = logging.getLogger('awardtracker')
+        
+        from logging import Handler
+        class TestLogHandler(Handler):
+            def __init__(self):
+                super().__init__()
+                self.records = []
+            def emit(self, record):
+                self.records.append(self.format(record))
+                
+        test_handler = TestLogHandler()
+        test_formatter = logging.Formatter('%(message)s')
+        test_handler.setFormatter(test_formatter)
+        app_log.addHandler(test_handler)
+        
+        try:
+            # Initialize context with sensitive info
+            debug_logger.init_run_context(
+                account_id=123,
+                provider_name="TestProvider",
+                username="shyoo_test",
+                password="secret_password123",
+                current_balance=88888
+            )
+            
+            # Scenario 1: Privacy masking enabled
+            with unittest.mock.patch('debug_logger.is_privacy_masked', return_value=True):
+                app_log.info("User is shyoo_test with password secret_password123 and balance 88888")
+                self.assertEqual(len(test_handler.records), 1)
+                self.assertNotIn("shyoo_test", test_handler.records[0])
+                self.assertNotIn("secret_password123", test_handler.records[0])
+                self.assertNotIn("88888", test_handler.records[0])
+                self.assertIn("***", test_handler.records[0])
+                
+            # Clear records
+            test_handler.records.clear()
+            
+            # Scenario 2: Privacy masking disabled
+            with unittest.mock.patch('debug_logger.is_privacy_masked', return_value=False):
+                app_log.info("User is shyoo_test with password secret_password123 and balance 88888")
+                self.assertEqual(len(test_handler.records), 1)
+                self.assertIn("shyoo_test", test_handler.records[0])
+                self.assertIn("secret_password123", test_handler.records[0])
+                self.assertIn("88888", test_handler.records[0])
+                
+        finally:
+            app_log.removeHandler(test_handler)
+            debug_logger.clear_run_context()
+
+    def test_save_snapshot_logs_url(self):
+        import debug_logger
+        from unittest.mock import patch, MagicMock
+        
+        mock_sb = MagicMock()
+        mock_sb.get_current_url.return_value = "https://www.example.com/login"
+        
+        with patch('debug_logger.is_debug_mode', return_value=True), \
+             patch('debug_logger.log_action') as mock_log_action, \
+             patch('debug_logger.os.makedirs'), \
+             patch('builtins.open', unittest.mock.mock_open()):
+             
+            debug_logger._log_context.account_id = 1
+            debug_logger._log_context.provider_name = "TestProvider"
+            debug_logger._log_context.run_dir = "dummy_dir"
+            debug_logger._log_context.step_counter = 0
+            debug_logger._log_context.in_logger = False
+            
+            try:
+                debug_logger.save_snapshot(mock_sb, "test_action")
+                
+                # Should have fetched the current URL
+                mock_sb.get_current_url.assert_called_once()
+                # Should have logged the URL
+                mock_log_action.assert_any_call("Current browser URL: https://www.example.com/login")
+                # Should have saved screenshot
+                mock_sb.save_screenshot.assert_called_once_with("001_test_action.png", folder="dummy_dir")
+            finally:
+                debug_logger.clear_run_context()
+
+    def test_export_logs_zip_filtering(self):
+        import zipfile
+        import io
+        import os
+        from unittest.mock import patch
+        
+        # Setup dummy log files in a temporary structures using write_dir
+        from config import write_dir
+        temp_logs_dir = os.path.join(write_dir, 'logs')
+        os.makedirs(temp_logs_dir, exist_ok=True)
+        
+        # Create dummy awardtracker_debug.log
+        main_log_path = os.path.join(temp_logs_dir, 'awardtracker_debug.log')
+        with open(main_log_path, 'w', encoding='utf-8') as f:
+            f.write("2026-06-12 00:00:00 INFO Line 1\n")
+            f.write("2026-06-12 00:05:00 INFO Line 2\n")
+            
+        # Create a dummy run directory
+        dummy_run_dir = os.path.join(temp_logs_dir, '20260612_000500-1-Delta')
+        os.makedirs(dummy_run_dir, exist_ok=True)
+        
+        with open(os.path.join(dummy_run_dir, 'run.log'), 'w', encoding='utf-8') as f:
+            f.write("2026-06-12 00:05:00 INFO run log entry\n")
+            
+        with open(os.path.join(dummy_run_dir, '001_click.png'), 'w', encoding='utf-8') as f:
+            f.write("dummy png")
+            
+        with open(os.path.join(dummy_run_dir, '001_click.html'), 'w', encoding='utf-8') as f:
+            f.write("dummy html")
+            
+        try:
+            # Scenario 1: Only logs requested
+            res1 = self.client.post('/settings/logs/export-zip', data={
+                'include_logs': 'on',
+                'time_filter': 'all'
+            })
+            self.assertEqual(res1.status_code, 200)
+            
+            # Read ZIP from response
+            zip_data = io.BytesIO(res1.data)
+            with zipfile.ZipFile(zip_data, 'r') as zf:
+                file_list = zf.namelist()
+                # Must contain awardtracker_debug.log and run.log
+                self.assertIn('awardtracker_debug.log', file_list)
+                self.assertTrue(any(f.endswith('run.log') for f in file_list))
+                # Must NOT contain png or html
+                self.assertFalse(any(f.endswith('.png') for f in file_list))
+                self.assertFalse(any(f.endswith('.html') for f in file_list))
+                
+            # Scenario 2: Only snapshots requested
+            res2 = self.client.post('/settings/logs/export-zip', data={
+                'include_snapshots': 'on',
+                'time_filter': 'all'
+            })
+            self.assertEqual(res2.status_code, 200)
+            
+            zip_data = io.BytesIO(res2.data)
+            with zipfile.ZipFile(zip_data, 'r') as zf:
+                file_list = zf.namelist()
+                # Must NOT contain awardtracker_debug.log or run.log
+                self.assertNotIn('awardtracker_debug.log', file_list)
+                self.assertFalse(any(f.endswith('run.log') for f in file_list))
+                # Must contain png and html
+                self.assertTrue(any(f.endswith('.png') for f in file_list))
+                self.assertTrue(any(f.endswith('.html') for f in file_list))
+                
+        finally:
+            # Clean up dummy files
+            try:
+                os.remove(main_log_path)
+                os.remove(os.path.join(dummy_run_dir, 'run.log'))
+                os.remove(os.path.join(dummy_run_dir, '001_click.png'))
+                os.remove(os.path.join(dummy_run_dir, '001_click.html'))
+                os.rmdir(dummy_run_dir)
+            except Exception:
+                pass
+
 if __name__ == '__main__':
     unittest.main()
-

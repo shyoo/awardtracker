@@ -143,25 +143,20 @@ class AsianaAirlinesPlugin(ProviderPlugin):
         Returns the specified segment with the matched country and language, or C/US/EN/ as fallback.
         """
         curr_url = sb.get_current_url().lower()
-        print(f"DEBUG Asiana: _get_localized_prefix parsing URL: {curr_url}")
         match = re.search(r'flyasiana\.com/([a-z]+)/([a-z]{2})/([a-z]{2})/', curr_url)
         if match:
             res = f"{segment.upper()}/{match.group(2).upper()}/{match.group(3).upper()}/"
-            print(f"DEBUG Asiana: Found prefix match: {res}")
             return res
         res = f"{segment.upper()}/US/EN/"
-        print(f"DEBUG Asiana: No prefix match, using fallback: {res}")
         return res
 
     def _dismiss_landing_banners(self, sb) -> None:
         """Dismisses any splash ads, welcome coupons, slide announcements, or cookie notices on the landing page."""
-        print("DEBUG Asiana: Checking for landing page banners/popups...")
         
         # 1. New Member Welcome Coupon tooltip-banner
         for sel in ["a.join_event_btn_x", ".new_subscription a.join_event_btn_x"]:
             try:
                 if sb.is_element_visible(sel):
-                    print(f"DEBUG Asiana: Welcome coupon banner visible. Clicking close button: {sel}")
                     sb.click(sel)
                     sb.sleep(1)
                     break
@@ -172,7 +167,6 @@ class AsianaAirlinesPlugin(ProviderPlugin):
         for sel in ["a.noti_check", "#cookieNotice a.noti_check"]:
             try:
                 if sb.is_element_visible(sel):
-                    print(f"DEBUG Asiana: Cookie consent notice visible. Clicking OK button: {sel}")
                     sb.click(sel)
                     sb.sleep(1)
                     break
@@ -183,7 +177,6 @@ class AsianaAirlinesPlugin(ProviderPlugin):
         for sel in ["a.noti_close", ".notice_box_control a.noti_close"]:
             try:
                 if sb.is_element_visible(sel):
-                    print(f"DEBUG Asiana: Top slide notice visible. Clicking Close button: {sel}")
                     sb.click(sel)
                     sb.sleep(1)
                     break
@@ -194,7 +187,6 @@ class AsianaAirlinesPlugin(ProviderPlugin):
         for sel in ["#todayClose a", "#todayClose button", ".todayClose a", ".todayClose button"]:
             try:
                 if sb.is_element_visible(sel):
-                    print(f"DEBUG Asiana: General todayClose visible. Clicking button: {sel}")
                     sb.click(sel)
                     sb.sleep(1)
                     break
@@ -206,7 +198,6 @@ class AsianaAirlinesPlugin(ProviderPlugin):
         for skip_sel in ["button#btnAfterChange", "#btnAfterChange", "button:contains('Change later')", "button:contains('다음에 변경')"]:
             try:
                 if sb.is_element_visible(skip_sel):
-                    print(f"DEBUG Asiana: Password change reminder detected. Clicking skip button: {skip_sel}")
                     sb.click(skip_sel)
                     sb.sleep(sleep_sec)
                     return True
@@ -247,14 +238,12 @@ class AsianaAirlinesPlugin(ProviderPlugin):
                     sb.sleep(0.5)
                     break
         except Exception as e:
-            print(f"DEBUG Asiana: Prefill failed: {e}")
-
+            pass
     def _fetch_expiration(self, sb, result: Dict[str, Any]) -> None:
         """Navigates to the expiration details page, retrieves the HTML, and parses the earliest expiration date."""
         try:
             exp_prefix = self._get_localized_prefix(sb, "I")
             exp_url = f"https://flyasiana.com/{exp_prefix}GetMileageDetail.do"
-            print(f"DEBUG Asiana: Navigating to expiration page: {exp_url}")
             sb.open(exp_url)
             sb.sleep(6)
             
@@ -307,7 +296,6 @@ class AsianaAirlinesPlugin(ProviderPlugin):
             if dates:
                 earliest = min(dates)
                 result["expiration_date"] = earliest.strftime("%Y-%m-%dT00:00:00Z")
-                print(f"DEBUG Asiana: Found expiration date {result['expiration_date']}")
 
         except Exception as e:
             app_log.warning(f"Asiana: Failed to fetch expiration details (non-fatal): {e}\n{traceback.format_exc()}")
@@ -338,22 +326,16 @@ class AsianaAirlinesPlugin(ProviderPlugin):
                 return False
 
             # Wait for navigation away from login page
-            print(f"DEBUG Asiana: Auto-login form submitted. Waiting for page transition away from login...")
             for i in range(15):
                 sb.sleep(2)
                 current_url = sb.get_current_url().lower()
-                print(f"DEBUG Asiana: Wait loop {i}, current URL: {current_url}")
                 
                 self._bypass_password_change_reminder(sb, sleep_sec=3.0)
                 
                 if "login" not in current_url and "signin" not in current_url and "viewlogin.do" not in current_url:
-                    print(f"DEBUG Asiana: Navigated away from login. Final URL is: {current_url}")
                     return True
-
-            print(f"DEBUG Asiana: Timeout waiting for login transition. Current URL: {sb.get_current_url()}")
             return False
         except Exception as e:
-            print(f"DEBUG Asiana: Exception in _try_auto_login: {e}")
             return False
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
@@ -362,7 +344,6 @@ class AsianaAirlinesPlugin(ProviderPlugin):
         try:
             with SB(uc=True, user_data_dir=profile_dir) as sb:
                 # 1. Open home page to initialize session context and language cookies
-                print("DEBUG Asiana: Opening home page to initialize session context...")
                 sb.open("https://flyasiana.com/")
                 sb.sleep(6)
                 
@@ -370,7 +351,6 @@ class AsianaAirlinesPlugin(ProviderPlugin):
                 self._dismiss_landing_banners(sb)
 
                 current_url = sb.get_current_url().lower()
-                print(f"DEBUG Asiana: Landed on home page: {current_url}")
 
                 # If not already logged in, click "Log in" link
                 if "my-asiana" not in current_url:
@@ -378,36 +358,30 @@ class AsianaAirlinesPlugin(ProviderPlugin):
                     for selector in ["a:contains('Log in')", "a:contains('Log In')", "a:contains('로그인')", "button:contains('Log in')"]:
                         try:
                             if sb.is_element_visible(selector):
-                                print(f"DEBUG Asiana: Clicking login link selector: {selector}")
                                 sb.click(selector)
                                 sb.sleep(6)
                                 login_clicked = True
                                 break
                         except Exception as e:
-                            print(f"DEBUG Asiana: Failed clicking {selector}: {e}")
-                    
+                            pass                    
                     if not login_clicked:
                         # Direct navigation fallback if click failed
                         prefix = self._get_localized_prefix(sb, "I")
                         target = f"https://flyasiana.com/{prefix}viewLogin.do?callType=IBE&menuId=CM201802220000728453"
-                        print(f"DEBUG Asiana: Fallback direct open of localized login URL: {target}")
                         sb.open(target)
                         sb.sleep(6)
 
                 current_url = sb.get_current_url().lower()
-                print(f"DEBUG Asiana: Current URL before login form fill: {current_url}")
 
                 # 2. If on login form, fill credentials
                 if "login" in current_url or "viewlogin.do" in current_url:
                     logged_in = self._try_auto_login(sb, username, password)
                     if not logged_in:
-                        print("DEBUG Asiana: Auto-login returned False")
                         raise InteractionRequiredError("auto_login_failed")
 
                 # 3. Direct to dashboard overview page using dynamic regional prefix (segment I)
                 prefix = self._get_localized_prefix(sb, "I")
                 target_dashboard = f"https://flyasiana.com/{prefix}MyasianaDashboard.do?menuId=CM201803060000729176"
-                print(f"DEBUG Asiana: Opening dashboard: {target_dashboard}")
                 sb.open(target_dashboard)
                 sb.sleep(6)
 
@@ -415,45 +389,35 @@ class AsianaAirlinesPlugin(ProviderPlugin):
                 self._bypass_password_change_reminder(sb, sleep_sec=4.0)
 
                 current_url = sb.get_current_url().lower()
-                print(f"DEBUG Asiana: URL after my-asiana navigation: {current_url}")
                 if "login" in current_url or "viewlogin.do" in current_url:
-                    print("DEBUG Asiana: Login form still active after dashboard navigate, re-logging in...")
                     logged_in = self._try_auto_login(sb, username, password)
                     if logged_in:
                         prefix = self._get_localized_prefix(sb, "I")
                         target_dashboard = f"https://flyasiana.com/{prefix}MyasianaDashboard.do?menuId=CM201803060000729176"
-                        print(f"DEBUG Asiana: Opening dashboard again: {target_dashboard}")
                         sb.open(target_dashboard)
                         sb.sleep(6)
                     else:
-                        print("DEBUG Asiana: Re-login returned False")
                         raise InteractionRequiredError("auto_login_failed")
 
                 # Wait for page data to load (up to 30s)
-                print("DEBUG Asiana: Waiting for mileage page elements to load...")
                 for i in range(15):
                     src = sb.get_page_source()
                     if any(kw in src.lower() for kw in ["available miles", "잔여 마일리지", "마일리지"]):
-                        print(f"DEBUG Asiana: Found target elements at loop {i}")
                         break
                     sb.sleep(2)
 
                 current_url = sb.get_current_url().lower()
-                print(f"DEBUG Asiana: Final URL before parsing: {current_url}")
                 if "error" in current_url:
-                    print("DEBUG Asiana: Error page detected at final stage!")
-
+                    pass
                 html = sb.get_page_source()
                 result = self._parse_mileage_html(html)
                 if not result:
-                    print("DEBUG Asiana: Mileage parsing failed. Writing first 1500 chars of page source:")
                     try:
                         print(html[:1500])
                     except Exception:
                         pass
 
                 if result:
-                    print(f"DEBUG Asiana: Success! Parsed result: {result}")
                     
                     # Try fetching expiration details
                     self._fetch_expiration(sb, result)

@@ -149,28 +149,96 @@ def inject_control_modal(sb):
         pass
 
 def _apply_selenium_patches():
-    # Wrap standard navigation/state methods of BaseCase to auto-inject the modal
+    # Wrap standard navigation/state/interaction methods of BaseCase
     methods_to_patch = [
         "open",
         "uc_open_with_reconnect",
         "open_if_not_on_page",
         "sleep",
         "wait_for_element_visible",
-        "click"
+        "click",
+        "type",
+        "update_text",
+        "execute_script",
+        "js_click"
     ]
     
+    import os
     for method_name in methods_to_patch:
         original = getattr(BaseCase, method_name, None)
         if original and not hasattr(original, "_is_awardtracker_patched"):
-            def make_wrapper(orig_method):
+            def make_wrapper(m_name, orig_method):
                 def wrapper(self, *args, **kwargs):
-                    res = orig_method(self, *args, **kwargs)
-                    inject_control_modal(self)
-                    return res
+                    try:
+                        import debug_logger
+                    except ImportError:
+                        return orig_method(self, *args, **kwargs)
+                        
+                    # Re-entry guard to prevent recursion if screenshot/html methods trigger wrappers
+                    in_logger = getattr(debug_logger._log_context, 'in_logger', False)
+                    if in_logger:
+                        return orig_method(self, *args, **kwargs)
+                        
+                    # Re-entry guard to prevent duplicate logging and snapshots from nested calls
+                    in_patched_call = getattr(debug_logger._log_context, 'in_patched_call', False)
+                    if in_patched_call:
+                        return orig_method(self, *args, **kwargs)
+                        
+                    debug_logger._log_context.in_patched_call = True
+                    try:
+                        # Log the call
+                        try:
+                            arg_str = ""
+                            if args:
+                                if m_name in ("type", "update_text", "send_keys") and len(args) >= 2:
+                                    masked_args = list(args)
+                                    masked_args[1] = debug_logger.mask_sensitive(str(args[1]))
+                                    arg_str = ", ".join(repr(a) for a in masked_args)
+                                else:
+                                    arg_str = ", ".join(repr(a) for a in args)
+                            if kwargs:
+                                kw_str = ", ".join(f"{k}={repr(v)}" for k, v in kwargs.items())
+                                arg_str = f"{arg_str}, {kw_str}" if arg_str else kw_str
+                            debug_logger.log_action(f"Calling sb.{m_name}({arg_str})")
+                        except Exception:
+                            pass
+                            
+                        try:
+                            res = orig_method(self, *args, **kwargs)
+                            
+                            # Post-execution modal inject
+                            try:
+                                inject_control_modal(self)
+                            except Exception:
+                                pass
+                                
+                            # Save screenshot & HTML source if debug mode is active
+                            if debug_logger.is_debug_mode() and m_name in (
+                                "open", "uc_open_with_reconnect", "open_if_not_on_page", 
+                                "click", "type", "update_text", "execute_script", "js_click"
+                            ):
+                                try:
+                                    debug_logger.save_snapshot(self, m_name)
+                                except Exception:
+                                    pass
+                                    
+                            return res
+                        except Exception as e:
+                            # Log error & save failure snapshot
+                            try:
+                                debug_logger.log_action(f"Exception raised in sb.{m_name}: {e}", level="ERROR")
+                                if debug_logger.is_debug_mode():
+                                    debug_logger.save_snapshot(self, f"error_{m_name}")
+                            except Exception:
+                                pass
+                            raise e
+                    finally:
+                        debug_logger._log_context.in_patched_call = False
+                        
                 wrapper._is_awardtracker_patched = True
                 return wrapper
-            
-            setattr(BaseCase, method_name, make_wrapper(original))
+                
+            setattr(BaseCase, method_name, make_wrapper(method_name, original))
 
 def _apply_sb_context_patch():
     import sys
@@ -201,6 +269,22 @@ def safe_call_plugin_method(method, *args, **kwargs):
     passing the keyword arguments that the method signature actually accepts,
     unless the method signature has a **kwargs parameter.
     """
+    # Extract run metadata
+    account_id = kwargs.pop('_account_id', None)
+    provider_name = kwargs.pop('_provider_name', None)
+    current_balance = kwargs.pop('_current_balance', None)
+    
+    # Initialize debug log context if metadata is provided
+    try:
+        import debug_logger
+        if account_id and provider_name:
+            username = args[0] if len(args) > 0 else ""
+            password = args[1] if len(args) > 1 else ""
+            debug_logger.init_run_context(account_id, provider_name, username, password, current_balance)
+            debug_logger.log_action(f"Started sync run for account ID {account_id} ({provider_name})")
+    except Exception:
+        pass
+        
     try:
         sig = inspect.signature(method)
         # Check if the method accepts arbitrary kwargs (VAR_KEYWORD)
@@ -216,7 +300,23 @@ def safe_call_plugin_method(method, *args, **kwargs):
         # Fallback to passing all kwargs if inspect fails
         filtered_kwargs = kwargs
 
-    return method(*args, **filtered_kwargs)
+    try:
+        res = method(*args, **filtered_kwargs)
+        try:
+            import debug_logger
+            if isinstance(res, dict) and 'balance' in res:
+                debug_logger.update_balance_in_context(res['balance'])
+                debug_logger.log_action(f"Finished sync run successfully. Balance: {res['balance']}")
+        except Exception:
+            pass
+        return res
+    except Exception as e:
+        try:
+            import debug_logger
+            debug_logger.log_action(f"Sync run failed with exception: {e}", level="ERROR")
+        except Exception:
+            pass
+        raise e
 
 def add_months(source_date, months):
     """

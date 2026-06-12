@@ -206,6 +206,7 @@ begin
       DelTree(ExpandConstant('{userappdata}\AwardTracker\downloaded_files'), True, True, True);
       DeleteFile(ExpandConstant('{userappdata}\AwardTracker\awardtracker.db'));
       DeleteFile(ExpandConstant('{userappdata}\AwardTracker\scraper_debug.log'));
+      DelTree(ExpandConstant('{userappdata}\AwardTracker\logs'), True, True, True);
       DeleteFile(ExpandConstant('{userappdata}\AwardTracker\settings.json'));
       DeleteFile(ExpandConstant('{userappdata}\AwardTracker\valuations.json'));
     end;

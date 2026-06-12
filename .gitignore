@@ -26,3 +26,4 @@ awardtracker.iconset/
 # Local configuration overrides
 settings.json
 valuations.json
+logs/
