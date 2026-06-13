@@ -83,6 +83,9 @@ Provides a tracking chart that shows points history over the times.
 * **Marriott Bonvoy**
 * **World of Hyatt**
 
+### 🚗 Car Rentals
+* **Hertz Gold+ Rewards**
+
 ---
 
 ## 🛠️ Developer Compilation Guide (macOS & Windows)

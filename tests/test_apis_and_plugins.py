@@ -198,7 +198,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
     def test_plugin_registration(self):
         # Verify that all 17 core scrapers are registered in the manager
         core_plugins = [
-            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'caesars', 
+            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'caesars', 'hertz', 
             'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'british', 'aircanada', 'jal', 'ana', 'eva'
         ]
         
@@ -499,6 +499,65 @@ class TestAPIsAndPlugins(unittest.TestCase):
         """
         _, status_standard, _ = plugin._extract_data(html_standard)
         self.assertEqual(status_standard, "Member")
+
+    def test_hertz_extraction(self):
+        plugin = plugin_manager.get_plugin('hertz')
+        self.assertIsNotNone(plugin)
+
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        # Test using the actual downloaded Hertz html file
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        hertz_file_path = os.path.join(project_root, 'downloaded_files', 'Overall Status _ Hertz.htm')
+        
+        if os.path.exists(hertz_file_path):
+            with open(hertz_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                html_content = f.read()
+            
+            mock_sb = MockSB(html_content)
+            balance, status, last_activity = plugin._extract_data(mock_sb)
+            self.assertEqual(balance, 0)
+            self.assertEqual(status, "Gold")
+            self.assertIsNotNone(last_activity)
+
+        # Test using a basic mock HTML fallback
+        html_fallback = """
+        <html>
+            <body>
+                <div class="p-15-25">
+                    <span class="loginFormInnerHeaderSpan">Hertz Gold+ Five Star</span>
+                    <span class="loginFormInnerHeaderSpan">1,500 pts</span>
+                </div>
+            </body>
+        </html>
+        """
+        mock_sb_fallback = MockSB(html_fallback)
+        balance, status, last_activity = plugin._extract_data(mock_sb_fallback)
+        self.assertEqual(balance, 1500)
+        self.assertEqual(status, "Five Star")
+        self.assertIsNotNone(last_activity)
+
+        # Test using a translated/Korean mock HTML (user translation case)
+        html_korean = """
+        <html>
+            <body>
+                <div class="p-15-25">
+                    <span class="loginFormInnerHeaderSpan">하츠 골드+</span>
+                    <span class="loginFormInnerHeaderSpan">0 포인트</span>
+                    <span class="loginFormInnerHeaderSpan">회원번호 #: 61669148 나의 회원정보</span>
+                </div>
+            </body>
+        </html>
+        """
+        mock_sb_korean = MockSB(html_korean)
+        balance, status, last_activity = plugin._extract_data(mock_sb_korean)
+        self.assertEqual(balance, 0)
+        self.assertEqual(status, "Gold")
+        self.assertIsNotNone(last_activity)
 
     def test_alaska_is_auth_url(self):
         plugin = plugin_manager.get_plugin('alaska')
