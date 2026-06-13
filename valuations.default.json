@@ -43,6 +43,10 @@
     "cpp": 1.2,
     "name": "Virgin Atlantic Flying Club"
   },
+  "british": {
+    "cpp": 1.5,
+    "name": "British Airways Executive Club"
+  },
   "aircanada": {
     "cpp": 1.4,
     "name": "Air Canada Aeroplan"

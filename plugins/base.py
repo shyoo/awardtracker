@@ -47,6 +47,12 @@ def inject_control_modal(sb):
             return
             
         current_url = sb.get_current_url().lower()
+        if "britishairways" in current_url or "ba.com" in current_url:
+            return
+        # Also skip for British Airways plugin regardless of URL (e.g. about:blank during interactive login)
+        for frame in inspect.stack():
+            if frame.filename and "british" in frame.filename.lower():
+                return
         
         # Determine if this is an interactive login or a standard sync
         interactive = False
@@ -95,6 +101,9 @@ def inject_control_modal(sb):
         elif "evaair.com" in current_url or "flyeva" in current_url:
             provider_name = "EVA Air"
             custom_tip = "Complete the CAPTCHA image manually, then enter your email verification code if prompted."
+        elif "britishairways.com" in current_url or "ba.com" in current_url:
+            provider_name = "British Airways"
+            custom_tip = "Complete the CAPTCHA manually if prompted, then click Continue."
 
         title = f"{provider_name} Assistant"
         

@@ -70,6 +70,7 @@ DEFAULT_STANDARD_VALUATIONS = {
     'alaska': {'name': 'Alaska Airlines Mileage Plan', 'cpp': 1.4},
     'southwest': {'name': 'Southwest Rapid Rewards', 'cpp': 1.3},
     'virgin': {'name': 'Virgin Atlantic Flying Club', 'cpp': 1.2},
+    'british': {'name': 'British Airways Executive Club', 'cpp': 1.5},
     'aircanada': {'name': 'Air Canada Aeroplan', 'cpp': 1.4},
     'avianca': {'name': 'Avianca LifeMiles', 'cpp': 1.2},
     'asiana': {'name': 'Asiana Club', 'cpp': 1.4},
@@ -250,6 +251,7 @@ def create_app(config_class=Config):
                 'american': 'aa.com',
                 'avianca': 'avianca.com',
                 'virgin': 'virginatlantic.com',
+                'british': 'britishairways.com',
                 'asiana': 'flyasiana.com',
                 'aircanada': 'aircanada.com',
                 'jal': 'jal.co.jp',
@@ -1274,7 +1276,7 @@ def create_app(config_class=Config):
     def settings():
         STANDARD_VALUATION_KEYS = {
             'marriott', 'hyatt', 'hilton', 'ihg', 'american', 'united', 'delta',
-            'korean', 'alaska', 'southwest', 'virgin', 'aircanada', 'avianca',
+            'korean', 'alaska', 'southwest', 'virgin', 'british', 'aircanada', 'avianca',
             'asiana', 'jal', 'ana', 'eva', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         }
 
@@ -1453,7 +1455,7 @@ def create_app(config_class=Config):
         
         ordered_standard_keys = [
             'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 'jal', 'ana', 'eva',
-            'virgin', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 
+            'virgin', 'british', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 
             'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         ]
         
@@ -1501,7 +1503,7 @@ def create_app(config_class=Config):
 
     @app.route('/settings/logs')
     def view_logs():
-        from config import write_dir
+        write_dir = app.config.get('ROOT_DIR')
         log_path = os.path.join(write_dir, 'logs', 'awardtracker_debug.log')
         if not os.path.exists(log_path):
             return "No log file found yet."
@@ -1518,7 +1520,7 @@ def create_app(config_class=Config):
     @app.route('/settings/logs/download')
     def download_logs():
         from flask import send_file
-        from config import write_dir
+        write_dir = app.config.get('ROOT_DIR')
         log_path = os.path.join(write_dir, 'logs', 'awardtracker_debug.log')
         if os.path.exists(log_path):
             return send_file(log_path, as_attachment=True)
@@ -1532,7 +1534,7 @@ def create_app(config_class=Config):
         import io
         import re
         from datetime import datetime, timedelta
-        from config import write_dir
+        write_dir = app.config.get('ROOT_DIR')
         
         include_logs = request.form.get('include_logs') == 'on'
         include_snapshots = request.form.get('include_snapshots') == 'on'

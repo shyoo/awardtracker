@@ -199,7 +199,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # Verify that all 17 core scrapers are registered in the manager
         core_plugins = [
             'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 
-            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'aircanada', 'jal', 'ana', 'eva'
+            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'british', 'aircanada', 'jal', 'ana', 'eva'
         ]
         
         for pid in core_plugins:
@@ -260,6 +260,101 @@ class TestAPIsAndPlugins(unittest.TestCase):
             inspect.Parameter.VAR_KEYWORD,
             "kwargs in interactive_login must be VAR_KEYWORD"
         )
+
+    def test_british_plugin_kwargs(self):
+        import inspect
+        plugin = plugin_manager.get_plugin('british')
+        self.assertIsNotNone(plugin)
+        
+        # Verify fetch_data signature accepts **kwargs
+        fetch_sig = inspect.signature(plugin.fetch_data)
+        self.assertIn('kwargs', fetch_sig.parameters, "british.fetch_data must accept **kwargs")
+        self.assertEqual(
+            fetch_sig.parameters['kwargs'].kind, 
+            inspect.Parameter.VAR_KEYWORD,
+            "kwargs in fetch_data must be VAR_KEYWORD"
+        )
+        
+        # Verify interactive_login signature accepts **kwargs
+        login_sig = inspect.signature(plugin.interactive_login)
+        self.assertIn('kwargs', login_sig.parameters, "british.interactive_login must accept **kwargs")
+        self.assertEqual(
+            login_sig.parameters['kwargs'].kind, 
+            inspect.Parameter.VAR_KEYWORD,
+            "kwargs in interactive_login must be VAR_KEYWORD"
+        )
+
+    def test_british_calculate_expiration(self):
+        plugin = plugin_manager.get_plugin('british')
+        self.assertIsNotNone(plugin)
+        
+        now = datetime.utcnow()
+        # Non-zero balance should calculate 36 months from now
+        exp = plugin.calculate_expiration(1000, "Blue", now)
+        self.assertIsNotNone(exp)
+        diff_months = (exp.year - now.year) * 12 + (exp.month - now.month)
+        self.assertEqual(diff_months, 36)
+        
+        # Zero balance should return None
+        exp_zero = plugin.calculate_expiration(0, "Blue", now)
+        self.assertIsNone(exp_zero)
+
+    def test_british_clear_ba_cookies(self):
+        import tempfile
+        import shutil
+        import os
+        
+        plugin = plugin_manager.get_plugin('british')
+        self.assertIsNotNone(plugin)
+        
+        # Create a temporary directory structure to mock a Chrome profile
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create subdirectories
+            default_dir = os.path.join(temp_dir, "Default")
+            network_dir = os.path.join(default_dir, "Network")
+            sessions_dir = os.path.join(default_dir, "Sessions")
+            session_storage_dir = os.path.join(default_dir, "Session Storage")
+            local_storage_dir = os.path.join(default_dir, "Local Storage")
+            
+            os.makedirs(network_dir, exist_ok=True)
+            os.makedirs(sessions_dir, exist_ok=True)
+            os.makedirs(session_storage_dir, exist_ok=True)
+            os.makedirs(local_storage_dir, exist_ok=True)
+            
+            # Create mockup files
+            files_to_create = [
+                os.path.join(temp_dir, "british_cookies.json"),
+                os.path.join(default_dir, "Cookies"),
+                os.path.join(default_dir, "Cookies-journal"),
+                os.path.join(network_dir, "Cookies"),
+                os.path.join(network_dir, "Cookies-journal"),
+                os.path.join(default_dir, "Current Session"),
+                os.path.join(default_dir, "Current Tabs"),
+                os.path.join(default_dir, "Last Session"),
+                os.path.join(default_dir, "Last Tabs"),
+                os.path.join(sessions_dir, "some_session_data"),
+                os.path.join(session_storage_dir, "some_storage_data"),
+                os.path.join(local_storage_dir, "some_local_data"),
+            ]
+            
+            for path in files_to_create:
+                with open(path, "w") as f:
+                    f.write("dummy data")
+                    
+            # Confirm files exist before calling clear
+            for path in files_to_create:
+                self.assertTrue(os.path.exists(path))
+                
+            # Call clear function
+            plugin._clear_ba_cookies(temp_dir)
+            
+            # Assert all files and directories have been deleted
+            for path in files_to_create:
+                self.assertFalse(os.path.exists(path), f"File should have been deleted: {path}")
+                
+            self.assertFalse(os.path.exists(sessions_dir), f"Directory should have been deleted: {sessions_dir}")
+            self.assertFalse(os.path.exists(session_storage_dir), f"Directory should have been deleted: {session_storage_dir}")
+            self.assertFalse(os.path.exists(local_storage_dir), f"Directory should have been deleted: {local_storage_dir}")
 
     def test_united_extraction_inflation_prevention(self):
         plugin = plugin_manager.get_plugin('united')
@@ -1031,6 +1126,30 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertIn(b"Sync failed.", res.data)
         self.assertIn(b"Please try syncing again. If it repeatedly fails or is blocked by an undetected MFA/CAPTCHA challenge", res.data)
 
+    def test_account_detail_renders_mfa_requirement_message(self):
+        # Create an account that requires interactive login
+        account = Account(
+            provider_id=self.provider_auto.id,
+            person_id=self.person.id,
+            username="mfa_detail_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            is_manual=False,
+            balance=5000,
+            status="Gold",
+            last_fetch_status="FAILED",
+            last_error="MFA required"
+        )
+        db.session.add(account)
+        db.session.commit()
+        
+        # Request the account details page
+        res = self.client.get(f'/accounts/{account.id}')
+        self.assertEqual(res.status_code, 200)
+        
+        # Verify the MFA warning banner is rendered
+        self.assertIn(b"MFA / Additional security screening required", res.data)
+        self.assertIn(b"Please click the orange <strong class=\"text-amber-800\">Interactive Login</strong> button", res.data)
+
     def test_eva_air_requires_interactive_login_on_new_account(self):
         # Create a new provider for EVA Air
         provider_eva = Provider(name="EVA Air", plugin_name="eva", enabled=True)
@@ -1199,7 +1318,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         from unittest.mock import patch
         
         # Setup dummy log files in a temporary structures using write_dir
-        from config import write_dir
+        write_dir = self.app.config.get('ROOT_DIR')
         temp_logs_dir = os.path.join(write_dir, 'logs')
         os.makedirs(temp_logs_dir, exist_ok=True)
         
