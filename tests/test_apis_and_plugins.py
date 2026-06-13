@@ -1650,5 +1650,112 @@ class TestAPIsAndPlugins(unittest.TestCase):
         data_error = json.loads(res_error.data)
         self.assertEqual(data_error['status'], 'error')
 
+    def test_marriott_korean_date_formats(self):
+        plugin = plugin_manager.get_plugin('marriott')
+        self.assertIsNotNone(plugin)
+        
+        # Test case 1: Standard YYYY-MM-DD
+        html_dash = "<div>Last activity date: 2026-05-20</div>"
+        exp_dash = plugin._extract_expiration_date(html_dash)
+        self.assertIsNotNone(exp_dash)
+        self.assertEqual(exp_dash.year, 2028)
+        self.assertEqual(exp_dash.month, 5)
+        self.assertEqual(exp_dash.day, 20)
+        
+        # Test case 2: Korean dot format YYYY.MM.DD
+        html_dot = "<div>최근 활동일: 2026.04.15</div>"
+        exp_dot = plugin._extract_expiration_date(html_dot)
+        self.assertIsNotNone(exp_dot)
+        self.assertEqual(exp_dot.year, 2028)
+        self.assertEqual(exp_dot.month, 4)
+        self.assertEqual(exp_dot.day, 15)
+        
+        # Test case 3: Korean dot format with spaces YYYY. MM. DD.
+        html_dot_spaces = "<div>최근 활동일: 2026. 03. 10.</div>"
+        exp_dot_spaces = plugin._extract_expiration_date(html_dot_spaces)
+        self.assertIsNotNone(exp_dot_spaces)
+        self.assertEqual(exp_dot_spaces.year, 2028)
+        self.assertEqual(exp_dot_spaces.month, 3)
+        self.assertEqual(exp_dot_spaces.day, 10)
+        
+        # Test case 4: Korean word format YYYY년 MM월 DD일
+        html_kr = "<div>최근 활동일: 2026년 02월 08일</div>"
+        exp_kr = plugin._extract_expiration_date(html_kr)
+        self.assertIsNotNone(exp_kr)
+        self.assertEqual(exp_kr.year, 2028)
+        self.assertEqual(exp_kr.month, 2)
+        self.assertEqual(exp_kr.day, 8)
+        
+        # Test case 5: Korean word format single digits YYYY년 M월 D일
+        html_kr_single = "<div>최근 활동일: 2026년 6월 9일</div>"
+        exp_kr_single = plugin._extract_expiration_date(html_kr_single)
+        self.assertIsNotNone(exp_kr_single)
+        self.assertEqual(exp_kr_single.year, 2028)
+        self.assertEqual(exp_kr_single.month, 6)
+        self.assertEqual(exp_kr_single.day, 9)
+
+    def test_marriott_fetch_data_korean_redirect(self):
+        from unittest.mock import patch, MagicMock
+        plugin = plugin_manager.get_plugin('marriott')
+        self.assertIsNotNone(plugin)
+
+        # Mock the SeleniumBase instance and context manager
+        mock_sb = MagicMock()
+        
+        # We dynamically change the current URL state based on clicks and navigations
+        current_url_wrapper = ["https://www.marriott.com/sign-in.mi"]
+        
+        def get_current_url_side_effect():
+            return current_url_wrapper[0]
+            
+        mock_sb.get_current_url.side_effect = get_current_url_side_effect
+        
+        # Clicking the submit button triggers transition to the Korean dashboard
+        def click_side_effect(selector):
+            if "submit" in selector:
+                current_url_wrapper[0] = "https://www.marriott.com/ko/default.mi"
+        mock_sb.click.side_effect = click_side_effect
+        
+        # Capture the activity page URL opened by the plugin and simulate navigation
+        opened_urls = []
+        def open_side_effect(url):
+            opened_urls.append(url)
+            current_url_wrapper[0] = url
+        mock_sb.open.side_effect = open_side_effect
+        
+        # Mock get_page_source to return dataLayer properties on dashboard and dates on activity page
+        def get_page_source_side_effect():
+            curr_url = mock_sb.get_current_url()
+            if "activity.mi" in curr_url:
+                return '<html>2026. 05. 20</html>'
+            elif "default.mi" in curr_url:
+                return '<html><script>var dataLayer = {"mr_prof_points_balance":"25000","mr_prof_rewards_level":"Platinum Elite"};</script></html>'
+            else:
+                return "<html>Not Logged In</html>"
+        mock_sb.get_page_source.side_effect = get_page_source_side_effect
+        
+        def is_element_visible_side_effect(selector):
+            if "otp" in selector or "code" in selector or "passcode" in selector or "verification" in selector or "error" in selector:
+                return False
+            if "password" in selector and "default.mi" in mock_sb.get_current_url():
+                return False
+            return True
+        mock_sb.is_element_visible.side_effect = is_element_visible_side_effect
+        
+        # Setup context manager mock
+        mock_sb_context = MagicMock()
+        mock_sb_context.__enter__.return_value = mock_sb
+        
+        with patch('plugins.marriott.SB', return_value=mock_sb_context):
+            result = plugin.fetch_data("testuser", "testpass")
+            
+        # Verify the returned values
+        self.assertEqual(result["balance"], 25000)
+        self.assertEqual(result["status"], "Platinum Elite")
+        self.assertIsNotNone(result["expiration_date"])
+        
+        # Verify that the activity page opened includes the "/ko" language prefix
+        self.assertIn("https://www.marriott.com/ko/loyalty/myAccount/activity.mi", opened_urls)
+
 if __name__ == '__main__':
     unittest.main()
