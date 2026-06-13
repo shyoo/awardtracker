@@ -75,8 +75,8 @@ class Account(db.Model):
 
     @property
     def interactive_login_required(self):
-        # EVA Air is known to always require interactive login on first/new sign-ins
-        if self.provider and self.provider.plugin_name == 'eva':
+        # EVA Air and British Airways are known to always require interactive login on first/new sign-ins
+        if self.provider and self.provider.plugin_name in ('eva', 'british'):
             if self.last_fetch_status != 'SUCCESS':
                 return True
 

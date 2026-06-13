@@ -230,29 +230,113 @@ def configure_session_restore(self, profile_dir: str) -> None:
 ```
 
 ### D. Process Shutdown Verification
-When using direct file/SQLite updates, always wait for Chrome processes using that profile to fully exit before initiating updates:
+When using direct file/SQLite updates, always wait for Chrome processes using that profile to fully exit before initiating updates. Because `psutil` is not a guaranteed dependency in all run environments, always wrap it with native OS command fallbacks (`powershell`/`wmic` on Windows and `ps` on macOS/Linux):
 ```python
 def wait_for_chrome_exit(self, profile_dir: str) -> None:
     import os
     import time
-    import psutil
+    import platform
+    import subprocess
+    
     abs_profile = os.path.abspath(profile_dir).lower()
     for _ in range(30):
         running = False
-        for proc in psutil.process_iter(['name', 'cmdline']):
+        try:
+            import psutil
+            for proc in psutil.process_iter(['name', 'cmdline']):
+                try:
+                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
+                        cmdline = proc.info['cmdline']
+                        if cmdline:
+                            cmdline_str = ' '.join(cmdline).lower()
+                            if abs_profile in cmdline_str:
+                                running = True
+                                break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except ImportError:
+            # Fallback to native OS commands if psutil is not installed
             try:
-                if proc.info['name'] and 'chrome' in proc.info['name'].lower():
-                    cmdline = proc.info['cmdline']
-                    if cmdline:
-                        cmdline_str = ' '.join(cmdline).lower()
-                        if abs_profile in cmdline_str:
-                            running = True
-                            break
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                if platform.system() == "Windows":
+                    # wmic is deprecated/removed in modern Windows 11; try PowerShell first.
+                    try:
+                        output = subprocess.check_output(
+                            ["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*chrome*' } | Select-Object -ExpandProperty CommandLine"],
+                            stderr=subprocess.DEVNULL
+                        ).decode(errors='ignore').lower()
+                    except Exception:
+                        output = subprocess.check_output(
+                            'wmic process where "name like \'%chrome%\'" get commandline',
+                            shell=True,
+                            stderr=subprocess.DEVNULL
+                        ).decode(errors='ignore').lower()
+                    
+                    if abs_profile in output:
+                        running = True
+                else:
+                    output = subprocess.check_output(
+                        "ps -ef | grep -i chrome | grep -v grep",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode(errors='ignore').lower()
+                    if abs_profile in output:
+                        running = True
+            except Exception:
                 pass
         if not running:
             return
         time.sleep(0.5)
+```
+
+### E. Native Browser Subprocess Execution (Bypassing Strict Anti-Bot)
+When anti-bot systems (e.g., Akamai or Cloudflare) enforce strict browser checks that flag automation signatures or CDP debugging ports (causing infinite CAPTCHA/MFA loops), use a manual, native Chrome execution fallback:
+
+1. **Locate Chrome Executable**: Search registry paths (Windows) or standard application directories:
+```python
+def _get_chrome_path(self) -> Optional[str]:
+    import platform
+    import os
+    if platform.system() == "Windows":
+        import winreg
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe") as key:
+                path, _ = winreg.QueryValueEx(key, "")
+                if path and os.path.exists(path):
+                    return path
+        except Exception:
+            pass
+        for p in [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+        ]:
+            if os.path.exists(p):
+                return p
+    elif platform.system() == "Darwin":
+        path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        if os.path.exists(path):
+            return path
+    return None
+```
+
+2. **Launch Native Subprocess**: Launch Google Chrome directly as a normal subprocess using the account's profile directory. This carries no automation flags:
+```python
+chrome_path = self._get_chrome_path()
+if not chrome_path:
+    raise PluginError("Google Chrome could not be found.")
+
+import subprocess
+cmd = [
+    chrome_path,
+    f"--user-data-dir={os.path.abspath(profile_dir)}",
+    "https://www.example.com/login",
+    "--no-first-run",
+    "--no-default-browser-check"
+]
+subprocess.run(cmd, check=True)
+```
+
+3. **Background Capture**: Once the user manually authenticates and closes the browser window (detected via `wait_for_chrome_exit`), launch a headed/headless automated session to capture the points balance and persist session cookies.
 ```
 
 ---
