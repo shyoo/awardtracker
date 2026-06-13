@@ -293,5 +293,43 @@ class TestAlertThresholds(unittest.TestCase):
         self.assertIn('bg-amber-50', html_detail)
         self.assertIn('Expires: ' + cert_b.expiration_date.strftime('%Y-%m-%d'), html_detail)
 
+    def test_account_detail_history_deltas(self):
+        from models import AccountHistory
+        
+        acc = Account(
+            provider_id=self.provider_manual.id,
+            person_id=self.person.id,
+            username="test_deltas",
+            password_encrypted="",
+            balance=190987,
+            is_manual=True
+        )
+        db.session.add(acc)
+        db.session.commit()
+        
+        # Add historical entries
+        # entry 1: June 4, 190982 pts
+        h1 = AccountHistory(
+            account_id=acc.id,
+            timestamp=datetime(2026, 6, 4, 11, 4),
+            balance=190982
+        )
+        # entry 2: June 13, 190987 pts
+        h2 = AccountHistory(
+            account_id=acc.id,
+            timestamp=datetime(2026, 6, 13, 1, 5),
+            balance=190987
+        )
+        db.session.add_all([h1, h2])
+        db.session.commit()
+        
+        res = self.client.get(f'/accounts/{acc.id}')
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode()
+        
+        # Check that the change delta "+5" is present
+        self.assertIn('+5', html)
+        self.assertIn('Initial', html)
+
 if __name__ == '__main__':
     unittest.main()

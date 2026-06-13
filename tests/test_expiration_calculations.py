@@ -109,6 +109,7 @@ class TestExpirationCalculations(unittest.TestCase):
         # Descriptions must provide policy detail for tooltips
         self.assertTrue("never expire" in get_program_rule_description('delta').lower())
         self.assertTrue("24 months" in get_program_rule_description('american').lower())
+        self.assertTrue("credit card" in get_program_rule_description('american').lower())
         self.assertTrue("korean air" in get_program_rule_description('korean').lower() or "december 31" in get_program_rule_description('korean').lower())
         self.assertTrue("infinity mileagelands" in get_program_rule_description('eva').lower() or "36 months" in get_program_rule_description('eva').lower())
         self.assertTrue("36 months" in get_program_rule_description('british').lower())
