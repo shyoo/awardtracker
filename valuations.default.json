@@ -19,6 +19,10 @@
     "cpp": 1.0,
     "name": "Caesars Rewards"
   },
+  "hertz": {
+    "cpp": 1.0,
+    "name": "Hertz Gold+ Rewards"
+  },
   "american": {
     "cpp": 1.5,
     "name": "American Airlines AAdvantage"

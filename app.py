@@ -64,6 +64,7 @@ DEFAULT_STANDARD_VALUATIONS = {
     'hilton': {'name': 'Hilton Honors', 'cpp': 0.6},
     'ihg': {'name': 'IHG One Rewards', 'cpp': 0.8},
     'caesars': {'name': 'Caesars Rewards', 'cpp': 1.0},
+    'hertz': {'name': 'Hertz Gold+ Rewards', 'cpp': 1.0},
     'american': {'name': 'American Airlines AAdvantage', 'cpp': 1.5},
     'united': {'name': 'United Airlines MileagePlus', 'cpp': 1.2},
     'delta': {'name': 'Delta SkyMiles', 'cpp': 1.2},
@@ -243,6 +244,7 @@ def create_app(config_class=Config):
                 'hyatt': 'hyatt.com',
                 'hilton': 'hilton.com',
                 'caesars': 'caesars.com',
+                'hertz': 'hertz.com',
                 'marriott': 'marriott.com',
                 'ihg': 'ihg.com',
                 'alaska': 'alaskaair.com',
@@ -1277,7 +1279,7 @@ def create_app(config_class=Config):
     @app.route('/settings', methods=['GET', 'POST'])
     def settings():
         STANDARD_VALUATION_KEYS = {
-            'marriott', 'hyatt', 'hilton', 'ihg', 'caesars', 'american', 'united', 'delta',
+            'marriott', 'hyatt', 'hilton', 'ihg', 'caesars', 'hertz', 'american', 'united', 'delta',
             'korean', 'alaska', 'southwest', 'virgin', 'british', 'aircanada', 'avianca',
             'asiana', 'jal', 'ana', 'eva', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         }
@@ -1457,7 +1459,7 @@ def create_app(config_class=Config):
         
         ordered_standard_keys = [
             'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 'jal', 'ana', 'eva',
-            'virgin', 'british', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 'caesars', 
+            'virgin', 'british', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 'caesars', 'hertz', 
             'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         ]
         

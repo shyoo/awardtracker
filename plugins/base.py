@@ -90,6 +90,8 @@ def inject_control_modal(sb):
         elif "caesars.com" in current_url:
             provider_name = "Caesars Rewards"
             custom_tip = "Click the 'Maybe Later' button if prompted to enroll in MFA."
+        elif "hertz.com" in current_url:
+            provider_name = "Hertz Gold+ Rewards"
         elif "hyatt.com" in current_url:
             provider_name = "World of Hyatt"
         elif "ihg.com" in current_url:
