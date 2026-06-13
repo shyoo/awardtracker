@@ -307,6 +307,61 @@ try:
 except Exception:
     pass
 
+def wait_for_chrome_exit(profile_dir: str) -> None:
+    if not profile_dir:
+        return
+    import os
+    import time
+    import platform
+    import subprocess
+
+    abs_profile = os.path.abspath(profile_dir).lower()
+    for _ in range(30):
+        running = False
+        try:
+            import psutil
+            for proc in psutil.process_iter(['name', 'cmdline']):
+                try:
+                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
+                        cmdline = proc.info['cmdline']
+                        if cmdline:
+                            cmdline_str = ' '.join(cmdline).lower()
+                            if abs_profile in cmdline_str:
+                                running = True
+                                break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except ImportError:
+            try:
+                if platform.system() == "Windows":
+                    try:
+                        output = subprocess.check_output(
+                            ["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*chrome*' } | Select-Object -ExpandProperty CommandLine"],
+                            stderr=subprocess.DEVNULL
+                        ).decode(errors='ignore').lower()
+                    except Exception:
+                        output = subprocess.check_output(
+                            'wmic process where "name like \'%chrome%\'" get commandline',
+                            shell=True,
+                            stderr=subprocess.DEVNULL
+                        ).decode(errors='ignore').lower()
+                    
+                    if abs_profile in output:
+                        running = True
+                else:
+                    output = subprocess.check_output(
+                        "ps -ef | grep -i chrome | grep -v grep",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode(errors='ignore').lower()
+                    if abs_profile in output:
+                        running = True
+            except Exception:
+                pass
+        if not running:
+            return
+        time.sleep(0.5)
+
 def safe_call_plugin_method(method, *args, **kwargs):
     """
     Safely call a plugin method (like fetch_data or interactive_login) by only
@@ -328,6 +383,14 @@ def safe_call_plugin_method(method, *args, **kwargs):
             debug_logger.log_action(f"Started sync run for account ID {account_id} ({provider_name})")
     except Exception:
         pass
+
+    # Wait for Chrome to exit if profile_dir is provided to prevent lockouts
+    profile_dir = kwargs.get('profile_dir')
+    if profile_dir:
+        try:
+            wait_for_chrome_exit(profile_dir)
+        except Exception:
+            pass
         
     try:
         sig = inspect.signature(method)
@@ -356,6 +419,13 @@ def safe_call_plugin_method(method, *args, **kwargs):
                 pass
             return res
         except Exception as e:
+            err_msg = str(e)
+            if "session not created" in err_msg or "chrome not reachable" in err_msg or "cannot connect to chrome" in err_msg.lower():
+                raise PluginError(
+                    f"Scraping failed: {err_msg}. If you have another Chrome window open with this profile, "
+                    "please close it. Otherwise, there may be an orphaned Chrome process in the background. "
+                    "Please terminate any orphaned Chrome processes in your Task Manager/Activity Monitor, or restart your computer."
+                )
             try:
                 import debug_logger
                 debug_logger.log_action(f"Sync run failed with exception: {e}", level="ERROR")

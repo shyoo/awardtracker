@@ -947,6 +947,49 @@ class TestAPIsAndPlugins(unittest.TestCase):
         )
         self.assertEqual(res3["balance"], 9999)
 
+    def test_safe_call_plugin_method_chrome_lockout_and_errors(self):
+        from plugins.base import safe_call_plugin_method, PluginError
+        from unittest.mock import patch
+
+        # 1. Verify wait_for_chrome_exit is called when profile_dir is passed
+        called_profile_dir = None
+        def dummy_wait(p_dir):
+            nonlocal called_profile_dir
+            called_profile_dir = p_dir
+
+        def dummy_success(username, password, profile_dir=None):
+            return {"balance": 1234}
+
+        with patch('plugins.base.wait_for_chrome_exit', side_effect=dummy_wait) as mock_wait:
+            res = safe_call_plugin_method(
+                dummy_success, "user", "pass", profile_dir="mock_profile_path"
+            )
+            mock_wait.assert_called_once_with("mock_profile_path")
+            self.assertEqual(res["balance"], 1234)
+
+        # 2. Verify connection error wrapping
+        def dummy_fail_connection(username, password, profile_dir=None):
+            raise Exception("session not created: cannot connect to chrome")
+
+        with patch('plugins.base.wait_for_chrome_exit', return_value=None):
+            with self.assertRaises(PluginError) as ctx:
+                safe_call_plugin_method(
+                    dummy_fail_connection, "user", "pass", profile_dir="mock_profile_path"
+                )
+            self.assertIn("terminate any orphaned Chrome processes", str(ctx.exception))
+            self.assertIn("session not created", str(ctx.exception))
+
+        # 3. Verify other exceptions are not wrapped/altered (except normal raise)
+        def dummy_fail_other(username, password, profile_dir=None):
+            raise ValueError("some other error")
+
+        with patch('plugins.base.wait_for_chrome_exit', return_value=None):
+            with self.assertRaises(ValueError) as ctx:
+                safe_call_plugin_method(
+                    dummy_fail_other, "user", "pass", profile_dir="mock_profile_path"
+                )
+            self.assertEqual(str(ctx.exception), "some other error")
+
     def test_eva_plugin_registration(self):
         plugin = plugin_manager.get_plugin('eva')
         self.assertIsNotNone(plugin, "Scraper plugin 'eva' was not registered.")
