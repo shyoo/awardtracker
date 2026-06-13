@@ -34,6 +34,58 @@ class MarriottPlugin(ProviderPlugin):
             
         return balance, status
 
+    def _extract_expiration_date(self, html: str) -> Optional[datetime]:
+        """Extracts expiration date based on 24 months from the latest activity date found in HTML."""
+        from datetime import datetime
+        
+        dates = []
+        today = datetime.now()
+        
+        # 1. Find all YYYY-MM-DD
+        matches_dash = re.findall(r'202\d-\d\d-\d\d', html)
+        for m in set(matches_dash):
+            try:
+                dt = datetime.strptime(m, "%Y-%m-%d")
+                if dt <= today:
+                    dates.append(dt)
+            except:
+                pass
+        
+        # 2. Find all YYYY.MM.DD or YYYY. MM. DD.
+        matches_dot = re.findall(r'202\d\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}', html)
+        for m in set(matches_dot):
+            try:
+                clean = re.sub(r'\s+', '', m)
+                parts = clean.split('.')
+                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+                if dt <= today:
+                    dates.append(dt)
+            except:
+                pass
+                
+        # 3. Find all YYYY년 MM월 DD일
+        matches_kr = re.findall(r'202\d\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일', html)
+        for m in set(matches_kr):
+            try:
+                nums = re.findall(r'\d+', m)
+                if len(nums) == 3:
+                    dt = datetime(int(nums[0]), int(nums[1]), int(nums[2]))
+                    if dt <= today:
+                        dates.append(dt)
+            except:
+                pass
+        
+        if dates:
+            last_activity = max(dates)
+            try:
+                expiration_date = last_activity.replace(year=last_activity.year + 2)
+            except ValueError:
+                # Handle leap year (Feb 29)
+                expiration_date = last_activity.replace(year=last_activity.year + 2, day=28)
+            return expiration_date
+            
+        return None
+
     def _check_for_mfa(self, sb) -> bool:
         """Helper to detect if Marriott is presenting an MFA passcode/OTP challenge page."""
         try:
@@ -64,7 +116,8 @@ class MarriottPlugin(ProviderPlugin):
                 "one-time passcode", "verification code", "security code", "enter code", 
                 "six-digit", "6-digit", "one-time code", "temporary code", 
                 "enter the code", "security screening", "mfa", "otp", "verify your identity",
-                "challenge question"
+                "challenge question",
+                "일회용 비밀번호", "인증 코드", "인증번호", "본인 확인", "6자리", "보안 질문"
             ]
             if any(kw in text_content for kw in mfa_keywords):
                 # Ensure we are not logged in or looking at standard pages
@@ -146,6 +199,18 @@ class MarriottPlugin(ProviderPlugin):
                 sb.uc_open_with_reconnect("https://www.marriott.com/sign-in.mi", 4)
                 sb.sleep(5)
                 
+                # Check for redirection to language-specific pages (e.g. /ko/sign-in.mi or /ko/default.mi)
+                current_url = sb.get_current_url()
+                import urllib.parse
+                lang_prefix = ""
+                try:
+                    parsed_url = urllib.parse.urlparse(current_url)
+                    path_parts = parsed_url.path.strip("/").split("/")
+                    if path_parts and len(path_parts[0]) == 2:
+                        lang_prefix = f"/{path_parts[0]}"
+                except Exception:
+                    pass
+                
                 # Check if we were redirected to the dashboard (e.g. dataLayer has mr_prof_points_balance)
                 balance, status = self._extract_from_datalayer(sb.get_page_source())
                 
@@ -153,43 +218,84 @@ class MarriottPlugin(ProviderPlugin):
                     # 2. Not logged in (still on sign-in page) -> Fill login form
                     self._fill_login_form(sb, username, password, auto_submit=True)
                     
-                    # 3. Wait for login to complete (button disappears)
-                    submit_selector = "button[data-testid*='submit'], button[type='submit']"
-                    try:
-                        sb.wait_for_element_absent(submit_selector, timeout=15)
-                    except Exception:
+                    # 3. Wait for login to complete
+                    login_success = False
+                    start_time = time.time()
+                    while time.time() - start_time < 20:
+                        curr_url = sb.get_current_url().lower()
+                        if "default.mi" in curr_url or "myaccount" in curr_url or "activity.mi" in curr_url:
+                            login_success = True
+                            break
+                        # Check if dataLayer has points
+                        try:
+                            bal, _ = self._extract_from_datalayer(sb.get_page_source())
+                            if bal is not None:
+                                login_success = True
+                                break
+                        except Exception:
+                            pass
+                        # Check if password input is gone
+                        try:
+                            if not sb.is_element_visible("input[type='password']"):
+                                sb.sleep(1)
+                                curr_url = sb.get_current_url().lower()
+                                if "default.mi" in curr_url or "myaccount" in curr_url or "activity.mi" in curr_url or not sb.is_element_visible("input[type='password']"):
+                                    login_success = True
+                                    break
+                        except Exception:
+                            pass
+                        sb.sleep(0.5)
+
+                    if not login_success:
                         if self._check_for_mfa(sb):
                             raise InteractionRequiredError("Marriott Bonvoy requested a one-time passcode verification (MFA). Please run Interactive Login to resolve this.")
-                        page_src = sb.get_page_source().lower()
+                        
+                        visible_text = ""
+                        try:
+                            visible_text = sb.get_text("body").lower()
+                        except Exception:
+                            pass
                         current_url = sb.get_current_url()
+                        
                         is_cred_error = (
                             "login-failure" in current_url or
                             sb.is_element_visible(".is-error") or
                             sb.is_element_visible(".error-label") or
                             sb.is_element_visible("[id*='-error']") or
-                            "incorrect" in page_src or
-                            "trouble signing in" in page_src or
-                            "invalid" in page_src
+                            "incorrect" in visible_text or
+                            "trouble signing in" in visible_text or
+                            "invalid" in visible_text or
+                            "올바르지" in visible_text or
+                            "일치하지" in visible_text or
+                            "오류" in visible_text or
+                            "실패" in visible_text
                         )
                         if is_cred_error:
                             raise PluginError("Invalid credentials or login failed.")
                         raise InteractionRequiredError("Login timed out or MFA required. Please resolve manually.")
                         
-                    # Check for MFA immediately after submit button disappears
+                    # Check for MFA immediately after login
                     if self._check_for_mfa(sb):
                         raise InteractionRequiredError("Marriott Bonvoy requested a one-time passcode verification (MFA). Please run Interactive Login to resolve this.")
 
-                    # 4. Wait for redirect to finish and try extracting from dataLayer again
-                    sb.sleep(5)
-                    if self._check_for_mfa(sb):
-                        raise InteractionRequiredError("Marriott Bonvoy requested a one-time passcode verification (MFA). Please run Interactive Login to resolve this.")
+                    # Update lang_prefix after login redirect has finished
+                    current_url = sb.get_current_url()
+                    try:
+                        parsed_url = urllib.parse.urlparse(current_url)
+                        path_parts = parsed_url.path.strip("/").split("/")
+                        if path_parts and len(path_parts[0]) == 2:
+                            lang_prefix = f"/{path_parts[0]}"
+                    except Exception:
+                        pass
+
                     balance, status = self._extract_from_datalayer(sb.get_page_source())
                     
                 if self._check_for_mfa(sb):
                     raise InteractionRequiredError("Marriott Bonvoy requested a one-time passcode verification (MFA). Please run Interactive Login to resolve this.")
 
                 # Always navigate to activity page to extract the latest activity for expiration date
-                sb.open("https://www.marriott.com/loyalty/myAccount/activity.mi")
+                activity_url = f"https://www.marriott.com{lang_prefix}/loyalty/myAccount/activity.mi"
+                sb.open(activity_url)
                 sb.sleep(6)
                 
                 if self._check_for_mfa(sb):
@@ -218,29 +324,8 @@ class MarriottPlugin(ProviderPlugin):
                             pass
 
                 # Extract Expiration Date based on 24 months from last activity
-                html = sb.get_page_source()
-                from datetime import datetime
-                
-                # Find all YYYY-MM-DD
-                matches = re.findall(r'202\d-\d\d-\d\d', html)
-                dates = []
-                today = datetime.now()
-                
-                for m in set(matches):
-                    try:
-                        dt = datetime.strptime(m, "%Y-%m-%d")
-                        if dt <= today:
-                            dates.append(dt)
-                    except:
-                        pass
-                
-                if dates:
-                    last_activity = max(dates)
-                    try:
-                        expiration_date = last_activity.replace(year=last_activity.year + 2)
-                    except ValueError:
-                        # Handle leap year (Feb 29)
-                        expiration_date = last_activity.replace(year=last_activity.year + 2, day=28)
+                expiration_date = self._extract_expiration_date(sb.get_page_source())
+                if expiration_date is not None:
                     result["expiration_date"] = expiration_date
                 
                 if balance is not None: result["balance"] = balance
@@ -273,8 +358,8 @@ class MarriottPlugin(ProviderPlugin):
                 while time.time() - start_time < 300:
 
 
-                    curr_url = sb.get_current_url()
-                    if "myAccount" in curr_url or "activity.mi" in curr_url or "default.mi" in curr_url:
+                    curr_url = sb.get_current_url().lower()
+                    if "myaccount" in curr_url or "activity.mi" in curr_url or "default.mi" in curr_url:
                         # Settle and verify points can be extracted or dashboard is reached
                         sb.sleep(5)
                         balance, _ = self._extract_from_datalayer(sb.get_page_source())
