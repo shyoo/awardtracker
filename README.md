@@ -77,6 +77,7 @@ Provides a tracking chart that shows points history over the times.
 > ⚠️ **Voucher & Certificate Support**: Automatic scraping of vouchers, coupons, and free-night certificates is currently supported for **Korean Air SKYPASS only**. Other programs display an informational notice on their account detail page.
 
 ### 🏨 Hotels
+* **Caesars Rewards**
 * **Hilton Honors**
 * **IHG One Rewards**
 * **Marriott Bonvoy**

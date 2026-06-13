@@ -27,7 +27,7 @@ class TestExpirationCalculations(unittest.TestCase):
     def test_universal_exemption(self):
         # Universal exemption always forces None (Never Expires)
         dt = datetime(2026, 5, 20)
-        for pid in ['american', 'alaska', 'marriott', 'hilton', 'hyatt', 'ihg', 'avianca', 'korean', 'delta', 'aircanada', 'eva', 'british']:
+        for pid in ['american', 'alaska', 'marriott', 'hilton', 'hyatt', 'ihg', 'avianca', 'korean', 'delta', 'aircanada', 'eva', 'british', 'caesars']:
             self.assertIsNone(calculate_expiration(pid, 1000, 'Member', dt, has_exemption=True))
 
     def test_aircanada_aeroplan_rules(self):
@@ -95,6 +95,11 @@ class TestExpirationCalculations(unittest.TestCase):
         expected = datetime(2029, 5, 20, 10, 30, 0)
         self.assertEqual(calculate_expiration('british', 5000, 'Member', dt, has_exemption=False), expected)
 
+    def test_caesars_rewards_rules(self):
+        # Caesars Rewards expiration calculation is not supported (returns None)
+        dt = datetime(2026, 5, 20, 10, 30, 0)
+        self.assertIsNone(calculate_expiration('caesars', 5000, 'Gold', dt, has_exemption=False))
+
     def test_program_descriptions(self):
         # Descriptions must provide policy detail for tooltips
         self.assertTrue("never expire" in get_program_rule_description('delta').lower())
@@ -102,6 +107,7 @@ class TestExpirationCalculations(unittest.TestCase):
         self.assertTrue("korean air" in get_program_rule_description('korean').lower() or "december 31" in get_program_rule_description('korean').lower())
         self.assertTrue("infinity mileagelands" in get_program_rule_description('eva').lower() or "36 months" in get_program_rule_description('eva').lower())
         self.assertTrue("36 months" in get_program_rule_description('british').lower())
+        self.assertTrue("6 months" in get_program_rule_description('caesars').lower())
 
 if __name__ == '__main__':
     unittest.main()
