@@ -66,6 +66,7 @@ Provides a tracking chart that shows points history over the times.
 * **American Airlines** (AAdvantage)
 * **Asiana Airlines** (Asiana Club)
 * **Avianca** (LifeMiles)
+* **British Airways** (Avios)
 * **Delta Air Lines** (SkyMiles)
 * **EVA Air** (Infinity Mileagelands)
 * **Japan Airlines** (JAL Mileage Bank)
