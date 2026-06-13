@@ -198,7 +198,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
     def test_plugin_registration(self):
         # Verify that all 17 core scrapers are registered in the manager
         core_plugins = [
-            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'caesars', 'hertz', 
+            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'caesars', 'hertz', 'enterprise', 
             'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'british', 'aircanada', 'jal', 'ana', 'eva'
         ]
         
@@ -620,6 +620,65 @@ class TestAPIsAndPlugins(unittest.TestCase):
         mock_sb_korean = MockSB(html_korean)
         balance, status, last_activity = plugin._extract_data(mock_sb_korean)
         self.assertEqual(balance, 0)
+        self.assertEqual(status, "Gold")
+        self.assertIsNotNone(last_activity)
+
+    def test_enterprise_extraction(self):
+        plugin = plugin_manager.get_plugin('enterprise')
+        self.assertIsNotNone(plugin)
+
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        # Test using the actual downloaded Enterprise html files
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # 1. Logged-in home page file
+        home_path = os.path.join(project_root, 'downloaded_files', 'Car Rental with Great Rates & Service (logged-in) _ Enterprise Rent-A-Car.htm')
+        if os.path.exists(home_path):
+            with open(home_path, 'r', encoding='utf-8', errors='ignore') as f:
+                html_content = f.read()
+            
+            mock_sb = MockSB(html_content)
+            balance, status, last_activity = plugin._extract_data(mock_sb)
+            self.assertEqual(balance, 0)
+            self.assertEqual(status, "Plus")
+            self.assertIsNotNone(last_activity)
+            
+        # 2. Account overview dashboard page file
+        dashboard_path = os.path.join(project_root, 'downloaded_files', 'Enterprise Plus Sign In _ Enterprise Rent-A-Car.htm')
+        if os.path.exists(dashboard_path):
+            with open(dashboard_path, 'r', encoding='utf-8', errors='ignore') as f:
+                html_content = f.read()
+                
+            mock_sb = MockSB(html_content)
+            balance, status, last_activity = plugin._extract_data(mock_sb)
+            self.assertEqual(balance, 0)
+            self.assertEqual(status, "Plus")
+            self.assertIsNotNone(last_activity)
+
+        # Test using a basic mock HTML fallback
+        html_fallback = """
+        <html>
+            <body>
+                <div class="points-container">
+                    1,200 points to date
+                    <small>as of 6/13/2026</small>
+                </div>
+                <div class="tier-banner gold">
+                    <div class="tier-label">
+                        <span class="tier">Gold</span>
+                    </div>
+                </div>
+            </body>
+        </html>
+        """
+        mock_sb_fallback = MockSB(html_fallback)
+        balance, status, last_activity = plugin._extract_data(mock_sb_fallback)
+        self.assertEqual(balance, 1200)
         self.assertEqual(status, "Gold")
         self.assertIsNotNone(last_activity)
 
