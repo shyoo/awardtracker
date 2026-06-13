@@ -19,7 +19,7 @@ class AmericanAirlinesPlugin(ProviderPlugin):
         return add_months(last_activity_date, 24)
 
     def get_expiration_policy_description(self, status: str = None) -> str:
-        return "Miles expire after 24 months of inactivity. Any earning or redemption transaction extends them."
+        return "Miles expire after 24 months of inactivity. Any earning or redemption transaction extends them. Primary credit cardmembers' miles do not expire."
 
     def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str], Optional[Any], Optional[Any]]:
         """Extracts AAdvantage miles balance, status tier, expiration_date, and last_activity_date from AA profile summary."""
@@ -91,53 +91,73 @@ class AmericanAirlinesPlugin(ProviderPlugin):
             if found_tier:
                 status = found_tier
 
-            # 3. Extract explicit expiration text
+            # 3. Extract explicit expiration text or exemption
             import datetime as dt
-            expire_matches = re.findall(r'(?:expire[s]?|expir\w*)\s+(?:on|by)?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{2}/\d{2}/\d{4})', text_content, re.IGNORECASE)
-            if expire_matches:
-                date_str = expire_matches[0]
-                try:
-                    expiration_date = dt.datetime.strptime(date_str, "%B %d, %Y")
-                except ValueError:
-                    try:
-                        expiration_date = dt.datetime.strptime(date_str, "%b %d, %Y")
-                    except ValueError:
-                        try:
-                            expiration_date = dt.datetime.strptime(date_str, "%m/%d/%Y")
-                        except ValueError:
-                            pass
-
-            # 4. Extract latest transaction / activity date
-            parsed_dates = []
-            date_patterns = [
-                r'\b([A-Za-z]{3,9})\s+(\d{1,2}),\s+(\d{4})\b', # e.g. Jan 15, 2026
-                r'\b(\d{1,2})/(\d{1,2})/(\d{4})\b'            # e.g. 01/15/2026
+            has_no_expiration = False
+            no_expiration_keywords = [
+                "no miles expiration",
+                "no expiration",
+                "miles do not expire",
+                "miles never expire",
+                "never expire"
             ]
-            
-            now = dt.datetime.utcnow()
-            for pattern in date_patterns:
-                for match in re.finditer(pattern, text_content):
-                    d_str = match.group(0)
+            for kw in no_expiration_keywords:
+                if kw in text_content.lower():
+                    has_no_expiration = True
+                    break
+
+            if has_no_expiration:
+                expiration_date = None
+                last_activity_date = None
+            else:
+                expire_matches = re.findall(r'(?:expire[s]?|expir\w*)\s+(?:on|by)?\s*([A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{2}/\d{2}/\d{4})', text_content, re.IGNORECASE)
+                if expire_matches:
+                    date_str = expire_matches[0]
                     try:
-                        p_date = None
-                        if "," in d_str:
-                            p_date = dt.datetime.strptime(d_str, "%b %d, %Y")
-                        else:
-                            p_date = dt.datetime.strptime(d_str, "%m/%d/%Y")
-                        
-                        if p_date and p_date <= now and p_date.year >= 2020:
-                            parsed_dates.append(p_date)
+                        expiration_date = dt.datetime.strptime(date_str, "%B %d, %Y")
                     except ValueError:
                         try:
-                            p_date = dt.datetime.strptime(d_str, "%B %d, %Y")
-                            if p_date and p_date <= now and p_date.year >= 2020:
-                                parsed_dates.append(p_date)
+                            expiration_date = dt.datetime.strptime(date_str, "%b %d, %Y")
                         except ValueError:
-                            pass
-            
-            if parsed_dates:
-                # Latest past date
-                last_activity_date = max(parsed_dates)
+                            try:
+                                expiration_date = dt.datetime.strptime(date_str, "%m/%d/%Y")
+                            except ValueError:
+                                pass
+
+                # 4. Extract latest transaction / activity date (only if not already resolved)
+                if expiration_date:
+                    last_activity_date = None
+                else:
+                    parsed_dates = []
+                    date_patterns = [
+                        r'\b([A-Za-z]{3,9})\s+(\d{1,2}),\s+(\d{4})\b', # e.g. Jan 15, 2026
+                        r'\b(\d{1,2})/(\d{1,2})/(\d{4})\b'            # e.g. 01/15/2026
+                    ]
+                    
+                    now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+                    for pattern in date_patterns:
+                        for match in re.finditer(pattern, text_content):
+                            d_str = match.group(0)
+                            try:
+                                p_date = None
+                                if "," in d_str:
+                                    p_date = dt.datetime.strptime(d_str, "%b %d, %Y")
+                                else:
+                                    p_date = dt.datetime.strptime(d_str, "%m/%d/%Y")
+                                
+                                if p_date and p_date <= now and p_date.year >= 2020:
+                                    parsed_dates.append(p_date)
+                            except ValueError:
+                                try:
+                                    p_date = dt.datetime.strptime(d_str, "%B %d, %Y")
+                                    if p_date and p_date <= now and p_date.year >= 2020:
+                                        parsed_dates.append(p_date)
+                                except ValueError:
+                                    pass
+                    
+                    if parsed_dates:
+                        # Latest past date
+                        last_activity_date = max(parsed_dates)
                 
         except Exception:
             pass

@@ -451,6 +451,70 @@ class TestAPIsAndPlugins(unittest.TestCase):
         _, status_goal, _, _ = plugin._extract_data(mock_sb_goal)
         self.assertEqual(status_goal, "Member")
 
+    def test_american_expiration_and_exemption(self):
+        plugin = plugin_manager.get_plugin('american')
+        self.assertIsNotNone(plugin)
+        
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        # Scenario 1: Exempt (Credit Cardholder)
+        html_exempt = """
+        <html>
+            <body>
+                <p>Award miles balance 50,000 miles</p>
+                <div>Primary AAdvantage® credit cardholder - no miles expiration with open card account</div>
+                <div>Recent transaction on Jun 10, 2026</div>
+            </body>
+        </html>
+        """
+        mock_sb_exempt = MockSB(html_exempt)
+        balance, status, exp_date, last_act = plugin._extract_data(mock_sb_exempt)
+        self.assertEqual(balance, 50000)
+        self.assertIsNone(exp_date)
+        self.assertIsNone(last_act)
+
+        # Scenario 2: Explicit expiration date
+        html_expire = """
+        <html>
+            <body>
+                <p>Award miles balance 100,947 miles</p>
+                <div>Miles expire on Mar 6, 2027</div>
+                <div>Recent activity: Jun 10, 2026</div>
+            </body>
+        </html>
+        """
+        mock_sb_expire = MockSB(html_expire)
+        balance, status, exp_date, last_act = plugin._extract_data(mock_sb_expire)
+        self.assertEqual(balance, 100947)
+        self.assertIsNotNone(exp_date)
+        self.assertEqual(exp_date.year, 2027)
+        self.assertEqual(exp_date.month, 3)
+        self.assertEqual(exp_date.day, 6)
+        self.assertIsNone(last_act)
+
+        # Scenario 3: Inactivity fallback
+        html_fallback = """
+        <html>
+            <body>
+                <p>Award miles balance 25,000 miles</p>
+                <div>Transaction details:</div>
+                <div>June 10, 2026 - Partner purchase</div>
+            </body>
+        </html>
+        """
+        mock_sb_fallback = MockSB(html_fallback)
+        balance, status, exp_date, last_act = plugin._extract_data(mock_sb_fallback)
+        self.assertEqual(balance, 25000)
+        self.assertIsNone(exp_date)
+        self.assertIsNotNone(last_act)
+        self.assertEqual(last_act.year, 2026)
+        self.assertEqual(last_act.month, 6)
+        self.assertEqual(last_act.day, 10)
+
     def test_aircanada_status_extraction(self):
         plugin = plugin_manager.get_plugin('aircanada')
         self.assertIsNotNone(plugin)

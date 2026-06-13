@@ -243,8 +243,8 @@
               </td>
               <td class="whitespace-nowrap px-3 py-3.5 text-right text-xs font-medium">
                 {% if not loop.last %}
-                  {% set next_index = history | length - loop.index %}
-                  {% set prev_entry = history[next_index] %}
+                  {% set prev_index = history | length - loop.index - 1 %}
+                  {% set prev_entry = history[prev_index] %}
                   {% set diff = entry.balance - prev_entry.balance %}
                   {% if diff > 0 %}
                     <span class="text-emerald-600 font-bold">+{{ "{:,}".format(diff) }}</span>
