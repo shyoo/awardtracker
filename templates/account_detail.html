@@ -541,19 +541,22 @@
               </div>
             </div>`;
           specialInstruct.classList.remove('hidden');
-        } else if (providerName.toLowerCase().includes('british') || providerName.toLowerCase().includes('ba')) {
-          // British Airways: fully manual — hide generic steps and show custom instructions
+        } else if (providerName.toLowerCase().includes('british') || providerName.toLowerCase().includes('ba') || providerName.toLowerCase().includes('wyndham')) {
+          // British Airways & Wyndham: fully manual — hide generic steps and show custom instructions
           const genericSteps = document.getElementById('interactiveGenericSteps');
           if (genericSteps) genericSteps.classList.add('hidden');
+          const isWyndham = providerName.toLowerCase().includes('wyndham');
+          const progName = isWyndham ? 'Wyndham Rewards' : 'British Airways';
+          const loginHint = isWyndham ? 'your username and password' : 'your Executive Club number, PIN/password';
           specialInstruct.innerHTML = `
             <div class="p-4 bg-blue-50 border border-blue-200 rounded-xl text-[11px] mb-3 leading-relaxed space-y-2.5 shadow-sm">
               <p class="font-bold text-blue-900 text-xs flex items-center gap-1.5">
                 <svg class="h-4 w-4 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
-                British Airways — Fully Manual Login Required
+                ${progName} — Fully Manual Login Required
               </p>
-              <p class="text-blue-800">To avoid anti-bot detection, a <strong>native Google Chrome window</strong> will open to the British Airways login page. **No automation** is used.</p>
+              <p class="text-blue-800">To avoid anti-bot detection, a <strong>native Google Chrome window</strong> will open to the ${progName} login page. **No automation** is used.</p>
               <div class="mt-2 p-3 bg-white border border-blue-100 rounded-lg space-y-1.5 text-blue-900">
-                <p>🔑 <strong>Step 1 — Sign in manually:</strong> Enter your Executive Club number, PIN/password, and complete any MFA/CAPTCHA in the opened Chrome window.</p>
+                <p>🔑 <strong>Step 1 — Sign in manually:</strong> Enter ${loginHint}, and complete any MFA/CAPTCHA in the opened Chrome window.</p>
                 <p>🚪 <strong class="text-orange-700">Step 2 — Close the browser:</strong> Once you have successfully logged in and see your dashboard/account overview, <strong>close the Chrome window</strong>.</p>
                 <p>⌛ <strong>Step 3 — Auto-capture:</strong> The tool will detect the window closure, automatically capture your balance in the background, and finalize the sync. <em class="text-blue-800 font-semibold">(Note: Please wait for ~30 seconds after closing the window for the application to finish post-processing cookies and updating your points)</em>.</p>
               </div>

@@ -31,6 +31,10 @@
     "cpp": 1.0,
     "name": "National Emerald Club"
   },
+  "wyndham": {
+    "cpp": 0.7,
+    "name": "Wyndham Rewards"
+  },
 
   "american": {
     "cpp": 1.5,
