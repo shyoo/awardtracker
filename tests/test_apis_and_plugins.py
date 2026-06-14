@@ -198,7 +198,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
     def test_plugin_registration(self):
         # Verify that all 17 core scrapers are registered in the manager
         core_plugins = [
-            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'caesars', 'hertz', 'enterprise', 'national',
+            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'caesars', 'hertz', 'enterprise', 'national', 'wyndham',
             'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'british', 'aircanada', 'jal', 'ana', 'eva'
         ]
         
@@ -1395,6 +1395,26 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # Since it hasn't succeeded yet (last_fetch_status is None), it should require interactive login
         self.assertTrue(account.interactive_login_required)
 
+    def test_wyndham_requires_interactive_login_on_new_account(self):
+        # Create a new provider for Wyndham
+        provider_wyndham = Provider(name="Wyndham Rewards", plugin_name="wyndham", enabled=True)
+        db.session.add(provider_wyndham)
+        db.session.commit()
+        
+        # Create a new account under Wyndham
+        account = Account(
+            provider_id=provider_wyndham.id,
+            person_id=self.person.id,
+            username="wyndham_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            is_manual=False
+        )
+        db.session.add(account)
+        db.session.commit()
+        
+        # Since it hasn't succeeded yet (last_fetch_status is None), it should require interactive login
+        self.assertTrue(account.interactive_login_required)
+
     def test_selenium_patch_nested_calls_guard(self):
         from seleniumbase import BaseCase
         import debug_logger
@@ -1784,6 +1804,35 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # Verify extracted data from national_members.html
         self.assertEqual(balance, 0)
         self.assertEqual(status, "Emerald Club")
+        self.assertIsNotNone(last_activity)
+
+    def test_wyndham_extraction(self):
+        plugin = plugin_manager.get_plugin('wyndham')
+        self.assertIsNotNone(plugin)
+        
+        # Check signature / kwargs
+        import inspect
+        fetch_sig = inspect.signature(plugin.fetch_data)
+        self.assertIn('kwargs', fetch_sig.parameters)
+        
+        # Read the mock members HTML file
+        path = os.path.join(self.app.config['ROOT_DIR'], 'downloaded_files', 'Wyndham My Account.htm')
+        self.assertTrue(os.path.exists(path))
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            html_content = f.read()
+            
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+                
+        mock_sb = MockSB(html_content)
+        balance, status, last_activity = plugin._extract_data(mock_sb)
+        
+        # Verify extracted data from Wyndham My Account.htm
+        self.assertEqual(balance, 0)
+        self.assertEqual(status, "BLUE")
         self.assertIsNotNone(last_activity)
 
 if __name__ == '__main__':
