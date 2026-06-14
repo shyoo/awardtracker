@@ -27,6 +27,10 @@
     "cpp": 1.0,
     "name": "Enterprise Plus"
   },
+  "national": {
+    "cpp": 1.0,
+    "name": "National Emerald Club"
+  },
 
   "american": {
     "cpp": 1.5,

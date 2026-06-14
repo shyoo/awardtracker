@@ -198,7 +198,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
     def test_plugin_registration(self):
         # Verify that all 17 core scrapers are registered in the manager
         core_plugins = [
-            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'caesars', 'hertz', 'enterprise', 
+            'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'caesars', 'hertz', 'enterprise', 'national',
             'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'british', 'aircanada', 'jal', 'ana', 'eva'
         ]
         
@@ -1756,6 +1756,35 @@ class TestAPIsAndPlugins(unittest.TestCase):
         
         # Verify that the activity page opened includes the "/ko" language prefix
         self.assertIn("https://www.marriott.com/ko/loyalty/myAccount/activity.mi", opened_urls)
+
+    def test_national_extraction(self):
+        plugin = plugin_manager.get_plugin('national')
+        self.assertIsNotNone(plugin)
+        
+        # Check signature / kwargs
+        import inspect
+        fetch_sig = inspect.signature(plugin.fetch_data)
+        self.assertIn('kwargs', fetch_sig.parameters)
+        
+        # Read the mock members HTML file
+        path = os.path.join(self.app.config['ROOT_DIR'], 'downloaded_files', 'national_members.html')
+        self.assertTrue(os.path.exists(path))
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            html_content = f.read()
+            
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+                
+        mock_sb = MockSB(html_content)
+        balance, status, last_activity = plugin._extract_data(mock_sb)
+        
+        # Verify extracted data from national_members.html
+        self.assertEqual(balance, 0)
+        self.assertEqual(status, "Emerald Club")
+        self.assertIsNotNone(last_activity)
 
 if __name__ == '__main__':
     unittest.main()

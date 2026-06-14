@@ -94,6 +94,8 @@ def inject_control_modal(sb):
             provider_name = "Hertz Gold+ Rewards"
         elif "enterprise.com" in current_url:
             provider_name = "Enterprise Plus"
+        elif "nationalcar.com" in current_url:
+            provider_name = "National Emerald Club"
 
         elif "hyatt.com" in current_url:
             provider_name = "World of Hyatt"
