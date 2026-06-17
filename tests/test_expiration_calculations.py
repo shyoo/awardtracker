@@ -27,7 +27,7 @@ class TestExpirationCalculations(unittest.TestCase):
     def test_universal_exemption(self):
         # Universal exemption always forces None (Never Expires)
         dt = datetime(2026, 5, 20)
-        for pid in ['american', 'alaska', 'marriott', 'hilton', 'hyatt', 'ihg', 'avianca', 'korean', 'delta', 'aircanada', 'eva', 'british', 'caesars', 'hertz', 'enterprise', 'national', 'wyndham']:
+        for pid in ['american', 'alaska', 'marriott', 'hilton', 'hyatt', 'ihg', 'avianca', 'korean', 'delta', 'aircanada', 'eva', 'british', 'caesars', 'hertz', 'enterprise', 'national', 'wyndham', 'jetblue']:
             self.assertIsNone(calculate_expiration(pid, 1000, 'Member', dt, has_exemption=True))
 
     def test_aircanada_aeroplan_rules(self):
@@ -120,6 +120,11 @@ class TestExpirationCalculations(unittest.TestCase):
         dt = datetime(2026, 5, 20, 10, 30, 0)
         self.assertIsNone(calculate_expiration('wyndham', 5000, 'BLUE', dt, has_exemption=False))
 
+    def test_jetblue_rules(self):
+        # JetBlue TrueBlue points never expire
+        dt = datetime(2026, 5, 20, 10, 30, 0)
+        self.assertIsNone(calculate_expiration('jetblue', 5000, 'TrueBlue', dt, has_exemption=False))
+
     def test_program_descriptions(self):
         # Descriptions must provide policy detail for tooltips
         self.assertTrue("never expire" in get_program_rule_description('delta').lower())
@@ -133,6 +138,7 @@ class TestExpirationCalculations(unittest.TestCase):
         self.assertTrue("36 months" in get_program_rule_description('enterprise').lower())
         self.assertTrue("december 31st" in get_program_rule_description('national').lower() or "free days" in get_program_rule_description('national').lower())
         self.assertTrue("4 years" in get_program_rule_description('wyndham').lower() or "18 consecutive months" in get_program_rule_description('wyndham').lower())
+        self.assertTrue("never expire" in get_program_rule_description('jetblue').lower())
 
 if __name__ == '__main__':
     unittest.main()

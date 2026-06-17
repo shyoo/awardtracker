@@ -51,9 +51,11 @@ def inject_control_modal(sb):
             return
         if "wyndhamhotels" in current_url or "wyndhamrewards" in current_url:
             return
-        # Also skip for British Airways and Wyndham plugins regardless of URL (e.g. about:blank during interactive login)
+        if "jetblue" in current_url:
+            return
+        # Also skip for British Airways, Wyndham and JetBlue plugins regardless of URL (e.g. about:blank during interactive login)
         for frame in inspect.stack():
-            if frame.filename and ("british" in frame.filename.lower() or "wyndham" in frame.filename.lower()):
+            if frame.filename and ("british" in frame.filename.lower() or "wyndham" in frame.filename.lower() or "jetblue" in frame.filename.lower()):
                 return
         
         # Determine if this is an interactive login or a standard sync

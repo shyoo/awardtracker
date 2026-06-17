@@ -199,7 +199,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # Verify that all 17 core scrapers are registered in the manager
         core_plugins = [
             'american', 'united', 'delta', 'marriott', 'hilton', 'hyatt', 'ihg', 'caesars', 'hertz', 'enterprise', 'national', 'wyndham',
-            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'british', 'aircanada', 'jal', 'ana', 'eva'
+            'avianca', 'alaska', 'korean', 'asiana', 'southwest', 'virgin', 'british', 'jetblue', 'aircanada', 'jal', 'ana', 'eva'
         ]
         
         for pid in core_plugins:
@@ -298,6 +298,46 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # Zero balance should return None
         exp_zero = plugin.calculate_expiration(0, "Blue", now)
         self.assertIsNone(exp_zero)
+
+    def test_jetblue_plugin_kwargs(self):
+        import inspect
+        plugin = plugin_manager.get_plugin('jetblue')
+        self.assertIsNotNone(plugin)
+        
+        # Verify fetch_data signature accepts **kwargs
+        fetch_sig = inspect.signature(plugin.fetch_data)
+        self.assertIn('kwargs', fetch_sig.parameters, "jetblue.fetch_data must accept **kwargs")
+        self.assertEqual(
+            fetch_sig.parameters['kwargs'].kind, 
+            inspect.Parameter.VAR_KEYWORD,
+            "kwargs in fetch_data must be VAR_KEYWORD"
+        )
+        
+        # Verify interactive_login signature accepts **kwargs
+        login_sig = inspect.signature(plugin.interactive_login)
+        self.assertIn('kwargs', login_sig.parameters, "jetblue.interactive_login must accept **kwargs")
+        self.assertEqual(
+            login_sig.parameters['kwargs'].kind, 
+            inspect.Parameter.VAR_KEYWORD,
+            "kwargs in interactive_login must be VAR_KEYWORD"
+        )
+
+    def test_jetblue_parsing(self):
+        plugin = plugin_manager.get_plugin('jetblue')
+        self.assertIsNotNone(plugin)
+        
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        ref_path = os.path.join(project_root, 'downloaded_files', 'My Dashboard _ TrueBlue (modal dismissed)_ JetBlue.htm')
+        self.assertTrue(os.path.exists(ref_path), f"Reference file not found at {ref_path}")
+        
+        with open(ref_path, 'r', encoding='utf-8', errors='ignore') as f:
+            html = f.read()
+            
+        result = plugin._parse_account_html(html)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["balance"], 882)
+        self.assertEqual(result["status"], "TrueBlue")
+        self.assertIsNone(result["expiration_date"])
 
     def test_british_clear_ba_cookies(self):
         import tempfile

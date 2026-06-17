@@ -76,6 +76,7 @@ DEFAULT_STANDARD_VALUATIONS = {
     'southwest': {'name': 'Southwest Rapid Rewards', 'cpp': 1.3},
     'virgin': {'name': 'Virgin Atlantic Flying Club', 'cpp': 1.2},
     'british': {'name': 'British Airways Executive Club', 'cpp': 1.5},
+    'jetblue': {'name': 'JetBlue TrueBlue', 'cpp': 1.3},
     'aircanada': {'name': 'Air Canada Aeroplan', 'cpp': 1.4},
     'avianca': {'name': 'Avianca LifeMiles', 'cpp': 1.2},
     'asiana': {'name': 'Asiana Club', 'cpp': 1.4},
@@ -262,6 +263,7 @@ def create_app(config_class=Config):
                 'avianca': 'avianca.com',
                 'virgin': 'virginatlantic.com',
                 'british': 'britishairways.com',
+                'jetblue': 'jetblue.com',
                 'asiana': 'flyasiana.com',
                 'aircanada': 'aircanada.com',
                 'jal': 'jal.co.jp',
@@ -1286,7 +1288,7 @@ def create_app(config_class=Config):
     def settings():
         STANDARD_VALUATION_KEYS = {
             'marriott', 'hyatt', 'hilton', 'ihg', 'caesars', 'hertz', 'enterprise', 'american', 'united', 'delta',
-            'korean', 'alaska', 'southwest', 'virgin', 'british', 'aircanada', 'avianca',
+            'korean', 'alaska', 'southwest', 'virgin', 'british', 'jetblue', 'aircanada', 'avianca',
             'asiana', 'jal', 'ana', 'eva', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         }
 
@@ -1465,7 +1467,7 @@ def create_app(config_class=Config):
         
         ordered_standard_keys = [
             'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 'jal', 'ana', 'eva',
-            'virgin', 'british', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 'caesars', 'hertz', 'enterprise', 
+            'virgin', 'british', 'jetblue', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 'caesars', 'hertz', 'enterprise', 
             'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
         ]
         
