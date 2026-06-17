@@ -68,6 +68,10 @@
     "cpp": 1.5,
     "name": "British Airways Executive Club"
   },
+  "jetblue": {
+    "cpp": 1.3,
+    "name": "JetBlue TrueBlue"
+  },
   "aircanada": {
     "cpp": 1.4,
     "name": "Air Canada Aeroplan"
