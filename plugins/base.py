@@ -46,18 +46,28 @@ def inject_control_modal(sb):
         if is_headless:
             return
             
-        current_url = sb.get_current_url().lower()
-        if "britishairways" in current_url or "ba.com" in current_url:
+        # Determine active plugin from stack
+        active_plugin = None
+        try:
+            for frame_info in inspect.stack():
+                frame = frame_info.frame
+                self_obj = frame.f_locals.get('self')
+                if self_obj and isinstance(self_obj, ProviderPlugin):
+                    active_plugin = self_obj
+                    break
+        except Exception:
+            pass
+
+        # If we have an active plugin and it says not to show the control modal, skip
+        if active_plugin and not active_plugin.show_control_modal:
             return
-        if "wyndhamhotels" in current_url or "wyndhamrewards" in current_url:
-            return
-        if "jetblue" in current_url:
-            return
-        # Also skip for British Airways, Wyndham and JetBlue plugins regardless of URL (e.g. about:blank during interactive login)
-        for frame in inspect.stack():
-            if frame.filename and ("british" in frame.filename.lower() or "wyndham" in frame.filename.lower() or "jetblue" in frame.filename.lower()):
+
+        # Fallback check for known non-modal plugins if active_plugin is not detected from stack (e.g. direct test calls)
+        if not active_plugin:
+            current_url = sb.get_current_url().lower()
+            if any(domain in current_url for domain in ("britishairways", "ba.com", "wyndhamhotels", "wyndhamrewards", "jetblue")):
                 return
-        
+
         # Determine if this is an interactive login or a standard sync
         interactive = False
         for frame in inspect.stack():
@@ -68,56 +78,58 @@ def inject_control_modal(sb):
         provider_name = "Award Tracker"
         custom_tip = ""
         
-        if "united.com" in current_url:
-            provider_name = "United Airlines"
-            custom_tip = "Check the checkbox for <strong>\"Don't require verification code again.\"</strong> to prevent future MFA prompts."
-        elif "marriott.com" in current_url:
-            provider_name = "Marriott Bonvoy"
-            custom_tip = "Check the checkbox/link for <strong>\"Trust this device for 90 days\"</strong> if prompted."
-        elif "lifemiles" in current_url or "avianca" in current_url:
-            provider_name = "Avianca LifeMiles"
-            custom_tip = "Check your email for the <strong>\"Confirm your identity\"</strong> verification code."
-        elif "aa.com" in current_url or "american" in current_url:
-            provider_name = "American Airlines"
-            custom_tip = "Check your email or phone for the <strong>\"Verification Code\"</strong>."
-        elif "asiana.com" in current_url:
-            provider_name = "Asiana Airlines"
-        elif "koreanair.com" in current_url:
-            provider_name = "Korean Air"
-            custom_tip = "After a successful sign-in, please wait a few seconds for the application to automatically redirect to your mileage overview page, or navigate to <strong>My Mileage > Overview</strong> manually if needed."
-        elif "alaskaair.com" in current_url:
-            provider_name = "Alaska Airlines"
-        elif "delta.com" in current_url:
-            provider_name = "Delta Air Lines"
-        elif "hilton.com" in current_url:
-            provider_name = "Hilton Honors"
-        elif "caesars.com" in current_url:
-            provider_name = "Caesars Rewards"
-            custom_tip = "Click the 'Maybe Later' button if prompted to enroll in MFA."
-        elif "hertz.com" in current_url:
-            provider_name = "Hertz Gold+ Rewards"
-        elif "enterprise.com" in current_url:
-            provider_name = "Enterprise Plus"
-        elif "nationalcar.com" in current_url:
-            provider_name = "National Emerald Club"
-
-        elif "hyatt.com" in current_url:
-            provider_name = "World of Hyatt"
-        elif "ihg.com" in current_url:
-            provider_name = "IHG One Rewards"
-        elif "southwest.com" in current_url:
-            provider_name = "Southwest Airlines"
-        elif "virginatlantic.com" in current_url:
-            provider_name = "Virgin Atlantic"
-        elif "aircanada.com" in current_url or "aeroplan" in current_url:
-            provider_name = "Air Canada Aeroplan"
-            custom_tip = "Complete any verification or security prompts if requested by Air Canada."
-        elif "evaair.com" in current_url or "flyeva" in current_url:
-            provider_name = "EVA Air"
-            custom_tip = "Complete the CAPTCHA image manually, then enter your email verification code if prompted."
-        elif "britishairways.com" in current_url or "ba.com" in current_url:
-            provider_name = "British Airways"
-            custom_tip = "Complete the CAPTCHA manually if prompted, then click Continue."
+        if active_plugin:
+            provider_name = active_plugin.name
+            custom_tip = active_plugin.custom_tip
+        else:
+            # Fallback URL parsing if active_plugin isn't on stack (e.g., direct runner script or mock test environment)
+            current_url = sb.get_current_url().lower()
+            if "united.com" in current_url:
+                provider_name = "United Airlines"
+                custom_tip = "Check the checkbox for <strong>\"Don't require verification code again.\"</strong> to prevent future MFA prompts."
+            elif "marriott.com" in current_url:
+                provider_name = "Marriott Bonvoy"
+                custom_tip = "Check the checkbox/link for <strong>\"Trust this device for 90 days\"</strong> if prompted."
+            elif "lifemiles" in current_url or "avianca" in current_url:
+                provider_name = "Avianca LifeMiles"
+                custom_tip = "Check your email for the <strong>\"Confirm your identity\"</strong> verification code."
+            elif "aa.com" in current_url or "american" in current_url:
+                provider_name = "American Airlines"
+                custom_tip = "Check your email or phone for the <strong>\"Verification Code\"</strong>."
+            elif "asiana.com" in current_url:
+                provider_name = "Asiana Airlines"
+            elif "koreanair.com" in current_url:
+                provider_name = "Korean Air"
+                custom_tip = "After a successful sign-in, please wait a few seconds for the application to automatically redirect to your mileage overview page, or navigate to <strong>My Mileage > Overview</strong> manually if needed."
+            elif "alaskaair.com" in current_url:
+                provider_name = "Alaska Airlines"
+            elif "delta.com" in current_url:
+                provider_name = "Delta Air Lines"
+            elif "hilton.com" in current_url:
+                provider_name = "Hilton Honors"
+            elif "caesars.com" in current_url:
+                provider_name = "Caesars Rewards"
+                custom_tip = "Click the 'Maybe Later' button if prompted to enroll in MFA."
+            elif "hertz.com" in current_url:
+                provider_name = "Hertz Gold+ Rewards"
+            elif "enterprise.com" in current_url:
+                provider_name = "Enterprise Plus"
+            elif "nationalcar.com" in current_url:
+                provider_name = "National Emerald Club"
+            elif "hyatt.com" in current_url:
+                provider_name = "World of Hyatt"
+            elif "ihg.com" in current_url:
+                provider_name = "IHG One Rewards"
+            elif "southwest.com" in current_url:
+                provider_name = "Southwest Airlines"
+            elif "virginatlantic.com" in current_url:
+                provider_name = "Virgin Atlantic"
+            elif "aircanada.com" in current_url or "aeroplan" in current_url:
+                provider_name = "Air Canada Aeroplan"
+                custom_tip = "Complete any verification or security prompts if requested by Air Canada."
+            elif "evaair.com" in current_url or "flyeva" in current_url:
+                provider_name = "EVA Air"
+                custom_tip = "Complete the CAPTCHA image manually, then enter your email verification code if prompted."
 
         title = f"{provider_name} Assistant"
         
@@ -479,6 +491,27 @@ class ProviderPlugin(ABC):
     def plugin_id(self) -> str:
         """Unique ID for the plugin (e.g., 'marriott')"""
         pass
+
+    @property
+    def interactive_login_required(self) -> bool:
+        """
+        Whether this plugin always requires interactive login on first/new sign-ins.
+        """
+        return False
+
+    @property
+    def show_control_modal(self) -> bool:
+        """
+        Whether to display the automated sync / interactive login control helper modal in the browser.
+        """
+        return True
+
+    @property
+    def custom_tip(self) -> str:
+        """
+        A custom instruction tip shown in the helper modal during interactive login.
+        """
+        return ""
 
     @abstractmethod
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
