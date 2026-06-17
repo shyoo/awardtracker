@@ -75,10 +75,12 @@ class Account(db.Model):
 
     @property
     def interactive_login_required(self):
-        # EVA Air, British Airways, Wyndham Rewards, and JetBlue TrueBlue are known to always require interactive login on first/new sign-ins
-        if self.provider and self.provider.plugin_name in ('eva', 'british', 'wyndham', 'jetblue'):
-            if self.last_fetch_status != 'SUCCESS':
-                return True
+        if self.provider:
+            from plugins.manager import plugin_manager
+            plugin = plugin_manager.get_plugin(self.provider.plugin_name)
+            if plugin and getattr(plugin, 'interactive_login_required', False):
+                if self.last_fetch_status != 'SUCCESS':
+                    return True
 
         if self.last_fetch_status != 'FAILED' or not self.last_error:
             return False

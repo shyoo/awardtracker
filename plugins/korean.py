@@ -16,6 +16,10 @@ class KoreanAirPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "korean"
 
+    @property
+    def custom_tip(self) -> str:
+        return "After a successful sign-in, please wait a few seconds for the application to automatically redirect to your mileage overview page, or navigate to <strong>My Mileage > Overview</strong> manually if needed."
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
         return last_activity_date
 

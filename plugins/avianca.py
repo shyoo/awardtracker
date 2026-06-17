@@ -15,6 +15,10 @@ class AviancaLifemilesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "avianca"
 
+    @property
+    def custom_tip(self) -> str:
+        return "Check your email for the <strong>\"Confirm your identity\"</strong> verification code."
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
         st = (status or "").lower()
         if any(tier in st for tier in ('elite', 'silver', 'gold', 'diamond', 'red')):

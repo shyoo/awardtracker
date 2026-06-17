@@ -13,6 +13,10 @@ class UnitedAirlinesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "united"
 
+    @property
+    def custom_tip(self) -> str:
+        return "Check the checkbox for <strong>\"Don't require verification code again.\"</strong> to prevent future MFA prompts."
+
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Miles in this program never expire."
 

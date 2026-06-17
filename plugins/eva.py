@@ -24,6 +24,14 @@ class EVAPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "eva"
 
+    @property
+    def interactive_login_required(self) -> bool:
+        return True
+
+    @property
+    def custom_tip(self) -> str:
+        return "Complete the CAPTCHA image manually, then enter your email verification code if prompted."
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
         return last_activity_date
 

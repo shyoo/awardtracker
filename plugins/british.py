@@ -35,6 +35,14 @@ class BritishAirwaysPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "british"
 
+    @property
+    def interactive_login_required(self) -> bool:
+        return True
+
+    @property
+    def show_control_modal(self) -> bool:
+        return False
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> Optional[datetime]:
         if balance == 0:
             return None

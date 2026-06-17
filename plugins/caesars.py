@@ -15,6 +15,10 @@ class CaesarsRewardsPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "caesars"
 
+    @property
+    def custom_tip(self) -> str:
+        return "Click the 'Maybe Later' button if prompted to enroll in MFA."
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> Optional[datetime]:
         return None
 

@@ -211,6 +211,34 @@ class TestAPIsAndPlugins(unittest.TestCase):
             self.assertTrue(hasattr(plugin, 'plugin_id'))
             self.assertTrue(hasattr(plugin, 'fetch_data'))
             self.assertTrue(hasattr(plugin, 'interactive_login'))
+            self.assertTrue(hasattr(plugin, 'interactive_login_required'))
+            self.assertTrue(hasattr(plugin, 'show_control_modal'))
+            self.assertTrue(hasattr(plugin, 'custom_tip'))
+
+    def test_plugin_refactored_properties(self):
+        # Wyndham, BA, JetBlue, EVA should require interactive login
+        for pid in ('wyndham', 'british', 'jetblue', 'eva'):
+            plugin = plugin_manager.get_plugin(pid)
+            self.assertIsNotNone(plugin)
+            self.assertTrue(plugin.interactive_login_required, f"{pid} must require interactive login")
+            
+        # Wyndham, BA, JetBlue should NOT show control modal
+        for pid in ('wyndham', 'british', 'jetblue'):
+            plugin = plugin_manager.get_plugin(pid)
+            self.assertIsNotNone(plugin)
+            self.assertFalse(plugin.show_control_modal, f"{pid} must not show control modal")
+            
+        # Delta SkyMiles should use default properties
+        delta = plugin_manager.get_plugin('delta')
+        self.assertIsNotNone(delta)
+        self.assertFalse(delta.interactive_login_required)
+        self.assertTrue(delta.show_control_modal)
+        self.assertEqual(delta.custom_tip, "")
+        
+        # United should have custom tip
+        united = plugin_manager.get_plugin('united')
+        self.assertIsNotNone(united)
+        self.assertTrue("Don't require verification code again" in united.custom_tip)
 
     def test_plugin_default_valuations_exist(self):
         # Ensure all registered plugins have default valuations in DEFAULT_STANDARD_VALUATIONS and valuations.default.json

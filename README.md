@@ -70,6 +70,7 @@ Provides a tracking chart that shows points history over the times.
 * **Delta Air Lines** (SkyMiles)
 * **EVA Air** (Infinity Mileagelands)
 * **Japan Airlines** (JAL Mileage Bank)
+* **JetBlue** (TrueBlue)
 * **Korean Air** (SKYPASS) — *includes automatic Mileage Validity Batch & Certificate recognition*
 * **Southwest Airlines** (Rapid Rewards)
 * **United Airlines** (MileagePlus)
