@@ -116,9 +116,10 @@ class TestExpirationCalculations(unittest.TestCase):
         self.assertIsNone(calculate_expiration('national', 5000, 'Emerald Club', dt, has_exemption=False))
 
     def test_wyndham_rewards_rules(self):
-        # Wyndham expiration calculation is not supported (returns None)
+        # Wyndham expiration calculation: 18 months of account inactivity
         dt = datetime(2026, 5, 20, 10, 30, 0)
-        self.assertIsNone(calculate_expiration('wyndham', 5000, 'BLUE', dt, has_exemption=False))
+        expected = datetime(2027, 11, 20, 10, 30, 0)
+        self.assertEqual(calculate_expiration('wyndham', 5000, 'BLUE', dt, has_exemption=False), expected)
 
     def test_jetblue_rules(self):
         # JetBlue TrueBlue points never expire

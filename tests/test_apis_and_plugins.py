@@ -1903,5 +1903,113 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertEqual(status, "BLUE")
         self.assertIsNotNone(last_activity)
 
+    def test_wyndham_expiration_parsing(self):
+        plugin = plugin_manager.get_plugin('wyndham')
+        self.assertIsNotNone(plugin)
+        
+        # Hardcoded HTML snippet containing expiration date elements
+        html_content = """
+        <div class="sn-section-content">
+            <div class="sn-instruction description">
+                <p>Points expire 4 years after they are earned. You have <span class="user-expiringpoints">21</span> that will expire on <span class="points-expiration">08/31/2029</span>.</p>
+                <p>In addition, after 18 consecutive months without any account activity, all of your points will be forfeited. Be sure to stay or redeem with us by <span class="account-expiration">11/16/2027</span>.</p>
+            </div>
+        </div>
+        """
+        
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+            def get_current_url(self):
+                return "https://www.wyndhamhotels.com/wyndham-rewards/my-account/activity"
+                
+        mock_sb = MockSB(html_content)
+        expiration_date = plugin._extract_expiration(mock_sb, 100)
+        
+        # Verify the parsed expiration date is the earlier of the two (11/16/2027 vs 08/31/2029)
+        self.assertEqual(expiration_date, datetime(2027, 11, 16))
+
+        # Only account-expiration present
+        html_only_account = """
+        <div>
+            <span class="account-expiration">11/16/2027</span>
+        </div>
+        """
+        mock_sb_account = MockSB(html_only_account)
+        self.assertEqual(plugin._extract_expiration(mock_sb_account, 100), datetime(2027, 11, 16))
+
+        # Only points-expiration present
+        html_only_points = """
+        <div>
+            <span class="points-expiration">08/31/2029</span>
+        </div>
+        """
+        mock_sb_points = MockSB(html_only_points)
+        self.assertEqual(plugin._extract_expiration(mock_sb_points, 100), datetime(2029, 8, 31))
+
+        # Neither present (should fallback to 18 months from now)
+        html_neither = """<div>No expiration info</div>"""
+        mock_sb_neither = MockSB(html_neither)
+        fallback_date = plugin._extract_expiration(mock_sb_neither, 100)
+        from plugins.base import add_months
+        expected_fallback = add_months(datetime.now(), 18)
+        self.assertAlmostEqual((fallback_date - expected_fallback).total_seconds(), 0, delta=10)
+
+        # Balance <= 0 should return None
+        self.assertIsNone(plugin._extract_expiration(mock_sb, 0))
+
+        # Test MFA detection
+        from plugins.base import InteractionRequiredError
+        class MockMfaSB:
+            def __init__(self, url, html=""):
+                self.url = url
+                self.html = html
+            def get_current_url(self):
+                return self.url
+            def get_page_source(self):
+                return self.html
+                
+        # 1. Redirected off dashboard to home page
+        mock_off_dashboard = MockMfaSB("https://www.wyndhamhotels.com/wyndham-rewards")
+        with self.assertRaises(InteractionRequiredError):
+            plugin._check_mfa_or_login_required(mock_off_dashboard)
+            
+        # 2. On Okta login page
+        mock_okta = MockMfaSB("https://wyndhamrewards.okta.com/signin/register")
+        with self.assertRaises(InteractionRequiredError):
+            plugin._check_mfa_or_login_required(mock_okta)
+            
+        # 3. MFA challenge URL
+        mock_mfa_challenge = MockMfaSB("https://www.wyndhamhotels.com/wyndham-rewards/my-account/mfa-sms-challenge")
+        with self.assertRaises(InteractionRequiredError):
+            plugin._check_mfa_or_login_required(mock_mfa_challenge)
+            
+        # 4. MFA text in page content
+        mock_mfa_content = MockMfaSB("https://www.wyndhamhotels.com/wyndham-rewards/my-account", "Please enter your verification code")
+        with self.assertRaises(InteractionRequiredError):
+            plugin._check_mfa_or_login_required(mock_mfa_content)
+
+        # 5. Normal dashboard URL (no MFA)
+        mock_normal = MockMfaSB("https://www.wyndhamhotels.com/wyndham-rewards/my-account", "Welcome to your dashboard")
+        # Should not raise any exception
+        plugin._check_mfa_or_login_required(mock_normal)
+
+        # Test Earner Premier cardmember exemption detection
+        html_cardmember = """
+        <div>
+            <p>Earner Premier Cardmembers: Points do not expire while you are a cardmember, so the above does not apply.</p>
+        </div>
+        """
+        mock_sb_cardmember = MockMfaSB("https://www.wyndhamhotels.com/wyndham-rewards/my-account", html_cardmember)
+        self.assertTrue(plugin._is_cardmember_exempt(mock_sb_cardmember))
+        
+        # Test get_never_expires_reason for Wyndham
+        self.assertEqual(plugin.get_never_expires_reason("BLUE (EARNER PREMIER)"), " (Earner Premier)")
+        self.assertEqual(plugin.get_never_expires_reason("GOLD (EARNER PREMIER)"), " (Earner Premier)")
+        self.assertEqual(plugin.get_never_expires_reason("BLUE"), "")
+        self.assertEqual(plugin.get_never_expires_reason("BLUE", has_exemption=True), " (Exempt)")
+
 if __name__ == '__main__':
     unittest.main()
