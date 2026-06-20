@@ -24,11 +24,22 @@ class WyndhamPlugin(ProviderPlugin):
         return False
 
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> Optional[datetime]:
-        # Expiration calculation is not supported for Wyndham (returns None)
+        if has_exemption:
+            return None
+        if last_activity_date:
+            from plugins.base import add_months
+            return add_months(last_activity_date, 18)
         return None
 
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Points expire 4 years after they are earned. In addition, after 18 consecutive months without any account activity, all of your points will be forfeited."
+
+    def get_never_expires_reason(self, status: str, has_exemption: bool = False) -> str:
+        if has_exemption:
+            return " (Exempt)"
+        if status and "EARNER PREMIER" in status.upper():
+            return " (Earner Premier)"
+        return ""
 
     def get_consistent_user_agent(self) -> str:
         import platform
@@ -248,6 +259,135 @@ class WyndhamPlugin(ProviderPlugin):
             
         return balance, status, last_activity_date
 
+    def _check_mfa_or_login_required(self, sb) -> None:
+        url = sb.get_current_url().lower()
+        
+        # 1. Check if we are on the dashboard/activity page
+        if "/my-account" not in url:
+            raise InteractionRequiredError("Wyndham session expired or not logged in (redirected off dashboard). Interaction required.")
+            
+        # 2. Check for login/MFA keywords in URL
+        keywords = ["okta", "auth0", "/login", "/signin", "mfa-", "verify", "verification", "challenge"]
+        if any(kw in url for kw in keywords):
+            raise InteractionRequiredError("Wyndham login/MFA verification screen detected. Interaction required.")
+            
+        # 3. Check for login/MFA keywords in page source
+        try:
+            page_text = sb.get_page_source().lower()
+            mfa_indicators = [
+                "ulp-container", 
+                "okta-sign-in", 
+                "okta-form", 
+                "oktaloginscreenimpression",
+                "verify your account", 
+                "verification code", 
+                "mfa-sms-challenge", 
+                "mfa-email-challenge",
+                "mfa-voice-challenge"
+            ]
+            if any(ind in page_text for ind in mfa_indicators):
+                raise InteractionRequiredError("Wyndham login/MFA verification screen detected in page content. Interaction required.")
+        except (InteractionRequiredError, PluginError):
+            raise
+        except Exception:
+            pass
+
+    def _parse_date_string(self, text: str) -> Optional[datetime]:
+        if not text:
+            return None
+        text = text.strip()
+        for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%y"):
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+        # regex fallback
+        m = re.search(r'(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})', text)
+        if m:
+            g1, g2, g3 = m.group(1), m.group(2), m.group(3)
+            if len(g3) == 4:
+                try:
+                    return datetime(int(g3), int(g1), int(g2))
+                except ValueError:
+                    pass
+            elif len(g1) == 4:
+                try:
+                    return datetime(int(g1), int(g2), int(g3))
+                except ValueError:
+                    pass
+        return None
+
+    def _is_cardmember_exempt(self, sb) -> bool:
+        try:
+            html = sb.get_page_source().lower()
+            return "earner premier cardmembers: points do not expire while you are a cardmember" in html
+        except Exception:
+            return False
+
+    def _extract_expiration(self, sb, balance: int) -> Optional[datetime]:
+        if balance is not None and balance <= 0:
+            return None
+
+        # Parse from current page source
+        html = sb.get_page_source()
+        soup = BeautifulSoup(html, "html.parser")
+
+        account_el = soup.find(class_="account-expiration")
+        account_date = None
+        if account_el:
+            account_date = self._parse_date_string(account_el.get_text(strip=True))
+
+        points_el = soup.find(class_="points-expiration")
+        points_date = None
+        if points_el:
+            points_date = self._parse_date_string(points_el.get_text(strip=True))
+
+        if account_date or points_date:
+            if account_date and points_date:
+                return min(account_date, points_date)
+            return account_date or points_date
+
+        # If not found, let's check if we are on the activity page
+        current_url = sb.get_current_url().lower()
+        if "activity" not in current_url:
+            try:
+                print("Expiration date elements not found on dashboard. Navigating to activity subpage...")
+                sb.open("https://www.wyndhamhotels.com/wyndham-rewards/my-account/activity")
+                
+                account_date, points_date = None, None
+                for i in range(10):
+                    self._check_mfa_or_login_required(sb)
+                    html = sb.get_page_source()
+                    soup = BeautifulSoup(html, "html.parser")
+
+                    account_el = soup.find(class_="account-expiration")
+                    if account_el:
+                        account_date = self._parse_date_string(account_el.get_text(strip=True))
+
+                    points_el = soup.find(class_="points-expiration")
+                    if points_el:
+                        points_date = self._parse_date_string(points_el.get_text(strip=True))
+
+                    if account_date or points_date:
+                        break
+                    sb.sleep(1)
+
+                if account_date or points_date:
+                    if account_date and points_date:
+                        return min(account_date, points_date)
+                    return account_date or points_date
+            except (InteractionRequiredError, PluginError):
+                raise
+            except Exception as e:
+                print(f"Failed to navigate to activity page or parse: {e}")
+
+        # Fallback if both elements are not found in the HTML but balance > 0
+        if balance is not None and balance > 0:
+            from plugins.base import add_months
+            return add_months(datetime.now(), 18)
+
+        return None
+
     def _handle_cookie_banner(self, sb) -> None:
         cookie_btn = "#onetrust-accept-btn-handler"
         try:
@@ -293,15 +433,43 @@ class WyndhamPlugin(ProviderPlugin):
                     sb.open("https://www.wyndhamhotels.com/wyndham-rewards/my-account")
                     sb.sleep(5)
                 
-                # Check if we are logged in
-                balance, status, last_activity = self._extract_data(sb)
+                # Check if we are logged in with robust wait and MFA check
+                balance, status = None, None
+                for i in range(10):
+                    self._check_mfa_or_login_required(sb)
+                    balance, status, last_activity = self._extract_data(sb)
+                    if balance is not None:
+                        break
+                    sb.sleep(1)
+                
                 if balance is None:
                     raise InteractionRequiredError("Wyndham session expired or not logged in. Interaction required.")
                     
                 result["balance"] = balance
+                
+                # Check cardmember status on dashboard
+                if self._is_cardmember_exempt(sb):
+                    if status and "EARNER PREMIER" not in status:
+                        status = f"{status} (EARNER PREMIER)"
+                        
+                # Extract expiration date
+                expiration_date = self._extract_expiration(sb, balance)
+                
+                # Check cardmember status on whichever page we ended up on (dashboard or activity)
+                if self._is_cardmember_exempt(sb):
+                    if status and "EARNER PREMIER" not in status:
+                        status = f"{status} (EARNER PREMIER)"
+                    expiration_date = None
+                    
                 if status:
                     result["status"] = status
-                result["last_activity_date"] = last_activity
+                if expiration_date:
+                    result["expiration_date"] = expiration_date.strftime("%Y-%m-%dT%H:%M:%S")
+                else:
+                    result["expiration_date"] = None
+                
+                # Set last_activity_date to None so app.py doesn't overwrite computed_expiration
+                result["last_activity_date"] = None
                 
                 if profile_dir:
                     try:
@@ -354,7 +522,7 @@ class WyndhamPlugin(ProviderPlugin):
         print("Chrome closed by user. Starting background session to parse balance and save cookies...")
         
         agent = self.get_consistent_user_agent()
-        with SB(uc=True, headless=True, user_data_dir=profile_dir, agent=agent) as sb:
+        with SB(uc=True, headless=False, user_data_dir=profile_dir, agent=agent) as sb:
             try:
                 sb.uc_open_with_reconnect("https://www.wyndhamhotels.com/wyndham-rewards/my-account", 4)
                 sb.sleep(5)
@@ -363,9 +531,21 @@ class WyndhamPlugin(ProviderPlugin):
 
             self._handle_cookie_banner(sb)
 
-            balance, status, last_activity = self._extract_data(sb)
+            balance, status = None, None
+            for i in range(10):
+                self._check_mfa_or_login_required(sb)
+                balance, status, last_activity = self._extract_data(sb)
+                if balance is not None:
+                    break
+                sb.sleep(1)
+                
             if balance is None:
                 raise PluginError("Failed to extract account details after interactive login. Please check if you signed in successfully.")
+
+            # Check if user is a cardmember
+            if self._is_cardmember_exempt(sb):
+                if status and "EARNER PREMIER" not in status:
+                    status = f"{status} (EARNER PREMIER)"
 
             if profile_dir:
                 try:
