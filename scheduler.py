@@ -170,7 +170,10 @@ def sync_all_accounts(is_scheduled=True):
                 
                 # Sync certificates/coupons if present in parsed data
                 if 'certificates' in data:
-                    Certificate.query.filter_by(account_id=account.id).delete()
+                    scraped_certs = Certificate.query.filter_by(account_id=account.id).all()
+                    for c in scraped_certs:
+                        if not c.details.get('is_custom'):
+                            db.session.delete(c)
                     for cert_data in data.get('certificates', []):
                         exp_date_str = cert_data.get('expiration_date')
                         exp_date = None

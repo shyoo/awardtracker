@@ -345,11 +345,20 @@
                 <li class="py-2 {% if not loop.first %}pt-2{% endif %} flex items-center justify-between text-xs">
                   <div class="flex flex-col gap-0.5">
                     <span class="font-bold text-slate-800">{{ cert.name }}</span>
+                    {% set details_list = [] %}
                     {% if cert.details %}
-                    <span class="text-[10px] text-slate-500 font-mono">
+                      {% if cert.details.get('is_custom') %}
+                        {% set _ = details_list.append("Custom Certificate & Voucher") %}
+                      {% endif %}
                       {% for k, v in cert.details.items() %}
-                        {{ k }}: {{ v }}{% if not loop.last %} | {% endif %}
+                        {% if k != 'is_custom' and v %}
+                          {% set _ = details_list.append(k ~ ": " ~ v) %}
+                        {% endif %}
                       {% endfor %}
+                    {% endif %}
+                    {% if details_list %}
+                    <span class="text-[10px] text-slate-500 font-mono">
+                      {{ details_list | join(' | ') }}
                     </span>
                     {% endif %}
                   </div>

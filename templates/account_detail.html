@@ -120,17 +120,17 @@
         {% elif account.expiration_status == 'critical' %}
         <div class="flex items-center justify-between">
           <span class="text-lg font-bold text-rose-600 animate-pulse">Critical</span>
-          <span class="custom-tooltip inline-flex items-center rounded-md bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800 ring-1 ring-inset ring-rose-600/20 animate-pulse" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">{{ format_time_remaining(account.days_left) }}</span>
+          <span class="custom-tooltip inline-flex items-center rounded-md bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800 ring-1 ring-inset ring-rose-600/20 animate-pulse" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">{{ account.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(account.days_left) }})</span>
         </div>
         {% elif account.expiration_status == 'warning' %}
         <div class="flex items-center justify-between">
           <span class="text-lg font-bold text-amber-600">Warning</span>
-          <span class="custom-tooltip inline-flex items-center rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">{{ format_time_remaining(account.days_left) }}</span>
+          <span class="custom-tooltip inline-flex items-center rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">{{ account.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(account.days_left) }})</span>
         </div>
         {% elif account.expiration_status == 'safe' %}
         <div class="flex items-center justify-between">
           <span class="text-lg font-bold text-emerald-600">Safe</span>
-          <span class="custom-tooltip inline-flex items-center rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 ring-1 ring-inset ring-emerald-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">{{ format_time_remaining(account.days_left) }}</span>
+          <span class="custom-tooltip inline-flex items-center rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 ring-1 ring-inset ring-emerald-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">{{ account.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(account.days_left) }})</span>
         </div>
         {% else %}
         <div class="flex items-center justify-between">
@@ -298,46 +298,88 @@
     {% endif %}
 
     <!-- Active Certificates and Vouchers -->
-    <div class="rounded-xl bg-white p-6 shadow-sm border border-slate-100">
-      <h3 class="text-sm font-bold leading-6 text-slate-700 border-b border-slate-100 pb-4 mb-4">Vouchers & Certificates</h3>
+    <div class="rounded-xl bg-white p-6 shadow-sm border border-slate-100 mt-6">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+        <h3 class="text-sm font-bold leading-6 text-slate-700">Vouchers & Certificates</h3>
+        <button onclick="openAddCertificateModal()" class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-blue-500 transition-colors">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          Add Custom Voucher
+        </button>
+      </div>
       <div class="flow-root">
-        {% if account.provider.plugin_name != 'korean' %}
-        {# Voucher/coupon scraping is only supported for Korean Air SKYPASS #}
-        <div class="rounded-xl bg-amber-50 border border-amber-100 p-4 flex items-start gap-3">
+        {# Show warning only if there are no certificates at all AND it's not Korean Air #}
+        {% if not certificates and account.provider.plugin_name != 'korean' %}
+        <div class="rounded-xl bg-amber-50 border border-amber-100 p-4 flex items-start gap-3 mb-4">
           <svg class="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
           </svg>
           <div>
-            <p class="text-sm font-semibold text-amber-800">Not Supported for {{ account.program_name }}</p>
-            <p class="mt-1 text-xs text-amber-700">Voucher, coupon, and free-night certificate scraping is not currently supported for this program. Only <strong>Korean Air SKYPASS</strong> supports automatic certificate recognition.</p>
+            <p class="text-sm font-semibold text-amber-800">Scraping Not Supported for {{ account.program_name }}</p>
+            <p class="mt-1 text-xs text-amber-700">Voucher, coupon, and free-night certificate scraping is not automatically supported for this program. However, you can track them manually by clicking "Add Custom Voucher".</p>
           </div>
         </div>
-        {% else %}
+        {% endif %}
+        
         <ul role="list" class="-my-5 divide-y divide-slate-100">
           {% for cert in certificates %}
           <li class="py-5">
             <div class="flex items-center justify-between">
               <div class="flex flex-col gap-1">
                 <span class="text-sm font-bold text-slate-900">{{ cert.name }}</span>
+                {% set details_list = [] %}
                 {% if cert.details %}
-                <span class="text-xs text-slate-500 font-mono">
+                  {% if cert.details.get('is_custom') %}
+                    {% set _ = details_list.append("Custom Certificate & Voucher") %}
+                  {% endif %}
                   {% for k, v in cert.details.items() %}
-                    {{ k }}: {{ v }}{% if not loop.last %} | {% endif %}
+                    {% if k != 'is_custom' and v %}
+                      {% set _ = details_list.append(k ~ ": " ~ v) %}
+                    {% endif %}
                   {% endfor %}
+                {% endif %}
+                {% if details_list %}
+                <span class="text-xs text-slate-500 font-mono">
+                  {{ details_list | join(' | ') }}
                 </span>
                 {% endif %}
               </div>
-              <div class="flex flex-col items-end gap-1">
-                {% if cert.expiration_status == 'expired' %}
-                <span class="inline-flex items-center rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-800 ring-1 ring-inset ring-rose-600/20">Expired: {{ cert.expiration_date.strftime('%Y-%m-%d') }}</span>
-                {% elif cert.expiration_status == 'critical' %}
-                <span class="inline-flex items-center rounded-md bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800 ring-1 ring-inset ring-rose-600/20 animate-pulse">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(cert.days_left) }})</span>
-                {% elif cert.expiration_status == 'warning' %}
-                <span class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-600/20">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(cert.days_left) }})</span>
-                {% elif cert.expiration_status == 'safe' %}
-                <span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-600/20">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(cert.days_left) }})</span>
-                {% else %}
-                <span class="inline-flex items-center rounded-md bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 ring-1 ring-inset ring-green-600/20">Active</span>
+              <div class="flex items-center gap-3">
+                <div class="flex flex-col items-end gap-1">
+                  {% if cert.expiration_status == 'expired' %}
+                  <span class="inline-flex items-center rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-800 ring-1 ring-inset ring-rose-600/20">Expired: {{ cert.expiration_date.strftime('%Y-%m-%d') }}</span>
+                  {% elif cert.expiration_status == 'critical' %}
+                  <span class="inline-flex items-center rounded-md bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800 ring-1 ring-inset ring-rose-600/20 animate-pulse">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(cert.days_left) }})</span>
+                  {% elif cert.expiration_status == 'warning' %}
+                  <span class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-600/20">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(cert.days_left) }})</span>
+                  {% elif cert.expiration_status == 'safe' %}
+                  <span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-600/20">Expires: {{ cert.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(cert.days_left) }})</span>
+                  {% else %}
+                  <span class="inline-flex items-center rounded-md bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 ring-1 ring-inset ring-green-600/20">Active</span>
+                  {% endif %}
+                </div>
+                {% if cert.details.get('is_custom') %}
+                <div class="flex items-center gap-1.5">
+                  <button type="button" 
+                          data-id="{{ cert.id }}" 
+                          data-name="{{ cert.name }}" 
+                          data-date="{% if cert.expiration_date %}{{ cert.expiration_date.strftime('%Y-%m-%d') }}{% endif %}" 
+                          data-code="{{ cert.details.get('code', '') }}" 
+                          data-desc="{{ cert.details.get('description', '') }}" 
+                          onclick="openEditCertificateModal(this)"
+                          class="text-indigo-500 hover:text-indigo-700 transition-colors p-1" 
+                          title="Edit custom voucher">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" />
+                    </svg>
+                  </button>
+                  <form action="{{ url_for('delete_certificate', certificate_id=cert.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this custom certificate?');" class="inline">
+                    <button type="submit" class="text-rose-500 hover:text-rose-700 transition-colors p-1" title="Delete custom voucher">
+                      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                      </svg>
+                    </button>
+                  </form>
+                </div>
                 {% endif %}
               </div>
             </div>
@@ -351,7 +393,6 @@
           </li>
           {% endfor %}
         </ul>
-        {% endif %}
       </div>
     </div>
   </div>
@@ -599,8 +640,57 @@
     }
   }
 
+  function openAddCertificateModal() {
+    const modal = document.getElementById('addCertificateModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  function closeAddCertificateModal() {
+    const modal = document.getElementById('addCertificateModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+  }
+
+  function openEditCertificateModal(btn) {
+    const modal = document.getElementById('editCertificateModal');
+    const form = document.getElementById('editCertificateForm');
+    if (!modal || !form || !btn) return;
+
+    const certId = btn.getAttribute('data-id');
+    const name = btn.getAttribute('data-name');
+    const date = btn.getAttribute('data-date');
+    const code = btn.getAttribute('data-code');
+    const desc = btn.getAttribute('data-desc');
+
+    form.action = `/certificates/${certId}/edit`;
+    document.getElementById('edit-cert-name').value = name || '';
+    document.getElementById('edit-cert-date').value = date || '';
+    document.getElementById('edit-cert-code').value = code || '';
+    document.getElementById('edit-cert-desc').value = desc || '';
+
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeEditCertificateModal() {
+    const modal = document.getElementById('editCertificateModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+  }
+
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeUpdateBalanceModal();
+    if (e.key === 'Escape') {
+      closeUpdateBalanceModal();
+      closeAddCertificateModal();
+      closeEditCertificateModal();
+    }
   });
 </script>
 
@@ -644,6 +734,21 @@
                      value="{{ account.balance }}"
                      class="block w-full rounded-xl border-0 py-3 px-4 text-slate-900 text-lg font-bold shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500">
             </div>
+            
+            <div>
+              <label for="detail-expiration-input" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Custom Expiration Date <span class="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <div class="relative flex items-center">
+                <input type="date" id="detail-expiration-input" name="expiration_date"
+                       value="{% if account.expiration_date %}{{ account.expiration_date.strftime('%Y-%m-%d') }}{% endif %}"
+                       class="block w-full rounded-xl border-0 py-3 px-4 pr-16 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500">
+                <button type="button" onclick="document.getElementById('detail-expiration-input').value = ''"
+                        class="absolute right-2 px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors">
+                  Clear
+                </button>
+              </div>
+            </div>
           </div>
           <div class="px-6 pb-5 flex justify-end gap-3">
             <button type="button" onclick="closeUpdateBalanceModal()" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors">Cancel</button>
@@ -660,5 +765,167 @@
   </div>
 </div>
 {% endif %}
+
+<!-- Add Certificate Modal -->
+<div id="addCertificateModal" class="relative z-50 hidden" role="dialog" aria-modal="true">
+  <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="closeAddCertificateModal()"></div>
+  <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="relative transform overflow-hidden rounded-2xl bg-white shadow-2xl w-full max-w-md animate-in fade-in zoom-in duration-200">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="rounded-xl bg-white/20 p-2">
+                <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-white">Add Custom Voucher</h3>
+                <p class="text-xs text-indigo-200">{{ account.program_name }}</p>
+              </div>
+            </div>
+            <button onclick="closeAddCertificateModal()" class="rounded-lg p-1.5 text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+        <!-- Form Body -->
+        <form action="{{ url_for('add_certificate', account_id=account.id) }}" method="POST">
+          <div class="px-6 py-5 space-y-4">
+            <div>
+              <label for="add-cert-name" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Voucher Name / Description <span class="text-rose-500">*</span>
+              </label>
+              <input type="text" id="add-cert-name" name="name" required placeholder="e.g. $250 Travel Voucher"
+                     class="block w-full rounded-xl border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm">
+            </div>
+            
+            <div>
+              <label for="add-cert-date" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Expiration Date <span class="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <div class="relative flex items-center">
+                <input type="date" id="add-cert-date" name="expiration_date"
+                       class="block w-full rounded-xl border-0 py-2.5 px-4 pr-16 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm">
+                <button type="button" onclick="document.getElementById('add-cert-date').value = ''"
+                        class="absolute right-2 px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors">
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label for="add-cert-code" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Code / Certificate Number <span class="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <input type="text" id="add-cert-code" name="code" placeholder="e.g. CERT12345"
+                     class="block w-full rounded-xl border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm">
+            </div>
+
+            <div>
+              <label for="add-cert-desc" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Additional Notes <span class="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <textarea id="add-cert-desc" name="description" rows="2" placeholder="e.g. Terms, restrictions, etc."
+                        class="block w-full rounded-xl border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm"></textarea>
+            </div>
+          </div>
+          <div class="px-6 pb-5 flex justify-end gap-3">
+            <button type="button" onclick="closeAddCertificateModal()" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors">Cancel</button>
+            <button type="submit" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+              <span class="flex items-center gap-1.5">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                Add Voucher
+              </span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Certificate Modal -->
+<div id="editCertificateModal" class="relative z-50 hidden" role="dialog" aria-modal="true">
+  <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="closeEditCertificateModal()"></div>
+  <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="relative transform overflow-hidden rounded-2xl bg-white shadow-2xl w-full max-w-md animate-in fade-in zoom-in duration-200">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="rounded-xl bg-white/20 p-2">
+                <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-white">Edit Custom Voucher</h3>
+                <p class="text-xs text-indigo-200">{{ account.program_name }}</p>
+              </div>
+            </div>
+            <button onclick="closeEditCertificateModal()" class="rounded-lg p-1.5 text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+        <!-- Form Body -->
+        <form id="editCertificateForm" action="" method="POST">
+          <div class="px-6 py-5 space-y-4">
+            <div>
+              <label for="edit-cert-name" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Voucher Name / Description <span class="text-rose-500">*</span>
+              </label>
+              <input type="text" id="edit-cert-name" name="name" required
+                     class="block w-full rounded-xl border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm">
+            </div>
+            
+            <div>
+              <label for="edit-cert-date" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Expiration Date <span class="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <div class="relative flex items-center">
+                <input type="date" id="edit-cert-date" name="expiration_date"
+                       class="block w-full rounded-xl border-0 py-2.5 px-4 pr-16 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm">
+                <button type="button" onclick="document.getElementById('edit-cert-date').value = ''"
+                        class="absolute right-2 px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors">
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label for="edit-cert-code" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Code / Certificate Number <span class="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <input type="text" id="edit-cert-code" name="code"
+                     class="block w-full rounded-xl border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm">
+            </div>
+
+            <div>
+              <label for="edit-cert-desc" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Additional Notes <span class="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <textarea id="edit-cert-desc" name="description" rows="2"
+                        class="block w-full rounded-xl border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm"></textarea>
+            </div>
+          </div>
+          <div class="px-6 pb-5 flex justify-end gap-3">
+            <button type="button" onclick="closeEditCertificateModal()" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors">Cancel</button>
+            <button type="submit" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+              <span class="flex items-center gap-1.5">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                Save Changes
+              </span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% endblock %}
