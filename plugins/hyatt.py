@@ -17,6 +17,10 @@ class WorldofHyattPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "hyatt"
 
+    @property
+    def default_cpp(self) -> float:
+        return 2.3
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
         from .base import add_months
         return add_months(last_activity_date, 24)

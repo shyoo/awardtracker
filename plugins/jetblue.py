@@ -36,6 +36,10 @@ class JetBluePlugin(ProviderPlugin):
         return "jetblue"
 
     @property
+    def default_cpp(self) -> float:
+        return 1.3
+
+    @property
     def interactive_login_required(self) -> bool:
         return True
 

@@ -493,6 +493,12 @@ class ProviderPlugin(ABC):
         pass
 
     @property
+    @abstractmethod
+    def default_cpp(self) -> float:
+        """Default cents-per-point (CPP) valuation for this rewards program."""
+        pass
+
+    @property
     def interactive_login_required(self) -> bool:
         """
         Whether this plugin always requires interactive login on first/new sign-ins.

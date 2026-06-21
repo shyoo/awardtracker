@@ -22,6 +22,10 @@ class JAPANAirlinesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "jal"
 
+    @property
+    def default_cpp(self) -> float:
+        return 1.4
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
         return last_activity_date
 

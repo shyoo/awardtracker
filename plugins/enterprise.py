@@ -15,6 +15,10 @@ class EnterprisePlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "enterprise"
 
+    @property
+    def default_cpp(self) -> float:
+        return 1.0
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> Optional[datetime]:
         # Expiration check is not implemented for Enterprise (returns None)
         return None

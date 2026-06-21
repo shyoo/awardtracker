@@ -15,6 +15,10 @@ class AmericanAirlinesPlugin(ProviderPlugin):
         return "american"
 
     @property
+    def default_cpp(self) -> float:
+        return 1.5
+
+    @property
     def custom_tip(self) -> str:
         return "Check your email or phone for the <strong>\"Verification Code\"</strong>."
 

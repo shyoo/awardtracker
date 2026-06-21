@@ -16,6 +16,10 @@ class CaesarsRewardsPlugin(ProviderPlugin):
         return "caesars"
 
     @property
+    def default_cpp(self) -> float:
+        return 1.0
+
+    @property
     def custom_tip(self) -> str:
         return "Click the 'Maybe Later' button if prompted to enroll in MFA."
 

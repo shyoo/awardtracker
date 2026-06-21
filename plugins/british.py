@@ -36,6 +36,10 @@ class BritishAirwaysPlugin(ProviderPlugin):
         return "british"
 
     @property
+    def default_cpp(self) -> float:
+        return 1.5
+
+    @property
     def interactive_login_required(self) -> bool:
         return True
 

@@ -18,6 +18,10 @@ class AirCanadaPlugin(ProviderPlugin):
         return "aircanada"
 
     @property
+    def default_cpp(self) -> float:
+        return 1.4
+
+    @property
     def custom_tip(self) -> str:
         return "Complete any verification or security prompts if requested by Air Canada."
 

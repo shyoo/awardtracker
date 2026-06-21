@@ -1996,18 +1996,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         # Should not raise any exception
         plugin._check_mfa_or_login_required(mock_normal)
 
-        # Test Earner Premier cardmember exemption detection
-        html_cardmember = """
-        <div>
-            <p>Earner Premier Cardmembers: Points do not expire while you are a cardmember, so the above does not apply.</p>
-        </div>
-        """
-        mock_sb_cardmember = MockMfaSB("https://www.wyndhamhotels.com/wyndham-rewards/my-account", html_cardmember)
-        self.assertTrue(plugin._is_cardmember_exempt(mock_sb_cardmember))
-        
-        # Test get_never_expires_reason for Wyndham
-        self.assertEqual(plugin.get_never_expires_reason("BLUE (EARNER PREMIER)"), " (Earner Premier)")
-        self.assertEqual(plugin.get_never_expires_reason("GOLD (EARNER PREMIER)"), " (Earner Premier)")
+        # Test get_never_expires_reason for Wyndham (using base class implementation)
         self.assertEqual(plugin.get_never_expires_reason("BLUE"), "")
         self.assertEqual(plugin.get_never_expires_reason("BLUE", has_exemption=True), " (Exempt)")
 

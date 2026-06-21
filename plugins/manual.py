@@ -45,6 +45,10 @@ class ChaseUltimateRewardsPlugin(_ManualBase):
     def plugin_id(self) -> str:
         return "chase"
 
+    @property
+    def default_cpp(self) -> float:
+        return 2.05
+
 
 class AmexMembershipRewardsPlugin(_ManualBase):
     @property
@@ -54,6 +58,10 @@ class AmexMembershipRewardsPlugin(_ManualBase):
     @property
     def plugin_id(self) -> str:
         return "amex"
+
+    @property
+    def default_cpp(self) -> float:
+        return 2.0
 
 
 class CitiThankYouPlugin(_ManualBase):
@@ -65,6 +73,10 @@ class CitiThankYouPlugin(_ManualBase):
     def plugin_id(self) -> str:
         return "citi"
 
+    @property
+    def default_cpp(self) -> float:
+        return 1.9
+
 
 class CapitalOneMilesPlugin(_ManualBase):
     @property
@@ -74,6 +86,10 @@ class CapitalOneMilesPlugin(_ManualBase):
     @property
     def plugin_id(self) -> str:
         return "capitalone"
+
+    @property
+    def default_cpp(self) -> float:
+        return 1.85
 
 
 class WellsFargoRewardsPlugin(_ManualBase):
@@ -85,6 +101,10 @@ class WellsFargoRewardsPlugin(_ManualBase):
     def plugin_id(self) -> str:
         return "wellsfargo"
 
+    @property
+    def default_cpp(self) -> float:
+        return 0.9
+
 
 class BiltRewardsPlugin(_ManualBase):
     @property
@@ -94,6 +114,10 @@ class BiltRewardsPlugin(_ManualBase):
     @property
     def plugin_id(self) -> str:
         return "bilt"
+
+    @property
+    def default_cpp(self) -> float:
+        return 1.25
 
 
 # ---------------------------------------------------------------------------
@@ -108,3 +132,7 @@ class ManualEntryPlugin(_ManualBase):
     @property
     def plugin_id(self) -> str:
         return "manual"
+
+    @property
+    def default_cpp(self) -> float:
+        return 1.0

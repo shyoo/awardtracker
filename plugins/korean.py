@@ -17,6 +17,10 @@ class KoreanAirPlugin(ProviderPlugin):
         return "korean"
 
     @property
+    def default_cpp(self) -> float:
+        return 1.8
+
+    @property
     def custom_tip(self) -> str:
         return "After a successful sign-in, please wait a few seconds for the application to automatically redirect to your mileage overview page, or navigate to <strong>My Mileage > Overview</strong> manually if needed."
 

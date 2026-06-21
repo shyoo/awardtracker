@@ -59,37 +59,8 @@ def save_valuations(valuations):
         return False
 
 DEFAULT_STANDARD_VALUATIONS = {
-    'marriott': {'name': 'Marriott Bonvoy', 'cpp': 0.8},
-    'hyatt': {'name': 'World of Hyatt', 'cpp': 2.3},
-    'hilton': {'name': 'Hilton Honors', 'cpp': 0.6},
-    'ihg': {'name': 'IHG One Rewards', 'cpp': 0.8},
-    'caesars': {'name': 'Caesars Rewards', 'cpp': 1.0},
-    'hertz': {'name': 'Hertz Gold+ Rewards', 'cpp': 1.0},
-    'enterprise': {'name': 'Enterprise Plus', 'cpp': 1.0},
-    'national': {'name': 'National Emerald Club', 'cpp': 1.0},
-    'wyndham': {'name': 'Wyndham Rewards', 'cpp': 0.7},
-    'american': {'name': 'American Airlines AAdvantage', 'cpp': 1.5},
-    'united': {'name': 'United Airlines MileagePlus', 'cpp': 1.2},
-    'delta': {'name': 'Delta SkyMiles', 'cpp': 1.2},
-    'korean': {'name': 'Korean Air Skypass', 'cpp': 1.8},
-    'alaska': {'name': 'Alaska Airlines Mileage Plan', 'cpp': 1.4},
-    'southwest': {'name': 'Southwest Rapid Rewards', 'cpp': 1.3},
-    'virgin': {'name': 'Virgin Atlantic Flying Club', 'cpp': 1.2},
-    'british': {'name': 'British Airways Executive Club', 'cpp': 1.5},
-    'jetblue': {'name': 'JetBlue TrueBlue', 'cpp': 1.3},
-    'aircanada': {'name': 'Air Canada Aeroplan', 'cpp': 1.4},
-    'avianca': {'name': 'Avianca LifeMiles', 'cpp': 1.2},
-    'asiana': {'name': 'Asiana Club', 'cpp': 1.4},
-    'jal': {'name': 'JAL Mileage Bank', 'cpp': 1.4},
-    'ana': {'name': 'ANA Mileage Club', 'cpp': 1.5},
-    'eva': {'name': 'EVA Air', 'cpp': 1.4},
-    'chase': {'name': 'Chase Ultimate Rewards', 'cpp': 2.05},
-    'amex': {'name': 'Amex Membership Rewards', 'cpp': 2.0},
-    'citi': {'name': 'Citi ThankYou Rewards', 'cpp': 1.9},
-    'capitalone': {'name': 'Capital One Miles', 'cpp': 1.85},
-    'wellsfargo': {'name': 'Wells Fargo Rewards', 'cpp': 0.9},
-    'bilt': {'name': 'Bilt Rewards', 'cpp': 1.25},
-    'manual': {'name': 'Custom Program Entry', 'cpp': 1.0}
+    plugin.plugin_id: {'name': plugin.name, 'cpp': plugin.default_cpp}
+    for plugin in plugin_manager.get_all_plugins()
 }
 
 
@@ -1286,11 +1257,7 @@ def create_app(config_class=Config):
 
     @app.route('/settings', methods=['GET', 'POST'])
     def settings():
-        STANDARD_VALUATION_KEYS = {
-            'marriott', 'hyatt', 'hilton', 'ihg', 'caesars', 'hertz', 'enterprise', 'american', 'united', 'delta',
-            'korean', 'alaska', 'southwest', 'virgin', 'british', 'jetblue', 'aircanada', 'avianca',
-            'asiana', 'jal', 'ana', 'eva', 'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
-        }
+        STANDARD_VALUATION_KEYS = set(plugin_manager.plugins.keys())
 
         if request.method == 'POST':
             form_id = request.form.get('form_id')
@@ -1465,11 +1432,7 @@ def create_app(config_class=Config):
         standard_valuations = []
         custom_valuations = []
         
-        ordered_standard_keys = [
-            'american', 'united', 'delta', 'southwest', 'alaska', 'korean', 'asiana', 'jal', 'ana', 'eva',
-            'virgin', 'british', 'jetblue', 'aircanada', 'avianca', 'marriott', 'hyatt', 'hilton', 'ihg', 'caesars', 'hertz', 'enterprise', 
-            'chase', 'amex', 'citi', 'capitalone', 'wellsfargo', 'bilt', 'manual'
-        ]
+        ordered_standard_keys = list(plugin_manager.plugins.keys())
         
         for key in ordered_standard_keys:
             val = valuations.get(key, {})

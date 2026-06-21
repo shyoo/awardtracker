@@ -12,6 +12,10 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "delta"
 
+    @property
+    def default_cpp(self) -> float:
+        return 1.2
+
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Miles in this program never expire."
 

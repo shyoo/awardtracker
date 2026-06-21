@@ -14,6 +14,10 @@ class UnitedAirlinesPlugin(ProviderPlugin):
         return "united"
 
     @property
+    def default_cpp(self) -> float:
+        return 1.2
+
+    @property
     def custom_tip(self) -> str:
         return "Check the checkbox for <strong>\"Don't require verification code again.\"</strong> to prevent future MFA prompts."
 
