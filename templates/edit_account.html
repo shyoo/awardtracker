@@ -52,6 +52,19 @@
           </div>
         </div>
         {% endif %}
+
+        <!-- Custom Expiration Date -->
+        <div class="mt-4">
+          <label for="expiration_date" class="block text-sm font-semibold text-slate-700">Custom Expiration Date <span class="text-slate-400">(Optional)</span></label>
+          <p class="mt-1 text-xs text-slate-400">Specify an expiration date if you want to track when your points/miles expire.</p>
+          <div class="mt-2 relative flex items-center">
+            <input type="date" name="expiration_date" id="expiration_date" value="{% if account.expiration_date %}{{ account.expiration_date.strftime('%Y-%m-%d') }}{% endif %}" class="block w-full rounded-lg border border-slate-200 px-3 py-2 pr-16 text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+            <button type="button" onclick="document.getElementById('expiration_date').value = ''"
+                    class="absolute right-2 px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors">
+              Clear
+            </button>
+          </div>
+        </div>
       {% else %}
       <!-- Username -->
       <div>

@@ -684,6 +684,14 @@ def create_app(config_class=Config):
                     if custom_program_name:
                         metadata['custom_program_name'] = custom_program_name
 
+                    expiration_date_str = request.form.get('expiration_date')
+                    expiration_date = None
+                    if expiration_date_str:
+                        try:
+                            expiration_date = datetime.strptime(expiration_date_str, '%Y-%m-%d')
+                        except (ValueError, TypeError):
+                            pass
+
                     account = Account(
                         provider_id=provider_id,
                         person_id=person_id if person_id else None,
@@ -692,6 +700,7 @@ def create_app(config_class=Config):
                         has_exemption=has_exemption,
                         is_manual=True,
                         balance=initial_balance,
+                        expiration_date=expiration_date if not has_exemption else None,
                         last_fetch_status='SUCCESS',
                         last_updated=datetime.utcnow()
                     )
@@ -773,6 +782,20 @@ def create_app(config_class=Config):
             return redirect(url_for('account_detail', account_id=account_id))
 
         account.balance = new_balance
+
+        # Parse and update expiration date
+        expiration_date_str = request.form.get('expiration_date')
+        if expiration_date_str:
+            try:
+                account.expiration_date = datetime.strptime(expiration_date_str, '%Y-%m-%d')
+            except (ValueError, TypeError):
+                pass
+        else:
+            account.expiration_date = None
+            
+        if account.has_exemption:
+            account.expiration_date = None
+
         account.last_updated = datetime.utcnow()
         account.last_fetch_status = 'SUCCESS'
         account.last_error = None
@@ -891,7 +914,10 @@ def create_app(config_class=Config):
             
             # Sync certificates/coupons if present in parsed data
             if 'certificates' in data:
-                Certificate.query.filter_by(account_id=account.id).delete()
+                scraped_certs = Certificate.query.filter_by(account_id=account.id).all()
+                for c in scraped_certs:
+                    if not c.details.get('is_custom'):
+                        db.session.delete(c)
                 for cert_data in data.get('certificates', []):
                     exp_date_str = cert_data.get('expiration_date')
                     exp_date = None
@@ -997,7 +1023,10 @@ def create_app(config_class=Config):
             
             # Sync certificates/coupons if present in parsed data
             if 'certificates' in data:
-                Certificate.query.filter_by(account_id=account.id).delete()
+                scraped_certs = Certificate.query.filter_by(account_id=account.id).all()
+                for c in scraped_certs:
+                    if not c.details.get('is_custom'):
+                        db.session.delete(c)
                 for cert_data in data.get('certificates', []):
                     exp_date_str = cert_data.get('expiration_date')
                     exp_date = None
@@ -1199,6 +1228,15 @@ def create_app(config_class=Config):
                 account.username = username
                 account.has_exemption = has_exemption
                 account.extra_metadata = metadata
+                if account.is_manual:
+                    expiration_date_str = request.form.get('expiration_date')
+                    if expiration_date_str:
+                        try:
+                            account.expiration_date = datetime.strptime(expiration_date_str, '%Y-%m-%d')
+                        except (ValueError, TypeError):
+                            pass
+                    else:
+                        account.expiration_date = None
                 if has_exemption:
                     account.expiration_date = None
                 
@@ -1694,6 +1732,75 @@ def create_app(config_class=Config):
                 app_log.info("Startup self-healing: Reset stuck scheduled sync status to 'idle'.")
     except Exception as e:
         app_log.error(f"Startup self-healing sync status reset failed: {e}")
+
+    @app.route('/accounts/<int:account_id>/certificates/add', methods=['POST'])
+    def add_certificate(account_id):
+        account = Account.query.get_or_404(account_id)
+        name = request.form.get('name')
+        if not name:
+            flash('Certificate name is required.')
+            return redirect(url_for('account_detail', account_id=account.id))
+            
+        expiration_date_str = request.form.get('expiration_date')
+        expiration_date = None
+        if expiration_date_str:
+            try:
+                expiration_date = datetime.strptime(expiration_date_str, '%Y-%m-%d')
+            except (ValueError, TypeError):
+                pass
+                
+        details = {
+            'is_custom': True,
+            'code': request.form.get('code', ''),
+            'description': request.form.get('description', '')
+        }
+        
+        cert = Certificate(
+            account_id=account.id,
+            name=name,
+            expiration_date=expiration_date,
+            details=details
+        )
+        db.session.add(cert)
+        db.session.commit()
+        flash('Custom certificate/voucher added successfully.')
+        return redirect(url_for('account_detail', account_id=account.id))
+
+    @app.route('/certificates/<int:certificate_id>/edit', methods=['POST'])
+    def edit_certificate(certificate_id):
+        cert = Certificate.query.get_or_404(certificate_id)
+        name = request.form.get('name')
+        if not name:
+            flash('Certificate name is required.')
+            return redirect(url_for('account_detail', account_id=cert.account_id))
+            
+        expiration_date_str = request.form.get('expiration_date')
+        expiration_date = None
+        if expiration_date_str:
+            try:
+                expiration_date = datetime.strptime(expiration_date_str, '%Y-%m-%d')
+            except (ValueError, TypeError):
+                pass
+                
+        cert.name = name
+        cert.expiration_date = expiration_date
+        cert.details = {
+            'is_custom': True,
+            'code': request.form.get('code', ''),
+            'description': request.form.get('description', '')
+        }
+        db.session.commit()
+        flash('Custom certificate/voucher updated successfully.')
+        return redirect(url_for('account_detail', account_id=cert.account_id))
+
+    @app.route('/certificates/<int:certificate_id>/delete', methods=['POST'])
+    def delete_certificate(certificate_id):
+        cert = Certificate.query.get_or_404(certificate_id)
+        account_id = cert.account_id
+        db.session.delete(cert)
+        db.session.commit()
+        flash('Custom certificate/voucher deleted successfully.')
+        return redirect(url_for('account_detail', account_id=account_id))
 
     return app
 
