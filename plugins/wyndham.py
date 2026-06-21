@@ -16,6 +16,10 @@ class WyndhamPlugin(ProviderPlugin):
         return "wyndham"
 
     @property
+    def default_cpp(self) -> float:
+        return 0.7
+
+    @property
     def interactive_login_required(self) -> bool:
         return True
 
@@ -33,13 +37,6 @@ class WyndhamPlugin(ProviderPlugin):
 
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Points expire 4 years after they are earned. In addition, after 18 consecutive months without any account activity, all of your points will be forfeited."
-
-    def get_never_expires_reason(self, status: str, has_exemption: bool = False) -> str:
-        if has_exemption:
-            return " (Exempt)"
-        if status and "EARNER PREMIER" in status.upper():
-            return " (Earner Premier)"
-        return ""
 
     def get_consistent_user_agent(self) -> str:
         import platform
@@ -317,13 +314,6 @@ class WyndhamPlugin(ProviderPlugin):
                     pass
         return None
 
-    def _is_cardmember_exempt(self, sb) -> bool:
-        try:
-            html = sb.get_page_source().lower()
-            return "earner premier cardmembers: points do not expire while you are a cardmember" in html
-        except Exception:
-            return False
-
     def _extract_expiration(self, sb, balance: int) -> Optional[datetime]:
         if balance is not None and balance <= 0:
             return None
@@ -447,20 +437,9 @@ class WyndhamPlugin(ProviderPlugin):
                     
                 result["balance"] = balance
                 
-                # Check cardmember status on dashboard
-                if self._is_cardmember_exempt(sb):
-                    if status and "EARNER PREMIER" not in status:
-                        status = f"{status} (EARNER PREMIER)"
-                        
                 # Extract expiration date
                 expiration_date = self._extract_expiration(sb, balance)
                 
-                # Check cardmember status on whichever page we ended up on (dashboard or activity)
-                if self._is_cardmember_exempt(sb):
-                    if status and "EARNER PREMIER" not in status:
-                        status = f"{status} (EARNER PREMIER)"
-                    expiration_date = None
-                    
                 if status:
                     result["status"] = status
                 if expiration_date:
@@ -542,10 +521,7 @@ class WyndhamPlugin(ProviderPlugin):
             if balance is None:
                 raise PluginError("Failed to extract account details after interactive login. Please check if you signed in successfully.")
 
-            # Check if user is a cardmember
-            if self._is_cardmember_exempt(sb):
-                if status and "EARNER PREMIER" not in status:
-                    status = f"{status} (EARNER PREMIER)"
+
 
             if profile_dir:
                 try:

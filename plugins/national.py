@@ -15,6 +15,10 @@ class NationalPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "national"
 
+    @property
+    def default_cpp(self) -> float:
+        return 1.0
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> Optional[datetime]:
         # Expiration calculation is not supported for National (returns None)
         return None

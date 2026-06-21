@@ -14,6 +14,10 @@ class MarriottPlugin(ProviderPlugin):
         return "marriott"
 
     @property
+    def default_cpp(self) -> float:
+        return 0.8
+
+    @property
     def custom_tip(self) -> str:
         return "Check the checkbox/link for <strong>\"Trust this device for 90 days\"</strong> if prompted."
 

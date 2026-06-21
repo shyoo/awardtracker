@@ -16,6 +16,10 @@ class AviancaLifemilesPlugin(ProviderPlugin):
         return "avianca"
 
     @property
+    def default_cpp(self) -> float:
+        return 1.2
+
+    @property
     def custom_tip(self) -> str:
         return "Check your email for the <strong>\"Confirm your identity\"</strong> verification code."
 
