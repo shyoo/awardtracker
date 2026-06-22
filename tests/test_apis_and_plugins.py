@@ -1240,6 +1240,77 @@ class TestAPIsAndPlugins(unittest.TestCase):
                 )
             self.assertEqual(str(ctx.exception), "some other error")
 
+    def test_wait_for_chrome_exit_and_lock_cleaning(self):
+        import tempfile
+        import os
+        import signal
+        if not hasattr(signal, "SIGKILL"):
+            signal.SIGKILL = 9
+        from unittest.mock import patch, MagicMock
+        from plugins.base import wait_for_chrome_exit
+
+        # 1. Test immediate return with empty profile_dir
+        with patch('psutil.process_iter') as mock_iter:
+            wait_for_chrome_exit("")
+            mock_iter.assert_not_called()
+
+        # 2. Test lock file cleaning
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lock_files = ["SingletonLock", "SingletonSocket", "SingletonCookie"]
+            for name in lock_files:
+                path = os.path.join(tmpdir, name)
+                with open(path, "w") as f:
+                    f.write("dummy")
+                self.assertTrue(os.path.exists(path))
+
+            # When wait_for_chrome_exit runs, it should clean these files up
+            with patch('psutil.process_iter', return_value=[]):
+                with patch('time.sleep', return_value=None):
+                    wait_for_chrome_exit(tmpdir)
+
+            for name in lock_files:
+                path = os.path.join(tmpdir, name)
+                self.assertFalse(os.path.exists(path), f"Lock file {name} was not cleaned up")
+
+        # 3. Test force kill with psutil
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mock_proc = MagicMock()
+            mock_proc.info = {
+                'name': 'chrome.exe',
+                'cmdline': ['chrome.exe', f'--user-data-dir={tmpdir}']
+            }
+            
+            with patch('psutil.process_iter', return_value=[mock_proc]):
+                with patch('time.sleep', return_value=None):
+                    wait_for_chrome_exit(tmpdir)
+                    mock_proc.kill.assert_called_once()
+
+        # 4. Test fallback process kill (Windows)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_tmp = os.path.abspath(tmpdir).lower()
+            with patch.dict('sys.modules', {'psutil': None}):
+                with patch('platform.system', return_value='Windows'):
+                    with patch('subprocess.check_output', return_value=abs_tmp.encode()):
+                        with patch('subprocess.run') as mock_run:
+                            with patch('time.sleep', return_value=None):
+                                wait_for_chrome_exit(tmpdir)
+                                called_cmd = mock_run.call_args[0][0]
+                                self.assertIn("powershell", called_cmd)
+                                self.assertIn(abs_tmp, called_cmd[-1])
+
+        # 5. Test fallback process kill (macOS)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_tmp = os.path.abspath(tmpdir).lower()
+            mock_ps_output = f"user 12345 1 0 10:00AM ?? 0:01.00 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir={abs_tmp}\n"
+            with patch.dict('sys.modules', {'psutil': None}):
+                with patch('platform.system', return_value='Darwin'):
+                    with patch('subprocess.check_output', return_value=mock_ps_output.encode()) as mock_check_output:
+                        with patch('os.kill') as mock_kill:
+                            with patch('time.sleep', return_value=None):
+                                wait_for_chrome_exit(tmpdir)
+                                mock_check_output.assert_called()
+                                mock_kill.assert_called_once_with(12345, signal.SIGKILL)
+
     def test_eva_plugin_registration(self):
         plugin = plugin_manager.get_plugin('eva')
         self.assertIsNotNone(plugin, "Scraper plugin 'eva' was not registered.")

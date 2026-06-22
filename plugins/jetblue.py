@@ -238,53 +238,8 @@ class JetBluePlugin(ProviderPlugin):
             print(f"Failed to write Preferences: {e}")
 
     def wait_for_chrome_exit(self, profile_dir: str) -> None:
-        abs_profile = os.path.abspath(profile_dir).lower()
-        for _ in range(30):
-            running = False
-            try:
-                import psutil
-                for proc in psutil.process_iter(['name', 'cmdline']):
-                    try:
-                        if proc.info['name'] and 'chrome' in proc.info['name'].lower():
-                            cmdline = proc.info['cmdline']
-                            if cmdline:
-                                cmdline_str = ' '.join(cmdline).lower()
-                                if abs_profile in cmdline_str:
-                                    running = True
-                                    break
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        pass
-            except ImportError:
-                # Fallback to native OS commands if psutil is not installed
-                try:
-                    if platform.system() == "Windows":
-                        try:
-                            output = subprocess.check_output(
-                                ["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*chrome*' } | Select-Object -ExpandProperty CommandLine"],
-                                stderr=subprocess.DEVNULL
-                            ).decode(errors='ignore').lower()
-                        except Exception:
-                            output = subprocess.check_output(
-                                'wmic process where "name like \'%chrome%\'" get commandline',
-                                shell=True,
-                                stderr=subprocess.DEVNULL
-                            ).decode(errors='ignore').lower()
-                        
-                        if abs_profile in output:
-                            running = True
-                    else:
-                        output = subprocess.check_output(
-                            "ps -ef | grep -i chrome | grep -v grep",
-                            shell=True,
-                            stderr=subprocess.DEVNULL
-                        ).decode(errors='ignore').lower()
-                        if abs_profile in output:
-                            running = True
-                except Exception:
-                    pass
-            if not running:
-                return
-            time.sleep(0.5)
+        from .base import wait_for_chrome_exit
+        wait_for_chrome_exit(profile_dir)
 
     def _parse_account_html(self, html: str) -> Optional[Dict[str, Any]]:
         soup = BeautifulSoup(html, "html.parser")
