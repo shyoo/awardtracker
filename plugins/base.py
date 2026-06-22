@@ -340,9 +340,12 @@ def wait_for_chrome_exit(profile_dir: str) -> None:
     import time
     import platform
     import subprocess
+    import signal
 
     abs_profile = os.path.abspath(profile_dir).lower()
-    for _ in range(30):
+    
+    # 1. Wait up to 5 seconds (10 loops of 0.5s) for natural exit to let Chrome save cookies/session
+    for attempt in range(10):
         running = False
         try:
             import psutil
@@ -384,9 +387,61 @@ def wait_for_chrome_exit(profile_dir: str) -> None:
                         running = True
             except Exception:
                 pass
+        
         if not running:
+            _clean_lock_files(profile_dir)
             return
         time.sleep(0.5)
+
+    # 2. If still running after 5 seconds, force terminate any chrome processes associated with this profile
+    try:
+        import psutil
+        for proc in psutil.process_iter(['name', 'cmdline']):
+            try:
+                if proc.info['name'] and 'chrome' in proc.info['name'].lower():
+                    cmdline = proc.info['cmdline']
+                    if cmdline:
+                        cmdline_str = ' '.join(cmdline).lower()
+                        if abs_profile in cmdline_str:
+                            proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except ImportError:
+        try:
+            if platform.system() == "Windows":
+                escaped_profile = abs_profile.replace("'", "''")
+                cmd = f"Get-CimInstance Win32_Process | Where-Object {{ $_.Name -like '*chrome*' -and $_.CommandLine -like '*{escaped_profile}*' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"
+                subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True)
+            else:
+                output = subprocess.check_output(
+                    "ps -ef | grep -i chrome | grep -v grep",
+                    shell=True,
+                    stderr=subprocess.DEVNULL
+                ).decode(errors='ignore')
+                for line in output.splitlines():
+                    if abs_profile in line.lower():
+                        parts = line.split()
+                        if len(parts) > 1:
+                            pid = parts[1]
+                            try:
+                                os.kill(int(pid), signal.SIGKILL)
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+            
+    time.sleep(1.0)
+    _clean_lock_files(profile_dir)
+
+def _clean_lock_files(profile_dir: str) -> None:
+    import os
+    for lock_name in ["SingletonLock", "SingletonSocket", "SingletonCookie"]:
+        lock_path = os.path.join(profile_dir, lock_name)
+        if os.path.islink(lock_path) or os.path.exists(lock_path):
+            try:
+                os.unlink(lock_path)
+            except Exception:
+                pass
 
 def safe_call_plugin_method(method, *args, **kwargs):
     """
