@@ -330,11 +330,18 @@ def create_app(config_class=Config):
                     }
             return None
 
+        def get_interactive_login_hint(plugin_name):
+            plugin = plugin_manager.get_plugin(plugin_name)
+            if plugin:
+                return plugin.interactive_login_hint
+            return ""
+
         return dict(
             get_program_rule_description=get_program_rule_description,
             get_never_expires_reason=get_never_expires_reason,
             format_time_remaining=format_time_remaining,
             get_logo_url=get_logo_url,
+            get_interactive_login_hint=get_interactive_login_hint,
             time_ago=time_ago,
             app_version=app.config.get('APP_VERSION', '1.2.2'),
             update_info=get_update_info(),

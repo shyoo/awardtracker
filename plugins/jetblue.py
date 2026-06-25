@@ -47,6 +47,10 @@ class JetBluePlugin(ProviderPlugin):
     def show_control_modal(self) -> bool:
         return False
 
+    @property
+    def interactive_login_hint(self) -> str:
+        return 'During sign-in, you must check <strong class="text-amber-800">"Keep me signed in"</strong> so that your session persists for automated sync.'
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> Optional[datetime]:
         # JetBlue TrueBlue points never expire
         return None
@@ -336,7 +340,7 @@ class JetBluePlugin(ProviderPlugin):
                 if "signin" in current_url or "login" in current_url or not self._check_logged_in(sb):
                     print("Session expired or not logged in. Interaction required.")
                     raise InteractionRequiredError(
-                        "JetBlue session expired. Please run Interactive Login."
+                        'JetBlue session expired. Please run Interactive Login and make sure to check "Keep me signed in" during sign-in.'
                     )
                 
                 html = sb.get_page_source()
