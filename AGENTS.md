@@ -28,6 +28,14 @@ Welcome! This document outlines the mandatory development workflows, branching s
 
 When the user explicitly asks to **"push to remote"** or **"push the branch"**, you must execute the following sequence precisely:
 
+### Pre-flight: Run All Tests
+Before starting the push workflow, run the full test suite to verify no regressions:
+```bash
+venv/Scripts/python.exe -m pytest tests/ -v
+```
+* **All tests must pass** (skipped tests are acceptable).
+* If any test fails, **stop the push workflow** and fix the failures before proceeding.
+
 ### Step A: Prompt for Version Bump
 1. Ask the user: *"Would you like to bump the version number? (yes/no)"*
 2. If the user answers **yes**:
@@ -55,7 +63,12 @@ To keep the commit history clean on the main branch, squash all changes in the c
 
 1. Create a markdown release note file under the [internal_docs](internal_docs) directory.
 2. Name the file exactly `release_notes_v<VERSION>.md` (e.g., `release_notes_v1.2.10.md`).
-3. Use the following structured format for the release notes:
+3. Find the **previous version tag or release-notes file** to determine the base commit. List **all commits since the last version** (not just the current branch), using:
+   ```bash
+   git log --oneline <LAST_VERSION_COMMIT>..HEAD
+   ```
+   Include every commit in this range in the release notes — the release covers all work since the last version, across all merged branches.
+4. Use the following structured format for the release notes:
    ```markdown
    # Award Tracker v<VERSION>
 
@@ -71,8 +84,9 @@ To keep the commit history clean on the main branch, squash all changes in the c
 
    ## 📁 Commits in this Release
    * `<COMMIT_HASH>` `<COMMIT_TITLE>`
+   * `<COMMIT_HASH>` `<COMMIT_TITLE>`
    ```
-4. **DO NOT** stage or commit the release notes. They must remain strictly local and untracked.
+5. **DO NOT** stage or commit the release notes. They must remain strictly local and untracked.
 
 ### Step D: Run Release Script Asynchronously
 Execute the compilation build script as a background asynchronous process:
@@ -344,6 +358,7 @@ subprocess.run(cmd, check=True)
 ## 🧭 Summary Checklist for Agent
 - [ ] Staging and checking out a new branch
 - [ ] No remote pushes during coding
+- [ ] User requests push -> Run all tests first (must pass)
 - [ ] User requests push -> Ask about version bump
 - [ ] Update [version.txt](version.txt) and commit if yes
 - [ ] Find merge-base with `main` and squash branch

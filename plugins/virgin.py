@@ -20,9 +20,16 @@ class VirginAtlanticPlugin(ProviderPlugin):
     def default_cpp(self) -> float:
         return 1.2
 
+    @property
+    def interactive_login_instructions(self):
+        return {
+            "mode": "assisted",
+            "pre_submit_note": 'The application will pre-fill your Username and Password for you, but you <strong>must manually click</strong> the <strong>"Submit"</strong> or <strong>"Sign In"</strong> button to proceed.',
+        }
+
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Miles in this program never expire."
-    
+
     def _extract_data(self, html: str) -> Tuple[Optional[int], Optional[str]]:
         """
         Parses Virgin Points balance and tier status from dashboard HTML.

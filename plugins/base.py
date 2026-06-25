@@ -582,6 +582,20 @@ class ProviderPlugin(ABC):
         """
         return ""
 
+    @property
+    def interactive_login_instructions(self) -> Dict[str, Any]:
+        """
+        Returns structured instructions for the interactive login modal.
+
+        Keys:
+          mode: "assisted" (credentials pre-filled, generic 4-step flow) or
+                "manual" (native Chrome, fully manual 3-step flow)
+          credential_hint: what to enter, e.g. "your email and password"
+          special_note: optional HTML callout shown after step 1 (e.g. "Keep me signed in")
+          pre_submit_note: optional HTML note shown in assisted mode (e.g. "must click Submit manually")
+        """
+        return {"mode": "assisted"}
+
     @abstractmethod
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
         """

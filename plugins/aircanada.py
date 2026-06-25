@@ -25,6 +25,13 @@ class AirCanadaPlugin(ProviderPlugin):
     def custom_tip(self) -> str:
         return "Complete any verification or security prompts if requested by Air Canada."
 
+    @property
+    def interactive_login_instructions(self):
+        return {
+            "mode": "assisted",
+            "pre_submit_note": 'The application will pre-fill your Username and Password. If prompted, please complete any <strong>security verification</strong> or <strong>MFA code</strong> manually, and then <strong>click the "Sign in" or "Continue" button manually</strong>.',
+        }
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
         st = (status or "").lower()
         if any(tier in st for tier in ('elite', 'altitude', 'super elite', '25k', '35k', '50k', '75k', '100k')):

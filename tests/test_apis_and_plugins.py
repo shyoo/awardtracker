@@ -2208,5 +2208,81 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertEqual(plugin.get_never_expires_reason("BLUE"), "")
         self.assertEqual(plugin.get_never_expires_reason("BLUE", has_exemption=True), " (Exempt)")
 
+    def test_interactive_login_instructions_default(self):
+        """Plugins without override return assisted mode with no extras."""
+        plugin = plugin_manager.get_plugin('delta')
+        self.assertIsNotNone(plugin)
+        instr = plugin.interactive_login_instructions
+        self.assertEqual(instr['mode'], 'assisted')
+        self.assertNotIn('credential_hint', instr)
+        self.assertNotIn('special_note', instr)
+        self.assertNotIn('pre_submit_note', instr)
+
+    def test_interactive_login_instructions_manual_plugins(self):
+        """British, Wyndham, JetBlue use manual mode with credential hints."""
+        for pid, expected_hint in [
+            ('british', 'Executive Club'),
+            ('wyndham', 'username and password'),
+            ('jetblue', 'email/username and password'),
+        ]:
+            plugin = plugin_manager.get_plugin(pid)
+            self.assertIsNotNone(plugin, f"Plugin {pid} not found")
+            instr = plugin.interactive_login_instructions
+            self.assertEqual(instr['mode'], 'manual', f"{pid} should be manual mode")
+            self.assertIn(expected_hint, instr.get('credential_hint', ''), f"{pid} credential_hint mismatch")
+
+    def test_interactive_login_instructions_jetblue_special_note(self):
+        """JetBlue must include 'Keep me signed in' special note."""
+        plugin = plugin_manager.get_plugin('jetblue')
+        instr = plugin.interactive_login_instructions
+        self.assertIn('Keep me signed in', instr.get('special_note', ''))
+
+    def test_interactive_login_instructions_assisted_with_pre_submit(self):
+        """Virgin and Air Canada use assisted mode with pre_submit_note."""
+        for pid in ['virgin', 'aircanada']:
+            plugin = plugin_manager.get_plugin(pid)
+            self.assertIsNotNone(plugin, f"Plugin {pid} not found")
+            instr = plugin.interactive_login_instructions
+            self.assertEqual(instr['mode'], 'assisted', f"{pid} should be assisted mode")
+            self.assertTrue(len(instr.get('pre_submit_note', '')) > 0, f"{pid} should have pre_submit_note")
+
+    def test_interactive_login_instructions_manual_hides_control_modal(self):
+        """All manual-mode plugins should also have show_control_modal=False."""
+        for pid in ['british', 'wyndham', 'jetblue']:
+            plugin = plugin_manager.get_plugin(pid)
+            instr = plugin.interactive_login_instructions
+            if instr['mode'] == 'manual':
+                self.assertFalse(plugin.show_control_modal, f"{pid} manual mode should have show_control_modal=False")
+
+    def test_get_interactive_login_instructions_helper(self):
+        """The app context helper returns plugin instructions or default."""
+        with self.app.app_context():
+            ctx = self.app.jinja_env.globals
+            if 'get_interactive_login_instructions' not in ctx:
+                processors = self.app.template_context_processors[None]
+                merged = {}
+                for proc in processors:
+                    merged.update(proc())
+                get_fn = merged.get('get_interactive_login_instructions')
+            else:
+                get_fn = ctx['get_interactive_login_instructions']
+
+            self.assertIsNotNone(get_fn)
+            jetblue_instr = get_fn('jetblue')
+            self.assertEqual(jetblue_instr['mode'], 'manual')
+
+            default_instr = get_fn('nonexistent_plugin')
+            self.assertEqual(default_instr['mode'], 'assisted')
+
+    def test_interactive_login_hint_jetblue(self):
+        """JetBlue interactive_login_hint mentions 'Keep me signed in'."""
+        plugin = plugin_manager.get_plugin('jetblue')
+        self.assertIn('Keep me signed in', plugin.interactive_login_hint)
+
+    def test_interactive_login_hint_default_empty(self):
+        """Plugins without override return empty interactive_login_hint."""
+        plugin = plugin_manager.get_plugin('delta')
+        self.assertEqual(plugin.interactive_login_hint, '')
+
 if __name__ == '__main__':
     unittest.main()

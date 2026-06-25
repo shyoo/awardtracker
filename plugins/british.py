@@ -47,6 +47,13 @@ class BritishAirwaysPlugin(ProviderPlugin):
     def show_control_modal(self) -> bool:
         return False
 
+    @property
+    def interactive_login_instructions(self):
+        return {
+            "mode": "manual",
+            "credential_hint": "your Executive Club number, PIN/password",
+        }
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> Optional[datetime]:
         if balance == 0:
             return None
