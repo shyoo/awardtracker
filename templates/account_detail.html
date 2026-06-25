@@ -184,7 +184,13 @@
       <div class="ml-3 flex-1 md:flex md:justify-between">
         <div>
           <h3 class="text-sm font-bold text-amber-800">MFA / Additional security screening required</h3>
-          <p class="mt-1.5 text-xs text-amber-700">Please click the orange <strong class="text-amber-800">Interactive Login</strong> button at the top right to perform an Interactive Login, and check the checkbox of <strong class="text-amber-800">"Don't require verification code again."</strong> during sign-in to prevent this next time.</p>
+          <p class="mt-1.5 text-xs text-amber-700">Please click the orange <strong class="text-amber-800">Interactive Login</strong> button at the top right to perform an Interactive Login.
+                    {% set plugin_hint = get_interactive_login_hint(account.provider.plugin_name) %}
+                    {% if plugin_hint %}
+                    {{ plugin_hint | safe }}
+                    {% else %}
+                    Check the checkbox of <strong class="text-amber-800">"Don't require verification code again."</strong> during sign-in to prevent this next time.
+                    {% endif %}</p>
         </div>
       </div>
     </div>
@@ -598,7 +604,7 @@
               </p>
               <p class="text-blue-800">To avoid anti-bot detection, a <strong>native Google Chrome window</strong> will open to the ${progName} login page. **No automation** is used.</p>
               <div class="mt-2 p-3 bg-white border border-blue-100 rounded-lg space-y-1.5 text-blue-900">
-                <p>🔑 <strong>Step 1 — Sign in manually:</strong> Enter ${loginHint}, and complete any MFA/CAPTCHA in the opened Chrome window.</p>
+                <p>🔑 <strong>Step 1 — Sign in manually:</strong> Enter ${loginHint}, and complete any MFA/CAPTCHA in the opened Chrome window.${isJetBlue ? ' <strong class="text-rose-600">You MUST check "Keep me signed in"</strong> on the sign-in page, or automated sync will fail every time.' : ''}</p>
                 <p>🚪 <strong class="text-orange-700">Step 2 — Close the browser:</strong> Once you have successfully logged in and see your dashboard/account overview, <strong>close the Chrome window</strong>. <span class="text-rose-600 font-semibold">(For macOS users, you <strong>must Quit Chrome</strong> using <strong>Cmd+Q</strong> or from the Dock/App menu, not just close the tab/window; otherwise, the application will keep waiting).</span></p>
                 <p>⌛ <strong>Step 3 — Auto-capture:</strong> The tool will detect the window closure, automatically capture your balance in the background, and finalize the sync. <em class="text-blue-800 font-semibold">(Note: Please wait for ~30 seconds after closing the window for the application to finish post-processing cookies and updating your points)</em>.</p>
               </div>

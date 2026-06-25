@@ -574,6 +574,14 @@ class ProviderPlugin(ABC):
         """
         return ""
 
+    @property
+    def interactive_login_hint(self) -> str:
+        """
+        Plugin-specific hint shown on the dashboard/detail page when interactive login is required.
+        Overrides the default "Don't require verification code again" message.
+        """
+        return ""
+
     @abstractmethod
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
         """
