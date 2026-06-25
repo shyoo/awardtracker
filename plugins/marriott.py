@@ -43,55 +43,166 @@ class MarriottPlugin(ProviderPlugin):
         return balance, status
 
     def _extract_expiration_date(self, html: str) -> Optional[datetime]:
-        """Extracts expiration date based on 24 months from the latest activity date found in HTML."""
+        """
+        Extracts the Marriott Bonvoy points expiration date from the activity page HTML.
+
+        Strategy (in priority order):
+        1. Parse Marriott's *explicit* expiration notice sentence — e.g.
+           "Your points will expire on January 15, 2026" or the Korean equivalent
+           "포인트는 2026년 1월 15일에 만료됩니다". This is the most reliable signal.
+        2. Fall back to inferring 24 months from the *most recent transaction date*,
+           but only consider dates that appear near recognised Marriott transaction
+           keywords so that JS/ad timestamps and other noise are excluded.
+        3. Return None if no reliable date is found.  The UI will then show no
+           expiration label rather than a misleadingly precise wrong date.
+        """
         from datetime import datetime
-        
-        dates = []
+
         today = datetime.now()
-        
-        # 1. Find all YYYY-MM-DD
-        matches_dash = re.findall(r'202\d-\d\d-\d\d', html)
-        for m in set(matches_dash):
+        MONTHS_EN = {
+            'january': 1, 'february': 2, 'march': 3, 'april': 4,
+            'may': 5, 'june': 6, 'july': 7, 'august': 8,
+            'september': 9, 'october': 10, 'november': 11, 'december': 12,
+        }
+
+        # ------------------------------------------------------------------
+        # Strategy 1: Look for an explicit expiration notice on the page.
+        # ------------------------------------------------------------------
+
+        # 1a. English: "expire on Month DD, YYYY"  /  "expire on Month YYYY"
+        #     Covers "will expire on", "are set to expire on", etc.
+        exp_en = re.search(
+            r'expir\w*\s+on\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})',
+            html, re.IGNORECASE
+        )
+        if exp_en:
             try:
-                dt = datetime.strptime(m, "%Y-%m-%d")
-                if dt <= today:
-                    dates.append(dt)
-            except:
+                month_num = MONTHS_EN.get(exp_en.group(1).lower())
+                if month_num:
+                    return datetime(int(exp_en.group(3)), month_num, int(exp_en.group(2)))
+            except Exception:
                 pass
-        
-        # 2. Find all YYYY.MM.DD or YYYY. MM. DD.
-        matches_dot = re.findall(r'202\d\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}', html)
-        for m in set(matches_dot):
+
+        # 1b. English: ISO / slash date near "expire" keyword
+        #     e.g. "expire on 2026-01-15" or "expire on 01/15/2026"
+        exp_en_iso = re.search(
+            r'expir\w*.{0,30}?(\d{4}-\d{2}-\d{2})',
+            html, re.IGNORECASE | re.DOTALL
+        )
+        if exp_en_iso:
             try:
-                clean = re.sub(r'\s+', '', m)
-                parts = clean.split('.')
-                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]))
-                if dt <= today:
-                    dates.append(dt)
-            except:
+                return datetime.strptime(exp_en_iso.group(1), "%Y-%m-%d")
+            except Exception:
                 pass
-                
-        # 3. Find all YYYY년 MM월 DD일
-        matches_kr = re.findall(r'202\d\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일', html)
-        for m in set(matches_kr):
+
+        exp_en_slash = re.search(
+            r'expir\w*.{0,30}?(\d{1,2}/\d{1,2}/\d{4})',
+            html, re.IGNORECASE | re.DOTALL
+        )
+        if exp_en_slash:
             try:
-                nums = re.findall(r'\d+', m)
-                if len(nums) == 3:
-                    dt = datetime(int(nums[0]), int(nums[1]), int(nums[2]))
-                    if dt <= today:
-                        dates.append(dt)
-            except:
+                return datetime.strptime(exp_en_slash.group(1), "%m/%d/%Y")
+            except Exception:
                 pass
-        
-        if dates:
-            last_activity = max(dates)
+
+        # 1c. Korean: "YYYY년 MM월 DD일에 만료" / "만료: YYYY.MM.DD"
+        exp_kr = re.search(
+            r'(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일.{0,20}만료',
+            html, re.IGNORECASE
+        )
+        if not exp_kr:
+            exp_kr = re.search(
+                r'만료.{0,40}?(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일',
+                html, re.IGNORECASE
+            )
+        if exp_kr:
             try:
-                expiration_date = last_activity.replace(year=last_activity.year + 2)
+                return datetime(int(exp_kr.group(1)), int(exp_kr.group(2)), int(exp_kr.group(3)))
+            except Exception:
+                pass
+
+        # 1d. Korean: date in ISO/dot format near 만료
+        exp_kr_iso = re.search(
+            r'만료.{0,30}?(\d{4}[-./]\d{2}[-./]\d{2})',
+            html, re.IGNORECASE
+        )
+        if not exp_kr_iso:
+            exp_kr_iso = re.search(
+                r'(\d{4}[-./]\d{2}[-./]\d{2}).{0,30}만료',
+                html, re.IGNORECASE
+            )
+        if exp_kr_iso:
+            raw = re.sub(r'[./]', '-', exp_kr_iso.group(1))
+            try:
+                return datetime.strptime(raw, "%Y-%m-%d")
+            except Exception:
+                pass
+
+        # ------------------------------------------------------------------
+        # Strategy 2: Infer from the most recent *transaction* date.
+        # Only consider dates that appear near recognised Marriott transaction
+        # keywords so JS/ad/page-load timestamps are excluded.
+        # ------------------------------------------------------------------
+        TRANSACTION_KEYWORDS = re.compile(
+            r'earn|redeem|stay|bonus|transfer|credit|purchase|award|hotel|night'
+            r'|보너스|적립|사용|숙박|이체|호텔|리워드|활동',
+            re.IGNORECASE
+        )
+        # Scan a sliding window of ±500 chars around each date candidate.
+        # Support YYYY-MM-DD, YYYY.MM.DD (with optional spaces), and YYYY년MM월DD일 formats.
+        activity_dates = []
+        date_patterns = [
+            (r'202\d-\d{2}-\d{2}', "%Y-%m-%d"),
+        ]
+        for pattern, fmt in date_patterns:
+            for m in re.finditer(pattern, html):
+                try:
+                    dt = datetime.strptime(m.group(0), fmt)
+                    if dt > today:
+                        continue  # Future dates are not activity dates
+                    window_start = max(0, m.start() - 500)
+                    window_end = min(len(html), m.end() + 500)
+                    window = html[window_start:window_end]
+                    if TRANSACTION_KEYWORDS.search(window):
+                        activity_dates.append(dt)
+                except Exception:
+                    pass
+
+        # Also scan dot-format dates (YYYY.MM.DD with optional spaces)
+        for m in re.finditer(r'(202\d)\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})', html):
+            try:
+                dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                if dt > today:
+                    continue
+                window_start = max(0, m.start() - 500)
+                window_end = min(len(html), m.end() + 500)
+                window = html[window_start:window_end]
+                if TRANSACTION_KEYWORDS.search(window):
+                    activity_dates.append(dt)
+            except Exception:
+                pass
+
+        # Also scan Korean date format (YYYY년 MM월 DD일)
+        for m in re.finditer(r'(202\d)\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일', html):
+            try:
+                dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                if dt > today:
+                    continue
+                window_start = max(0, m.start() - 500)
+                window_end = min(len(html), m.end() + 500)
+                window = html[window_start:window_end]
+                if TRANSACTION_KEYWORDS.search(window):
+                    activity_dates.append(dt)
+            except Exception:
+                pass
+
+        if activity_dates:
+            last_activity = max(activity_dates)
+            try:
+                return last_activity.replace(year=last_activity.year + 2)
             except ValueError:
-                # Handle leap year (Feb 29)
-                expiration_date = last_activity.replace(year=last_activity.year + 2, day=28)
-            return expiration_date
-            
+                return last_activity.replace(year=last_activity.year + 2, day=28)
+
         return None
 
     def _check_for_mfa(self, sb) -> bool:

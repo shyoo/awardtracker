@@ -169,21 +169,38 @@ def format_time_remaining(days):
         return ""
     if days < 0:
         return "Expired"
-        
-    years = days // 365
-    rem = days % 365
-    months = rem // 30
-    rem_days = rem % 30
-    
-    parts = []
-    if years > 0:
-        parts.append(f"{years} yr{'s' if years != 1 else ''}")
-    if months > 0:
-        parts.append(f"{months} mo{'s' if months != 1 else ''}")
-    if rem_days > 0 or not parts:
-        parts.append(f"{rem_days} day{'s' if rem_days != 1 else ''}")
-        
-    return ", ".join(parts) + " remaining"
+
+    # Use calendar-accurate relativedelta rather than 365/30-day integer arithmetic
+    # so that e.g. 366 days shows "1 yr, 1 day" instead of "1 yr" and
+    # 700 days shows "1 yr, 11 mos" instead of rounding to "2 yrs".
+    try:
+        from dateutil.relativedelta import relativedelta
+        from datetime import date as _date
+        today = _date.today()
+        future = today + relativedelta(days=days)
+        delta = relativedelta(future, today)
+        parts = []
+        if delta.years > 0:
+            parts.append(f"{delta.years} yr{'s' if delta.years != 1 else ''}")
+        if delta.months > 0:
+            parts.append(f"{delta.months} mo{'s' if delta.months != 1 else ''}")
+        if delta.days > 0 or not parts:
+            parts.append(f"{delta.days} day{'s' if delta.days != 1 else ''}")
+        return ", ".join(parts) + " remaining"
+    except ImportError:
+        # Fallback if dateutil is unavailable
+        years = days // 365
+        rem = days % 365
+        months = rem // 30
+        rem_days = rem % 30
+        parts = []
+        if years > 0:
+            parts.append(f"{years} yr{'s' if years != 1 else ''}")
+        if months > 0:
+            parts.append(f"{months} mo{'s' if months != 1 else ''}")
+        if rem_days > 0 or not parts:
+            parts.append(f"{rem_days} day{'s' if rem_days != 1 else ''}")
+        return ", ".join(parts) + " remaining"
 
 def create_app(config_class=Config):
     if getattr(sys, 'frozen', False):
