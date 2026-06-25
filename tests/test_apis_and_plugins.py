@@ -1936,40 +1936,40 @@ class TestAPIsAndPlugins(unittest.TestCase):
         plugin = plugin_manager.get_plugin('marriott')
         self.assertIsNotNone(plugin)
         
-        # Test case 1: Standard YYYY-MM-DD
-        html_dash = "<div>Last activity date: 2026-05-20</div>"
+        # Test case 1: Standard YYYY-MM-DD near a transaction keyword (activity)
+        html_dash = "<div>최근 활동일: 2026-05-20 - hotel stay bonus</div>"
         exp_dash = plugin._extract_expiration_date(html_dash)
         self.assertIsNotNone(exp_dash)
         self.assertEqual(exp_dash.year, 2028)
         self.assertEqual(exp_dash.month, 5)
         self.assertEqual(exp_dash.day, 20)
         
-        # Test case 2: Korean dot format YYYY.MM.DD
-        html_dot = "<div>최근 활동일: 2026.04.15</div>"
+        # Test case 2: Korean dot format YYYY.MM.DD near a transaction keyword
+        html_dot = "<div>최근 활동일: 2026.04.15 hotel stay credit</div>"
         exp_dot = plugin._extract_expiration_date(html_dot)
         self.assertIsNotNone(exp_dot)
         self.assertEqual(exp_dot.year, 2028)
         self.assertEqual(exp_dot.month, 4)
         self.assertEqual(exp_dot.day, 15)
         
-        # Test case 3: Korean dot format with spaces YYYY. MM. DD.
-        html_dot_spaces = "<div>최근 활동일: 2026. 03. 10.</div>"
+        # Test case 3: Korean dot format with spaces YYYY. MM. DD. near a transaction keyword
+        html_dot_spaces = "<div>최근 활동일: 2026. 03. 10. hotel stay credit</div>"
         exp_dot_spaces = plugin._extract_expiration_date(html_dot_spaces)
         self.assertIsNotNone(exp_dot_spaces)
         self.assertEqual(exp_dot_spaces.year, 2028)
         self.assertEqual(exp_dot_spaces.month, 3)
         self.assertEqual(exp_dot_spaces.day, 10)
         
-        # Test case 4: Korean word format YYYY년 MM월 DD일
-        html_kr = "<div>최근 활동일: 2026년 02월 08일</div>"
+        # Test case 4: Korean word format YYYY년 MM월 DD일 near a transaction keyword
+        html_kr = "<div>최근 활동일: 2026년 02월 08일 숙박 활동</div>"
         exp_kr = plugin._extract_expiration_date(html_kr)
         self.assertIsNotNone(exp_kr)
         self.assertEqual(exp_kr.year, 2028)
         self.assertEqual(exp_kr.month, 2)
         self.assertEqual(exp_kr.day, 8)
         
-        # Test case 5: Korean word format single digits YYYY년 M월 D일
-        html_kr_single = "<div>최근 활동일: 2026년 6월 9일</div>"
+        # Test case 5: Korean word format single digits YYYY년 M월 D일 near a transaction keyword
+        html_kr_single = "<div>최근 활동일: 2026년 6월 9일 호텔 적립</div>"
         exp_kr_single = plugin._extract_expiration_date(html_kr_single)
         self.assertIsNotNone(exp_kr_single)
         self.assertEqual(exp_kr_single.year, 2028)
@@ -2009,7 +2009,8 @@ class TestAPIsAndPlugins(unittest.TestCase):
         def get_page_source_side_effect():
             curr_url = mock_sb.get_current_url()
             if "activity.mi" in curr_url:
-                return '<html>2026. 05. 20</html>'
+                # Include a Korean activity keyword so Strategy 2 picks up the date
+                return '<html>최근 활동일: 2026. 05. 20 hotel stay</html>'
             elif "default.mi" in curr_url:
                 return '<html><script>var dataLayer = {"mr_prof_points_balance":"25000","mr_prof_rewards_level":"Platinum Elite"};</script></html>'
             else:
