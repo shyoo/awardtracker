@@ -51,6 +51,14 @@ class JetBluePlugin(ProviderPlugin):
     def interactive_login_hint(self) -> str:
         return 'During sign-in, you must check <strong class="text-amber-800">"Keep me signed in"</strong> so that your session persists for automated sync.'
 
+    @property
+    def interactive_login_instructions(self):
+        return {
+            "mode": "manual",
+            "credential_hint": "your email/username and password",
+            "special_note": '<strong class="text-rose-600">You MUST check "Keep me signed in"</strong> on the sign-in page, or automated sync will fail every time.',
+        }
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> Optional[datetime]:
         # JetBlue TrueBlue points never expire
         return None
