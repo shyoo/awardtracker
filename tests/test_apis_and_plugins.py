@@ -1319,7 +1319,130 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertTrue(hasattr(plugin, 'fetch_data'))
         self.assertTrue(hasattr(plugin, 'interactive_login'))
 
+    def test_southwest_companion_pass_status_parsing(self):
+        """
+        Regression test for Issue #85: Southwest Companion Pass status appearing for users
+        who do not hold an active Companion Pass due to progress-tracker text matching.
+        """
+        plugin = plugin_manager.get_plugin('southwest')
+        self.assertIsNotNone(plugin)
+
+        def parse_status(html):
+            """Helper: run _extract_data_from_page on raw HTML via a mock sb."""
+            from unittest.mock import MagicMock
+            mock_sb = MagicMock()
+            mock_sb.get_page_source.return_value = html
+            return plugin._extract_data_from_page(mock_sb)
+
+        # 1. False positive case: progress tracker only — user has NO active Companion Pass.
+        # The page shows "X points toward Companion Pass" but no status badge.
+        html_progress_only = """
+        <html><body>
+          <div class="points-balance">
+            <span>Available Points</span>
+            <span>Points 45,230 Points 45,230</span>
+          </div>
+          <div class="companion-pass-progress">
+            <h3>Companion Pass Progress</h3>
+            <p>You have earned 45,230 qualifying points toward Companion Pass.</p>
+            <p>55,770 points remaining to earn Companion Pass.</p>
+          </div>
+          <div class="tier-progress">
+            <p>Earn 10,000 more qualifying points to reach A-List status.</p>
+          </div>
+        </body></html>
+        """
+        balance, status = parse_status(html_progress_only)
+        self.assertEqual(status, "Member",
+            "Should be 'Member' — 'toward Companion Pass' in progress tracker must NOT trigger Companion Pass status")
+
+        # 2. True positive case: user HAS an active Companion Pass status badge.
+        html_active_badge = """
+        <html><body>
+          <div class="points-balance">
+            <span>Available Points</span>
+            <span>Points 120,000 Points 120,000</span>
+          </div>
+          <div class="member-status">
+            <span class="status-badge">Companion Pass</span>
+            <span class="tier-level">Member Since 2020</span>
+          </div>
+        </body></html>
+        """
+        balance, status = parse_status(html_active_badge)
+        self.assertEqual(status, "Companion Pass",
+            "Should detect 'Companion Pass' from a clean status badge element")
+        self.assertEqual(balance, 120000)
+
+        # 3. Mixed page: active Companion Pass badge AND a progress tracker for A-List.
+        html_mixed = """
+        <html><body>
+          <div class="points-balance">
+            <span>Available Points</span>
+            <span>Points 98,000 Points 98,000</span>
+          </div>
+          <div class="member-status">
+            <span class="badge">Companion Pass</span>
+          </div>
+          <div class="a-list-progress">
+            <p>Earn 2,000 more qualifying points toward A-List.</p>
+          </div>
+        </body></html>
+        """
+        balance, status = parse_status(html_mixed)
+        self.assertEqual(status, "Companion Pass",
+            "Should still detect Companion Pass from badge even with A-List progress text present")
+
+        # 4. A-List member with Companion Pass progress text — should be A-List, not Companion Pass.
+        html_alist_with_cp_progress = """
+        <html><body>
+          <div class="points-balance">
+            <span>Available Points</span>
+            <span>Points 60,000 Points 60,000</span>
+          </div>
+          <div class="member-status">
+            <span class="badge">A-List</span>
+          </div>
+          <div class="companion-pass-progress">
+            <p>You need 40,000 more qualifying points to earn Companion Pass.</p>
+          </div>
+        </body></html>
+        """
+        balance, status = parse_status(html_alist_with_cp_progress)
+        self.assertEqual(status, "A-List",
+            "A-List badge + Companion Pass progress text should yield 'A-List', not 'Companion Pass'")
+
+        # 5. A-List Preferred member — should be detected correctly.
+        html_alist_preferred = """
+        <html><body>
+          <div class="points-balance">
+            <span>Available Points</span>
+            <span>Points 200,000 Points 200,000</span>
+          </div>
+          <div class="member-status">
+            <span class="badge">A-List Preferred</span>
+          </div>
+        </body></html>
+        """
+        balance, status = parse_status(html_alist_preferred)
+        self.assertEqual(status, "A-List Preferred",
+            "Should detect 'A-List Preferred' from clean status badge")
+
+        # 6. Plain member — no tier badge found, defaults to Member.
+        html_plain_member = """
+        <html><body>
+          <div class="points-balance">
+            <span>Available Points</span>
+            <span>Points 5,000 Points 5,000</span>
+          </div>
+        </body></html>
+        """
+        balance, status = parse_status(html_plain_member)
+        self.assertEqual(status, "Member",
+            "Should default to 'Member' when no tier badge is found")
+
     def test_eva_mileage_parsing(self):
+
         plugin = plugin_manager.get_plugin('eva')
         self.assertIsNotNone(plugin)
 

@@ -45,18 +45,43 @@ class SouthwestPlugin(ProviderPlugin):
                     if matches:
                         balance = int(matches[0].replace(",", ""))
             
-            # Also check tier status
+            # Also check tier status.
+            # We use a context-aware search to avoid false positives from progress-tracker text
+            # like "X points toward Companion Pass" which is visible to ALL members regardless of status.
+            _PROGRESS_INDICATORS = re.compile(
+                r"toward|progress|qualifying|earn|remaining|needed|away|points to|qualify|requirement", re.I
+            )
             tier_texts = soup.find_all(string=re.compile(r"A-List Preferred|A-List|Companion Pass", re.I))
             for t in tier_texts:
                 t_str = t.strip()
-                if len(t_str) < 50:
-                    if "Companion Pass" in t_str:
-                        status = "Companion Pass"
-                        break
-                    elif "A-List Preferred" in t_str and status != "Companion Pass":
-                        status = "A-List Preferred"
-                    elif "A-List" in t_str and status not in ["Companion Pass", "A-List Preferred"]:
-                        status = "A-List"
+                if len(t_str) >= 50:
+                    continue  # Too long — likely a sentence with context, not a bare badge label
+
+                # Walk up 2 ancestor levels and gather surrounding text for context inspection.
+                # We intentionally limit to 2 levels to avoid pulling in unrelated sibling
+                # sections (e.g. an A-List progress div that lives next to the status badge div).
+                context_text = t_str
+                try:
+                    ancestor = t.parent
+                    for _ in range(2):
+                        if ancestor is None:
+                            break
+                        context_text = ancestor.get_text(" ", strip=True)
+                        ancestor = ancestor.parent
+                except Exception:
+                    pass
+
+                if _PROGRESS_INDICATORS.search(context_text):
+                    continue  # Progress/marketing mention — not an active status badge
+
+                # Safe to treat as an active status badge
+                if "Companion Pass" in t_str:
+                    status = "Companion Pass"
+                    break
+                elif "A-List Preferred" in t_str and status != "Companion Pass":
+                    status = "A-List Preferred"
+                elif "A-List" in t_str and status not in ["Companion Pass", "A-List Preferred"]:
+                    status = "A-List"
                         
             return balance, status
         except Exception:
