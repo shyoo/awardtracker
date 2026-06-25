@@ -307,9 +307,8 @@ class TestFormatTimeRemaining(unittest.TestCase):
         # a leap year falls in the window.  Instead, compute the exact number of days
         # for 2 calendar years from today and test that value.
         from datetime import date
-        from dateutil.relativedelta import relativedelta
         today = date.today()
-        two_years_later = today + relativedelta(years=2)
+        two_years_later = today.replace(year=today.year + 2)
         days_for_two_years = (two_years_later - today).days
         result = self._fmt(days_for_two_years)
         self.assertIn("2 yrs", result)
