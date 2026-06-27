@@ -235,6 +235,7 @@
               <th scope="col" class="py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Timestamp</th>
               <th scope="col" class="px-3 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Balance</th>
               <th scope="col" class="px-3 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Change</th>
+              <th scope="col" class="px-3 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
@@ -263,10 +264,18 @@
                   <span class="text-slate-400 font-semibold bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">Initial</span>
                 {% endif %}
               </td>
+              <td class="whitespace-nowrap px-3 py-3.5 text-right text-xs font-medium space-x-2">
+                <button onclick="openEditHistoryModal('{{ entry.id }}', '{{ entry.balance }}', '{{ entry.timestamp.strftime('%Y-%m-%dT%H:%M') }}')"
+                        class="text-indigo-600 hover:text-indigo-900 transition-colors font-semibold">Edit</button>
+                <form action="{{ url_for('delete_history', history_id=entry.id) }}" method="POST" class="inline"
+                      onsubmit="return confirm('Are you sure you want to delete this historical entry?');">
+                  <button type="submit" class="text-rose-600 hover:text-rose-900 transition-colors font-semibold">Delete</button>
+                </form>
+              </td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="3" class="py-4 text-center text-xs text-slate-400">No sync logs recorded. Run a synchronization to track point growth.</td>
+              <td colspan="4" class="py-4 text-center text-xs text-slate-400">No sync logs recorded. Run a synchronization to track point growth.</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -679,11 +688,33 @@
     }
   }
 
+  function openEditHistoryModal(historyId, balance, timestampStr) {
+    const modal = document.getElementById('editHistoryModal');
+    const form = document.getElementById('editHistoryForm');
+    if (!modal || !form) return;
+
+    form.action = `/history/${historyId}/edit`;
+    document.getElementById('edit-history-balance').value = balance || '';
+    document.getElementById('edit-history-timestamp').value = timestampStr || '';
+
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeEditHistoryModal() {
+    const modal = document.getElementById('editHistoryModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+  }
+
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
       closeUpdateBalanceModal();
       closeAddCertificateModal();
       closeEditCertificateModal();
+      closeEditHistoryModal();
     }
   });
 </script>
@@ -909,6 +940,65 @@
           </div>
           <div class="px-6 pb-5 flex justify-end gap-3">
             <button type="button" onclick="closeEditCertificateModal()" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors">Cancel</button>
+            <button type="submit" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
+              <span class="flex items-center gap-1.5">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                Save Changes
+              </span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit History Entry Modal -->
+<div id="editHistoryModal" class="relative z-50 hidden" role="dialog" aria-modal="true">
+  <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="closeEditHistoryModal()"></div>
+  <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+    <div class="flex min-h-full items-center justify-center p-4">
+      <div class="relative transform overflow-hidden rounded-2xl bg-white shadow-2xl w-full max-w-md animate-in fade-in zoom-in duration-200">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-indigo-600 to-indigo-500 px-6 py-5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="rounded-xl bg-white/20 p-2">
+                <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-white">Edit Historical Sync Log</h3>
+                <p class="text-xs text-indigo-200">{{ account.program_name }}</p>
+              </div>
+            </div>
+            <button onclick="closeEditHistoryModal()" class="rounded-lg p-1.5 text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+        <!-- Form Body -->
+        <form id="editHistoryForm" action="" method="POST">
+          <div class="px-6 py-5 space-y-4">
+            <div>
+              <label for="edit-history-balance" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Points Balance <span class="text-rose-500">*</span>
+              </label>
+              <input type="number" id="edit-history-balance" name="balance" required min="0" step="1"
+                     class="block w-full rounded-xl border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm">
+            </div>
+            
+            <div>
+              <label for="edit-history-timestamp" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                Date & Time <span class="text-rose-500">*</span>
+              </label>
+              <input type="datetime-local" id="edit-history-timestamp" name="timestamp" required
+                     class="block w-full rounded-xl border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-500 text-sm">
+            </div>
+          </div>
+          <div class="px-6 pb-5 flex justify-end gap-3">
+            <button type="button" onclick="closeEditHistoryModal()" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors">Cancel</button>
             <button type="submit" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors">
               <span class="flex items-center gap-1.5">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
