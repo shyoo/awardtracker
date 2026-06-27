@@ -564,7 +564,7 @@
   };
 
   const accountIds = [
-    {% for acc in accounts %}
+    {% for acc in accounts if not acc.is_manual %}
       {{ acc.id }}{% if not loop.last %},{% endif %}
     {% endfor %}
   ];
