@@ -1833,6 +1833,63 @@ def create_app(config_class=Config):
         flash('Custom certificate/voucher deleted successfully.')
         return redirect(url_for('account_detail', account_id=account_id))
 
+    @app.route('/history/<int:history_id>/edit', methods=['POST'])
+    def edit_history(history_id):
+        entry = AccountHistory.query.get_or_404(history_id)
+        account = entry.account
+        
+        balance_str = request.form.get('balance')
+        if not balance_str:
+            flash('Balance is required.')
+            return redirect(url_for('account_detail', account_id=account.id))
+            
+        try:
+            new_balance = int(float(balance_str))
+        except (ValueError, TypeError):
+            flash('Invalid balance value.')
+            return redirect(url_for('account_detail', account_id=account.id))
+            
+        timestamp_str = request.form.get('timestamp')
+        if timestamp_str:
+            try:
+                entry.timestamp = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M')
+            except (ValueError, TypeError):
+                flash('Invalid timestamp format.')
+                return redirect(url_for('account_detail', account_id=account.id))
+                
+        entry.balance = new_balance
+        db.session.commit()
+        
+        # Sync account balance with the newest history log entry
+        remaining_history = AccountHistory.query.filter_by(account_id=account.id).order_by(AccountHistory.timestamp.desc()).all()
+        if remaining_history:
+            account.balance = remaining_history[0].balance
+        else:
+            account.balance = 0
+        db.session.commit()
+        
+        flash('Historical log entry updated successfully.')
+        return redirect(url_for('account_detail', account_id=account.id))
+
+    @app.route('/history/<int:history_id>/delete', methods=['POST'])
+    def delete_history(history_id):
+        entry = AccountHistory.query.get_or_404(history_id)
+        account = entry.account
+        
+        db.session.delete(entry)
+        db.session.commit()
+        
+        # Sync account balance with the newest history log entry
+        remaining_history = AccountHistory.query.filter_by(account_id=account.id).order_by(AccountHistory.timestamp.desc()).all()
+        if remaining_history:
+            account.balance = remaining_history[0].balance
+        else:
+            account.balance = 0
+        db.session.commit()
+        
+        flash('Historical log entry deleted successfully.')
+        return redirect(url_for('account_detail', account_id=account.id))
+
     return app
 
 if __name__ == '__main__':

@@ -331,5 +331,111 @@ class TestAlertThresholds(unittest.TestCase):
         self.assertIn('+5', html)
         self.assertIn('Initial', html)
 
+    def test_delete_history_entry_updates_account_balance(self):
+        from models import AccountHistory
+        
+        acc = Account(
+            provider_id=self.provider_manual.id,
+            person_id=self.person.id,
+            username="test_delete_history",
+            password_encrypted="",
+            balance=200,
+            is_manual=True
+        )
+        db.session.add(acc)
+        db.session.commit()
+
+        # Add 3 historical entries in chronological order
+        h1 = AccountHistory(account_id=acc.id, timestamp=datetime(2026, 1, 1), balance=100)
+        h2 = AccountHistory(account_id=acc.id, timestamp=datetime(2026, 1, 2), balance=150)
+        h3 = AccountHistory(account_id=acc.id, timestamp=datetime(2026, 1, 3), balance=200)
+        db.session.add_all([h1, h2, h3])
+        db.session.commit()
+
+        # Delete the latest entry (h3)
+        res = self.client.post(f'/history/{h3.id}/delete')
+        self.assertEqual(res.status_code, 302) # Redirects to account_detail
+
+        # Account balance should fall back to h2's balance (150)
+        db.session.refresh(acc)
+        self.assertEqual(acc.balance, 150)
+
+        # Delete the remaining latest entry (h2)
+        res = self.client.post(f'/history/{h2.id}/delete')
+        self.assertEqual(res.status_code, 302)
+        db.session.refresh(acc)
+        self.assertEqual(acc.balance, 100)
+
+        # Delete the last entry (h1)
+        res = self.client.post(f'/history/{h1.id}/delete')
+        self.assertEqual(res.status_code, 302)
+        db.session.refresh(acc)
+        self.assertEqual(acc.balance, 0)
+
+    def test_edit_history_entry_updates_account_balance(self):
+        from models import AccountHistory
+        
+        acc = Account(
+            provider_id=self.provider_manual.id,
+            person_id=self.person.id,
+            username="test_edit_history",
+            password_encrypted="",
+            balance=200,
+            is_manual=True
+        )
+        db.session.add(acc)
+        db.session.commit()
+
+        h1 = AccountHistory(account_id=acc.id, timestamp=datetime(2026, 1, 1), balance=100)
+        h2 = AccountHistory(account_id=acc.id, timestamp=datetime(2026, 1, 2), balance=200)
+        db.session.add_all([h1, h2])
+        db.session.commit()
+
+        # Edit the latest entry (h2) to a new balance and timestamp
+        res = self.client.post(f'/history/{h2.id}/edit', data={
+            'balance': '350',
+            'timestamp': '2026-01-02T12:00'
+        })
+        self.assertEqual(res.status_code, 302)
+
+        # Account balance should update to the new balance (350)
+        db.session.refresh(acc)
+        db.session.refresh(h2)
+        self.assertEqual(acc.balance, 350)
+        self.assertEqual(h2.balance, 350)
+        self.assertEqual(h2.timestamp, datetime(2026, 1, 2, 12, 0))
+
+    def test_edit_middle_history_entry_does_not_affect_latest_balance(self):
+        from models import AccountHistory
+        
+        acc = Account(
+            provider_id=self.provider_manual.id,
+            person_id=self.person.id,
+            username="test_edit_middle_history",
+            password_encrypted="",
+            balance=200,
+            is_manual=True
+        )
+        db.session.add(acc)
+        db.session.commit()
+
+        h1 = AccountHistory(account_id=acc.id, timestamp=datetime(2026, 1, 1), balance=100)
+        h2 = AccountHistory(account_id=acc.id, timestamp=datetime(2026, 1, 2), balance=200)
+        db.session.add_all([h1, h2])
+        db.session.commit()
+
+        # Edit the middle/old entry (h1)
+        res = self.client.post(f'/history/{h1.id}/edit', data={
+            'balance': '120',
+            'timestamp': '2026-01-01T08:00'
+        })
+        self.assertEqual(res.status_code, 302)
+
+        # Account balance should still remain h2's balance (200)
+        db.session.refresh(acc)
+        db.session.refresh(h1)
+        self.assertEqual(acc.balance, 200)
+        self.assertEqual(h1.balance, 120)
+
 if __name__ == '__main__':
     unittest.main()
