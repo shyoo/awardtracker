@@ -437,5 +437,48 @@ class TestAlertThresholds(unittest.TestCase):
         self.assertEqual(acc.balance, 200)
         self.assertEqual(h1.balance, 120)
 
+    def test_manual_accounts_excluded_from_sync_all_list(self):
+        from security import security_manager
+        provider_auto = Provider(name="United Airlines", plugin_name="united", enabled=True)
+        db.session.add(provider_auto)
+        db.session.commit()
+
+        # Create a manual account
+        acc_manual = Account(
+            provider_id=self.provider_manual.id,
+            person_id=self.person.id,
+            username="manual_user",
+            password_encrypted="",
+            balance=1000,
+            is_manual=True
+        )
+        # Create an automated account
+        acc_auto = Account(
+            provider_id=provider_auto.id,
+            person_id=self.person.id,
+            username="auto_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            balance=5000,
+            is_manual=False
+        )
+        db.session.add_all([acc_manual, acc_auto])
+        db.session.commit()
+
+        # Request dashboard page
+        res = self.client.get('/')
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode()
+
+        # Verify that accountIds contains auto account id but NOT manual account id
+        import re
+        match = re.search(r'const\s+accountIds\s*=\s*\[(.*?)\];', html, re.DOTALL)
+        self.assertIsNotNone(match)
+        
+        ids_str = match.group(1).strip()
+        ids = [int(x.strip()) for x in ids_str.split(',') if x.strip()]
+        
+        self.assertIn(acc_auto.id, ids)
+        self.assertNotIn(acc_manual.id, ids)
+
 if __name__ == '__main__':
     unittest.main()
