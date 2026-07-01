@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError, add_months
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, add_months, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -335,7 +335,7 @@ class BritishAirwaysPlugin(ProviderPlugin):
                 except Exception:
                     pass
 
-            with SB(uc=True, headless=False, user_data_dir=profile_dir, agent=agent) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
                 print("Opening British Airways homepage to initialize domain...")
                 sb.uc_open_with_reconnect("https://www.britishairways.com/travel/home/public/en_us/", 4)
                 sb.sleep(2)
@@ -516,7 +516,7 @@ class BritishAirwaysPlugin(ProviderPlugin):
             # Now run a headless SB session to load the dashboard (using the logged-in profile)
             # and read the balance + save cookies to the JSON cookie jar.
             agent = self.get_consistent_user_agent()
-            with SB(uc=True, headless=True, user_data_dir=profile_dir, agent=agent) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=True, user_data_dir=profile_dir, agent=agent)) as sb:
                 # Load the dashboard page directly (session is already active)
                 try:
                     sb.uc_open_with_reconnect(

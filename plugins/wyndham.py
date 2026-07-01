@@ -4,7 +4,7 @@ import time
 import re
 from bs4 import BeautifulSoup
 from seleniumbase import SB
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 
 class WyndhamPlugin(ProviderPlugin):
     @property
@@ -412,7 +412,7 @@ class WyndhamPlugin(ProviderPlugin):
         
         try:
             agent = self.get_consistent_user_agent()
-            with SB(uc=True, headless=False, user_data_dir=profile_dir, agent=agent) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
                 # Open home page first
                 sb.open("https://www.wyndhamhotels.com/wyndham-rewards")
                 sb.sleep(4)
@@ -508,7 +508,7 @@ class WyndhamPlugin(ProviderPlugin):
         print("Chrome closed by user. Starting background session to parse balance and save cookies...")
         
         agent = self.get_consistent_user_agent()
-        with SB(uc=True, headless=False, user_data_dir=profile_dir, agent=agent) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
             try:
                 sb.uc_open_with_reconnect("https://www.wyndhamhotels.com/wyndham-rewards/my-account", 4)
                 sb.sleep(5)

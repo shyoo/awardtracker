@@ -4,7 +4,7 @@ import time
 import re
 from bs4 import BeautifulSoup
 from seleniumbase import SB
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 
 class NationalPlugin(ProviderPlugin):
     @property
@@ -267,7 +267,7 @@ class NationalPlugin(ProviderPlugin):
         
         try:
             agent = self.get_consistent_user_agent()
-            with SB(uc=True, headless=False, user_data_dir=profile_dir, agent=agent) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
                 # 1. Open sign-in page
                 sb.open("https://www.nationalcar.com/en/sign-in.html")
                 sb.sleep(8)
@@ -356,7 +356,7 @@ class NationalPlugin(ProviderPlugin):
                 pass
                 
         agent = self.get_consistent_user_agent()
-        with SB(uc=True, headless=False, user_data_dir=profile_dir, agent=agent) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
             sb.open("https://www.nationalcar.com/en/sign-in.html")
             sb.sleep(8)
             

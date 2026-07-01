@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -425,7 +425,7 @@ class EVAPlugin(ProviderPlugin):
 
         result = None
         try:
-            with SB(uc=True, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
                 print("Opening EVA Air login page to initialize cookie domain...")
                 sb.open("https://eservice.evaair.com/flyeva/eva/ffp/login.aspx")
                 sb.sleep(2)
@@ -472,7 +472,7 @@ class EVAPlugin(ProviderPlugin):
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
         try:
-            with SB(uc=True, user_data_dir=profile_dir, headed=True) as sb:
+            with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir, headed=True)) as sb:
                 print("Opening EVA Air login page with redirect target...")
                 # Open with redirect target to force landing on the frequent flyer page after login
                 sb.open("https://eservice.evaair.com/flyeva/eva/ffp/login.aspx?p_url=https://eservice.evaair.com/flyeva/eva/ffp/frequent-flyer.aspx")

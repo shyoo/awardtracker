@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Dict, Any, Tuple, Optional
 
 from seleniumbase import SB
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 
 class WorldofHyattPlugin(ProviderPlugin):
     @property
@@ -120,7 +120,7 @@ class WorldofHyattPlugin(ProviderPlugin):
             
             try:
                 # Launch with a 100% clean-slate profile to avoid Akamai/Kasada blocks
-                with SB(uc=True, headless=False) as sb:
+                with SB(**get_sb_kwargs(uc=True, headless=False)) as sb:
                     # Skip the homepage entirely (homepage is a React SPA where Kasada blocks JS hydration under automation)
                     # The sign-in page is server-rendered and loads reliably directly.
 
@@ -303,7 +303,7 @@ class WorldofHyattPlugin(ProviderPlugin):
                 print(f"Could not reset session cookies: {e}")
                 
         try:
-            with SB(uc=True, headless=False) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False)) as sb:
                 # Skip homepage and navigate directly to sign-in
                 print("Opening Hyatt traditional login page directly (skipping homepage)...")
                 sb.open("https://www.hyatt.com/en-US/member/sign-in/traditional")

@@ -4,7 +4,7 @@ import time
 import re
 from bs4 import BeautifulSoup
 from seleniumbase import SB
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 
 class CaesarsRewardsPlugin(ProviderPlugin):
     @property
@@ -252,7 +252,7 @@ class CaesarsRewardsPlugin(ProviderPlugin):
         }
         
         try:
-            with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
                 # 1. Open Caesars rewards profile page
                 sb.open("https://www.caesars.com/myrewards/profile/")
                 sb.sleep(10)
@@ -333,7 +333,7 @@ class CaesarsRewardsPlugin(ProviderPlugin):
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to Caesars Rewards.
         """
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             sb.open("https://www.caesars.com/myrewards/profile/")
             sb.sleep(10)
             

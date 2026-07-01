@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -329,7 +329,7 @@ class JetBluePlugin(ProviderPlugin):
                 except Exception:
                     pass
 
-            with SB(uc=True, headless=False, user_data_dir=profile_dir, agent=agent) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
                 print("Opening JetBlue to initialize domain...")
                 sb.uc_open_with_reconnect("https://www.jetblue.com/", 4)
                 sb.sleep(2)
@@ -503,7 +503,7 @@ class JetBluePlugin(ProviderPlugin):
             print("Chrome closed by user. Starting background session to parse balance and save cookies...")
             
             agent = self.get_consistent_user_agent()
-            with SB(uc=True, headless=True, user_data_dir=profile_dir, agent=agent) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=True, user_data_dir=profile_dir, agent=agent)) as sb:
                 # Load the dashboard page directly
                 try:
                     sb.uc_open_with_reconnect(

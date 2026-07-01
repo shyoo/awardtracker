@@ -9,6 +9,86 @@ from seleniumbase import BaseCase
 active_drivers = {}
 active_drivers_lock = threading.Lock()
 
+
+def get_chrome_binary() -> str | None:
+    """
+    Returns the absolute path to the Google Chrome binary, or None if not found.
+
+    On macOS, the PyInstaller-frozen .app bundle runs with a minimal PATH that
+    often causes SeleniumBase's internal find_chrome_executable() to fail even
+    when Chrome is properly installed. By probing well-known macOS paths directly
+    and passing the result as `binary_location` to SB(), we avoid the
+    "Chrome not found! Install it first!" error.
+
+    On Windows the PATH is usually rich enough, but we probe standard locations
+    as a belt-and-suspenders safeguard.
+    """
+    import platform
+    import os
+
+    system = platform.system()
+
+    if system == "Darwin":
+        candidates = [
+            # Standard installation in /Applications (most common)
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            # User-level installation (dragged to ~/Applications)
+            os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            # Canary channel
+            "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+            os.path.expanduser("~/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"),
+            # Chromium as last-resort fallback
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+        for path in candidates:
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                return path
+
+    elif system == "Windows":
+        import os
+        candidates = [
+            os.path.expandvars(r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%PROGRAMFILES(X86)%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        ]
+        # Also try registry (most reliable on Windows)
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe") as key:
+                reg_path, _ = winreg.QueryValueEx(key, "")
+                if reg_path and os.path.isfile(reg_path):
+                    return reg_path
+        except Exception:
+            pass
+        for path in candidates:
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                return path
+
+    # On Linux or if nothing found: let SeleniumBase auto-detect (returns None)
+    return None
+
+
+def get_sb_kwargs(**kwargs) -> dict:
+    """
+    Returns a kwargs dict suitable for passing to SB(...), with `binary_location`
+    pre-populated via get_chrome_binary() when running on macOS or Windows.
+
+    Usage in plugins::
+
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
+            ...
+
+    This ensures the Chrome binary is always found even inside a frozen .app
+    bundle or a minimal-PATH environment.
+    """
+    binary = get_chrome_binary()
+    if binary:
+        kwargs.setdefault("binary_location", binary)
+    return kwargs
+
+
+
 def register_active_driver(account_id, sb):
     with active_drivers_lock:
         active_drivers[account_id] = sb

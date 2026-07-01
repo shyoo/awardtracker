@@ -1,5 +1,5 @@
 from typing import Dict, Any, Tuple, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import time
@@ -267,7 +267,7 @@ class UnitedAirlinesPlugin(ProviderPlugin):
         }
         
         try:
-            with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
                 # 1. Open United MyUnited page directly to check if already logged in
                 sb.open("https://www.united.com/en/us/myunited")
                 sb.sleep(12)
@@ -346,7 +346,7 @@ class UnitedAirlinesPlugin(ProviderPlugin):
         """
         Interactive login to allow the user to resolve captchas and log in to United.
         """
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             sb.open("https://www.united.com/en/us/myunited")
             sb.sleep(4)
             

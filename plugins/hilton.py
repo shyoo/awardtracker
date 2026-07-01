@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import time
@@ -143,7 +143,7 @@ class HiltonHonorsPlugin(ProviderPlugin):
         }
         
         try:
-            with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
                 # 1. Open Hilton sign-in URL first. If already logged in, it will redirect to the activity page or dashboard.
                 sb.uc_open_with_reconnect("https://www.hilton.com/en/hilton-honors/login/", 4)
                 sb.sleep(10) # Let React render dynamic client-side elements if redirected
@@ -201,7 +201,7 @@ class HiltonHonorsPlugin(ProviderPlugin):
         Opens an interactive browser window for the user to resolve MFA.
         Uses the same user_data_dir so cookies are saved for future headless runs.
         """
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             sb.uc_open_with_reconnect("https://www.hilton.com/en/hilton-honors/login/", 4)
             sb.sleep(3)
             

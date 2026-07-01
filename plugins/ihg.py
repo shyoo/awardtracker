@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import time
@@ -192,7 +192,7 @@ class IHGRewardsPlugin(ProviderPlugin):
         }
         
         try:
-            with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
                 # 1. Open IHG sign-in URL first. If already logged in, it will redirect to the account dashboard.
                 sb.uc_open_with_reconnect("https://www.ihg.com/rewardsclub/us/en/sign-in", 4)
                 sb.sleep(10) # Let React/Gigya render dynamic elements if redirected
@@ -251,7 +251,7 @@ class IHGRewardsPlugin(ProviderPlugin):
         """
         ACCOUNT_URL = "https://www.ihg.com/rewardsclub/us/en/account-mgmt/home"
 
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             sb.uc_open_with_reconnect("https://www.ihg.com/rewardsclub/us/en/sign-in", 4)
             sb.sleep(3)
 

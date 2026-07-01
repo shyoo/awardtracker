@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 import time
 
@@ -40,7 +40,7 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
                 pass
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
-        with SB(uc=True, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             try:
                 # Delta login page
                 sb.open("https://www.delta.com/skymiles/login")
@@ -189,7 +189,7 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
                 raise PluginError(f"Delta scraping failed: {e}")
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
-        with SB(uc=True, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             sb.open("https://www.delta.com/")
             sb.sleep(2)
             self._dismiss_cookie_banners(sb)
