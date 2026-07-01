@@ -4,7 +4,7 @@ import time
 import re
 from bs4 import BeautifulSoup
 from seleniumbase import SB
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 
 class HertzPlugin(ProviderPlugin):
     @property
@@ -196,7 +196,7 @@ class HertzPlugin(ProviderPlugin):
         }
         
         try:
-            with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
                 # 1. Open login page
                 sb.open("https://www.hertz.com/rentacar/member/login")
                 sb.sleep(10)
@@ -254,7 +254,7 @@ class HertzPlugin(ProviderPlugin):
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to Hertz.
         """
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             sb.open("https://www.hertz.com/rentacar/member/login")
             sb.sleep(10)
             

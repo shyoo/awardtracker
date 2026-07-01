@@ -4,7 +4,7 @@ import time
 import re
 from bs4 import BeautifulSoup
 from seleniumbase import SB
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 
 class EnterprisePlugin(ProviderPlugin):
     @property
@@ -237,7 +237,7 @@ class EnterprisePlugin(ProviderPlugin):
         }
         
         try:
-            with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
                 # 1. Open login page
                 sb.open("https://www.enterprise.com/en/account.html")
                 sb.sleep(10)
@@ -307,7 +307,7 @@ class EnterprisePlugin(ProviderPlugin):
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to Enterprise.
         """
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             sb.open("https://www.enterprise.com/en/account.html")
             sb.sleep(10)
             

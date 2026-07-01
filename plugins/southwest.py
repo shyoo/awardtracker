@@ -1,5 +1,5 @@
 from typing import Dict, Any, Tuple, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 import time
 from bs4 import BeautifulSoup
@@ -219,7 +219,7 @@ class SouthwestPlugin(ProviderPlugin):
                     pass
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
-        with SB(uc=True, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             try:
                 # Open Southwest dashboard
                 print("Opening Southwest account page...")
@@ -281,7 +281,7 @@ class SouthwestPlugin(ProviderPlugin):
                 raise PluginError(f"Southwest scraping failed: {e}")
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
-        with SB(uc=True, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             sb.open("https://www.southwest.com/loyalty/myaccount/")
             sb.sleep(6)
             

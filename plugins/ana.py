@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -441,7 +441,7 @@ class ANAPlugin(ProviderPlugin):
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
         result = None
         try:
-            with SB(uc=True, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
                 print("Opening ANA login/reference page...")
                 sb.open("https://www.ana.co.jp/en/jp/amc/")
                 sb.sleep(6)
@@ -518,7 +518,7 @@ class ANAPlugin(ProviderPlugin):
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
         try:
-            with SB(uc=True, user_data_dir=profile_dir, headed=True) as sb:
+            with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir, headed=True)) as sb:
                 sb.open("https://www.ana.co.jp/en/jp/amc/")
                 sb.sleep(6)
                 

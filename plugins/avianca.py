@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
-from .base import ProviderPlugin, PluginError, InteractionRequiredError, is_hidden_node
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, is_hidden_node, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import time
@@ -516,7 +516,7 @@ class AviancaLifemilesPlugin(ProviderPlugin):
         }
         
         try:
-            with SB(uc=True, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
                 print("Navigating to Avianca LifeMiles homepage...")
                 sb.open("https://www.lifemiles.com")
                 sb.sleep(5)
@@ -698,7 +698,7 @@ class AviancaLifemilesPlugin(ProviderPlugin):
         Launches a headed browser window, helps pre-fill credentials when the Keycloak
         form is reached, and automatically closes the browser once active session data is parsed.
         """
-        with SB(uc=True, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             print("Opening Avianca LifeMiles homepage in headed mode...")
             sb.open("https://www.lifemiles.com")
             sb.sleep(5)

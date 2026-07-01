@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from selenium.common.exceptions import WebDriverException
 import time
@@ -569,7 +569,7 @@ class AirCanadaPlugin(ProviderPlugin):
                     pass
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
-        with SB(uc=True, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             try:
                 print("Opening Air Canada page...")
                 sb.open("https://www.aircanada.com/ca/en/aco/home.html")
@@ -710,7 +710,7 @@ class AirCanadaPlugin(ProviderPlugin):
                 raise PluginError(f"Air Canada scraping failed: {e}")
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
-        with SB(uc=True, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             print("Opening Air Canada home page for interactive login...")
             sb.open("https://www.aircanada.com/ca/en/aco/home.html")
             sb.sleep(6)

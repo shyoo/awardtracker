@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -364,7 +364,7 @@ class JAPANAirlinesPlugin(ProviderPlugin):
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
         region = (kwargs.get("region") or "JR").upper()
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             try:
                 for attempt in range(2):
                     print(f"Sync attempt {attempt + 1}, region: {region}")
@@ -507,7 +507,7 @@ class JAPANAirlinesPlugin(ProviderPlugin):
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
         region = (kwargs.get("region") or "JR").upper()
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             try:
                 for attempt in range(2):
                     print(f"Interactive login attempt {attempt + 1}, region: {region}")

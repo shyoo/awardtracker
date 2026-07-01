@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -346,7 +346,7 @@ class AsianaAirlinesPlugin(ProviderPlugin):
         result = None
 
         try:
-            with SB(uc=True, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
                 # 1. Open home page to initialize session context and language cookies
                 sb.open("https://flyasiana.com/")
                 sb.sleep(6)
@@ -448,7 +448,7 @@ class AsianaAirlinesPlugin(ProviderPlugin):
             raise PluginError(f"Asiana Airlines scraping failed: {e}")
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
-        with SB(uc=True, user_data_dir=profile_dir, headed=True) as sb:
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir, headed=True)) as sb:
             sb.open("https://flyasiana.com/")
             sb.sleep(6)
             

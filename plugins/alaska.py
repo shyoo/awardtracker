@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from datetime import datetime
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 import time
 
@@ -199,7 +199,7 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
                 except Exception:
                     pass
             agent = self.get_consistent_user_agent()
-            with SB(uc=True, headless=False, user_data_dir=profile_dir, agent=agent) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
                 # Open homepage first so we can inject cookies into the domain context
                 sb.open("https://www.alaskaair.com/")
                 sb.sleep(2)
@@ -416,7 +416,7 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
                 except Exception:
                     pass
             agent = self.get_consistent_user_agent()
-            with SB(uc=True, headless=False, user_data_dir=profile_dir, agent=agent) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
                 # Open homepage first to inject any existing cookies
                 sb.open("https://www.alaskaair.com/")
                 sb.sleep(2)

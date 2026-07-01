@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import time
@@ -261,7 +261,7 @@ class AmericanAirlinesPlugin(ProviderPlugin):
         }
         
         try:
-            with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
                 # 1. Open American Airlines summary page directly
                 sb.open("https://www.aa.com/aadvantage-program/profile/account-summary")
                 sb.sleep(12)
@@ -338,7 +338,7 @@ class AmericanAirlinesPlugin(ProviderPlugin):
         """
         Interactive login to allow the user to resolve captchas and log in to American Airlines.
         """
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             sb.open("https://www.aa.com/aadvantage-program/profile/account-summary")
             sb.sleep(12)
             

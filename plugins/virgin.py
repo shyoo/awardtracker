@@ -1,5 +1,5 @@
 from typing import Dict, Any, Tuple, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
@@ -271,7 +271,7 @@ class VirginAtlanticPlugin(ProviderPlugin):
         }
         
         try:
-            with SB(uc=True, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
                 # Open dashboard directly to check for existing active session
                 print("Navigating to Flying Club summary overview...")
                 sb.open("https://www.virginatlantic.com/flying-club/account/overview")
@@ -377,7 +377,7 @@ class VirginAtlanticPlugin(ProviderPlugin):
         Launches browser in headed mode to let the user perform interactive login.
         Automatically closes when successful dashboard loaded is detected.
         """
-        with SB(uc=True, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             # Step 1: Open homepage first to establish solid WAF session state and cookies
             print("Opening Virgin Atlantic home page to initialize session...")
             sb.open("https://www.virginatlantic.com/")

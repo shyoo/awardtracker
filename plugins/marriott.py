@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
-from .base import ProviderPlugin, PluginError, InteractionRequiredError
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 import time
 import re
@@ -358,7 +358,7 @@ class MarriottPlugin(ProviderPlugin):
         result = {"balance": 0, "status": "Unknown", "expiration_date": None, "certificates": []}
         
         try:
-            with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
                 # 1. Open Marriott sign-in URL first. If already logged in, it will redirect to the dashboard.
                 sb.uc_open_with_reconnect("https://www.marriott.com/sign-in.mi", 4)
                 sb.sleep(5)
@@ -505,7 +505,7 @@ class MarriottPlugin(ProviderPlugin):
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to Marriott Bonvoy.
         """
-        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
+        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             sb.uc_open_with_reconnect("https://www.marriott.com/sign-in.mi", 4)
             sb.sleep(4)
             
