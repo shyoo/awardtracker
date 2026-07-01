@@ -1,4 +1,5 @@
 from typing import Dict, Any, Tuple, Optional
+from datetime import datetime
 from .base import ProviderPlugin, PluginError, InteractionRequiredError
 from seleniumbase import SB
 import time
@@ -27,7 +28,46 @@ class MarriottPlugin(ProviderPlugin):
 
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Points expire after 24 months of inactivity. Any earning or redemption transaction extends them."
+
+    @staticmethod
+    def extract_marriott_expiration(html: str) -> Optional[datetime]:
+        """Parses Marriott Bonvoy expiration date directly from page HTML."""
+        from datetime import datetime
+        import calendar
+        from bs4 import BeautifulSoup
         
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+            for script in soup(["script", "style"]):
+                script.decompose()
+            text_content = soup.get_text(" ", strip=True)
+            
+            months_map = {
+                'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+                'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+                'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6,
+                'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
+            }
+            
+            pattern = r'(?i)\b(?:Expires|Expire|Expiring|Expiry|Expiration)\b\s+(?:on\s+)?([A-Za-z]+)\s*(?:(\d{1,2}),?\s*)?(20\d{2})'
+            match = re.search(pattern, text_content)
+            if match:
+                month_str = match.group(1).lower()
+                day_str = match.group(2)
+                year_str = match.group(3)
+                
+                month = months_map.get(month_str)
+                if month:
+                    year = int(year_str)
+                    if day_str:
+                        day = int(day_str)
+                    else:
+                        day = calendar.monthrange(year, month)[1]
+                    return datetime(year, month, day)
+        except Exception as e:
+            print(f"Error parsing explicit Marriott expiration: {e}")
+        return None
+
     def _extract_from_datalayer(self, page_source: str) -> Tuple[Optional[int], Optional[str]]:
         """Extracts points balance and status directly from Marriott's global dataLayer."""
         balance, status = None, None
@@ -57,6 +97,11 @@ class MarriottPlugin(ProviderPlugin):
            expiration label rather than a misleadingly precise wrong date.
         """
         from datetime import datetime
+
+        # 1. Primary Strategy: Try parsing explicit expiration date directly from cleaned HTML text
+        explicit_date = self.extract_marriott_expiration(html)
+        if explicit_date:
+            return explicit_date
 
         today = datetime.now()
         MONTHS_EN = {

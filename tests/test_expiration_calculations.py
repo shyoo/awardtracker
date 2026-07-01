@@ -323,6 +323,44 @@ class TestFormatTimeRemaining(unittest.TestCase):
             self.assertNotIn("2 yr", result,
                 f"{days} days should not display as 2 years (got: '{result}')")
 
+    def test_marriott_explicit_expiration(self):
+        from plugins.marriott import MarriottPlugin
+        
+        # 1. Test explicit "Expires Jun 2028" format (month & year)
+        html_month_year = """
+        <div class="d-none d-md-block">
+          <div data-component-name="a-ui-library-Text" data-testid="ui-library-Text" class="t-font-xs t-font-alt-xs m-0">
+            Expires Jun 2028
+          </div>
+        </div>
+        """
+        parsed_dt = MarriottPlugin.extract_marriott_expiration(html_month_year)
+        self.assertIsNotNone(parsed_dt)
+        self.assertEqual(parsed_dt, datetime(2028, 6, 30))
+        
+        # 2. Test explicit "Expires Jun 24, 2028" format (month, day & year)
+        html_full_date = "<div>Expires Jun 24, 2028</div>"
+        parsed_dt = MarriottPlugin.extract_marriott_expiration(html_full_date)
+        self.assertIsNotNone(parsed_dt)
+        self.assertEqual(parsed_dt, datetime(2028, 6, 24))
+        
+        # 3. Test text that contains other dates should not falsely match
+        html_falsy = "<div>Member Since Sep 2016</div>"
+        parsed_dt = MarriottPlugin.extract_marriott_expiration(html_falsy)
+        self.assertIsNone(parsed_dt)
+        
+        # 4. Test case-insensitivity and "Expiring" keyword
+        html_expiring = "<div>Expiring December 2029</div>"
+        parsed_dt = MarriottPlugin.extract_marriott_expiration(html_expiring)
+        self.assertIsNotNone(parsed_dt)
+        self.assertEqual(parsed_dt, datetime(2029, 12, 31))
+
+        # 5. Test "on" optional keyword
+        html_on = "<div>Expires on Jun 24, 2028</div>"
+        parsed_dt = MarriottPlugin.extract_marriott_expiration(html_on)
+        self.assertIsNotNone(parsed_dt)
+        self.assertEqual(parsed_dt, datetime(2028, 6, 24))
+
 
 if __name__ == '__main__':
     unittest.main()
