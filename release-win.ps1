@@ -118,10 +118,10 @@ if ($null -ne $IsccPath) {
         Write-Error "Installer compilation completed, but '$SetupExe' was not found."
     }
 } else {
-    Write-Warning "Inno Setup Compiler (ISCC.exe) was not found on your system."
-    Write-Host "To generate 'awardtracker-setup.exe', please download and install Inno Setup 6 from:" -ForegroundColor Yellow
+    Write-Error "Inno Setup Compiler (ISCC.exe) was not found on your system."
+    Write-Host "To generate the setup wizard, please download and install Inno Setup 6 from:" -ForegroundColor Yellow
     Write-Host "👉 https://jrsoftware.org/isdl.php" -ForegroundColor Yellow
-    Write-Host "Once Inno Setup is installed, run this script again or right-click 'installer.iss' and select 'Compile'." -ForegroundColor Gray
+    Exit 1
 }
 
 Write-Host "`n==================================================" -ForegroundColor Cyan
