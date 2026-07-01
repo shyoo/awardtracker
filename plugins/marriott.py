@@ -1,6 +1,5 @@
 from typing import Dict, Any, Tuple, Optional
-from datetime import datetime
-from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
+from .base import ProviderPlugin, PluginError, InteractionRequiredError
 from seleniumbase import SB
 import time
 import re
@@ -28,46 +27,7 @@ class MarriottPlugin(ProviderPlugin):
 
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Points expire after 24 months of inactivity. Any earning or redemption transaction extends them."
-
-    @staticmethod
-    def extract_marriott_expiration(html: str) -> Optional[datetime]:
-        """Parses Marriott Bonvoy expiration date directly from page HTML."""
-        from datetime import datetime
-        import calendar
-        from bs4 import BeautifulSoup
         
-        try:
-            soup = BeautifulSoup(html, "html.parser")
-            for script in soup(["script", "style"]):
-                script.decompose()
-            text_content = soup.get_text(" ", strip=True)
-            
-            months_map = {
-                'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-                'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-                'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6,
-                'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
-            }
-            
-            pattern = r'(?i)\b(?:Expires|Expire|Expiring|Expiry|Expiration)\b\s+(?:on\s+)?([A-Za-z]+)\s*(?:(\d{1,2}),?\s*)?(20\d{2})'
-            match = re.search(pattern, text_content)
-            if match:
-                month_str = match.group(1).lower()
-                day_str = match.group(2)
-                year_str = match.group(3)
-                
-                month = months_map.get(month_str)
-                if month:
-                    year = int(year_str)
-                    if day_str:
-                        day = int(day_str)
-                    else:
-                        day = calendar.monthrange(year, month)[1]
-                    return datetime(year, month, day)
-        except Exception as e:
-            print(f"Error parsing explicit Marriott expiration: {e}")
-        return None
-
     def _extract_from_datalayer(self, page_source: str) -> Tuple[Optional[int], Optional[str]]:
         """Extracts points balance and status directly from Marriott's global dataLayer."""
         balance, status = None, None
@@ -83,171 +43,55 @@ class MarriottPlugin(ProviderPlugin):
         return balance, status
 
     def _extract_expiration_date(self, html: str) -> Optional[datetime]:
-        """
-        Extracts the Marriott Bonvoy points expiration date from the activity page HTML.
-
-        Strategy (in priority order):
-        1. Parse Marriott's *explicit* expiration notice sentence — e.g.
-           "Your points will expire on January 15, 2026" or the Korean equivalent
-           "포인트는 2026년 1월 15일에 만료됩니다". This is the most reliable signal.
-        2. Fall back to inferring 24 months from the *most recent transaction date*,
-           but only consider dates that appear near recognised Marriott transaction
-           keywords so that JS/ad timestamps and other noise are excluded.
-        3. Return None if no reliable date is found.  The UI will then show no
-           expiration label rather than a misleadingly precise wrong date.
-        """
+        """Extracts expiration date based on 24 months from the latest activity date found in HTML."""
         from datetime import datetime
-
-        # 1. Primary Strategy: Try parsing explicit expiration date directly from cleaned HTML text
-        explicit_date = self.extract_marriott_expiration(html)
-        if explicit_date:
-            return explicit_date
-
+        
+        dates = []
         today = datetime.now()
-        MONTHS_EN = {
-            'january': 1, 'february': 2, 'march': 3, 'april': 4,
-            'may': 5, 'june': 6, 'july': 7, 'august': 8,
-            'september': 9, 'october': 10, 'november': 11, 'december': 12,
-        }
-
-        # ------------------------------------------------------------------
-        # Strategy 1: Look for an explicit expiration notice on the page.
-        # ------------------------------------------------------------------
-
-        # 1a. English: "expire on Month DD, YYYY"  /  "expire on Month YYYY"
-        #     Covers "will expire on", "are set to expire on", etc.
-        exp_en = re.search(
-            r'expir\w*\s+on\s+(\w+)\s+(\d{1,2}),?\s+(\d{4})',
-            html, re.IGNORECASE
-        )
-        if exp_en:
+        
+        # 1. Find all YYYY-MM-DD
+        matches_dash = re.findall(r'202\d-\d\d-\d\d', html)
+        for m in set(matches_dash):
             try:
-                month_num = MONTHS_EN.get(exp_en.group(1).lower())
-                if month_num:
-                    return datetime(int(exp_en.group(3)), month_num, int(exp_en.group(2)))
-            except Exception:
+                dt = datetime.strptime(m, "%Y-%m-%d")
+                if dt <= today:
+                    dates.append(dt)
+            except:
                 pass
-
-        # 1b. English: ISO / slash date near "expire" keyword
-        #     e.g. "expire on 2026-01-15" or "expire on 01/15/2026"
-        exp_en_iso = re.search(
-            r'expir\w*.{0,30}?(\d{4}-\d{2}-\d{2})',
-            html, re.IGNORECASE | re.DOTALL
-        )
-        if exp_en_iso:
+        
+        # 2. Find all YYYY.MM.DD or YYYY. MM. DD.
+        matches_dot = re.findall(r'202\d\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}', html)
+        for m in set(matches_dot):
             try:
-                return datetime.strptime(exp_en_iso.group(1), "%Y-%m-%d")
-            except Exception:
+                clean = re.sub(r'\s+', '', m)
+                parts = clean.split('.')
+                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+                if dt <= today:
+                    dates.append(dt)
+            except:
                 pass
-
-        exp_en_slash = re.search(
-            r'expir\w*.{0,30}?(\d{1,2}/\d{1,2}/\d{4})',
-            html, re.IGNORECASE | re.DOTALL
-        )
-        if exp_en_slash:
+                
+        # 3. Find all YYYY년 MM월 DD일
+        matches_kr = re.findall(r'202\d\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일', html)
+        for m in set(matches_kr):
             try:
-                return datetime.strptime(exp_en_slash.group(1), "%m/%d/%Y")
-            except Exception:
+                nums = re.findall(r'\d+', m)
+                if len(nums) == 3:
+                    dt = datetime(int(nums[0]), int(nums[1]), int(nums[2]))
+                    if dt <= today:
+                        dates.append(dt)
+            except:
                 pass
-
-        # 1c. Korean: "YYYY년 MM월 DD일에 만료" / "만료: YYYY.MM.DD"
-        exp_kr = re.search(
-            r'(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일.{0,20}만료',
-            html, re.IGNORECASE
-        )
-        if not exp_kr:
-            exp_kr = re.search(
-                r'만료.{0,40}?(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일',
-                html, re.IGNORECASE
-            )
-        if exp_kr:
+        
+        if dates:
+            last_activity = max(dates)
             try:
-                return datetime(int(exp_kr.group(1)), int(exp_kr.group(2)), int(exp_kr.group(3)))
-            except Exception:
-                pass
-
-        # 1d. Korean: date in ISO/dot format near 만료
-        exp_kr_iso = re.search(
-            r'만료.{0,30}?(\d{4}[-./]\d{2}[-./]\d{2})',
-            html, re.IGNORECASE
-        )
-        if not exp_kr_iso:
-            exp_kr_iso = re.search(
-                r'(\d{4}[-./]\d{2}[-./]\d{2}).{0,30}만료',
-                html, re.IGNORECASE
-            )
-        if exp_kr_iso:
-            raw = re.sub(r'[./]', '-', exp_kr_iso.group(1))
-            try:
-                return datetime.strptime(raw, "%Y-%m-%d")
-            except Exception:
-                pass
-
-        # ------------------------------------------------------------------
-        # Strategy 2: Infer from the most recent *transaction* date.
-        # Only consider dates that appear near recognised Marriott transaction
-        # keywords so JS/ad/page-load timestamps are excluded.
-        # ------------------------------------------------------------------
-        TRANSACTION_KEYWORDS = re.compile(
-            r'earn|redeem|stay|bonus|transfer|credit|purchase|award|hotel|night'
-            r'|보너스|적립|사용|숙박|이체|호텔|리워드|활동',
-            re.IGNORECASE
-        )
-        # Scan a sliding window of ±500 chars around each date candidate.
-        # Support YYYY-MM-DD, YYYY.MM.DD (with optional spaces), and YYYY년MM월DD일 formats.
-        activity_dates = []
-        date_patterns = [
-            (r'202\d-\d{2}-\d{2}', "%Y-%m-%d"),
-        ]
-        for pattern, fmt in date_patterns:
-            for m in re.finditer(pattern, html):
-                try:
-                    dt = datetime.strptime(m.group(0), fmt)
-                    if dt > today:
-                        continue  # Future dates are not activity dates
-                    window_start = max(0, m.start() - 500)
-                    window_end = min(len(html), m.end() + 500)
-                    window = html[window_start:window_end]
-                    if TRANSACTION_KEYWORDS.search(window):
-                        activity_dates.append(dt)
-                except Exception:
-                    pass
-
-        # Also scan dot-format dates (YYYY.MM.DD with optional spaces)
-        for m in re.finditer(r'(202\d)\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})', html):
-            try:
-                dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-                if dt > today:
-                    continue
-                window_start = max(0, m.start() - 500)
-                window_end = min(len(html), m.end() + 500)
-                window = html[window_start:window_end]
-                if TRANSACTION_KEYWORDS.search(window):
-                    activity_dates.append(dt)
-            except Exception:
-                pass
-
-        # Also scan Korean date format (YYYY년 MM월 DD일)
-        for m in re.finditer(r'(202\d)\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일', html):
-            try:
-                dt = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-                if dt > today:
-                    continue
-                window_start = max(0, m.start() - 500)
-                window_end = min(len(html), m.end() + 500)
-                window = html[window_start:window_end]
-                if TRANSACTION_KEYWORDS.search(window):
-                    activity_dates.append(dt)
-            except Exception:
-                pass
-
-        if activity_dates:
-            last_activity = max(activity_dates)
-            try:
-                return last_activity.replace(year=last_activity.year + 2)
+                expiration_date = last_activity.replace(year=last_activity.year + 2)
             except ValueError:
-                return last_activity.replace(year=last_activity.year + 2, day=28)
-
+                # Handle leap year (Feb 29)
+                expiration_date = last_activity.replace(year=last_activity.year + 2, day=28)
+            return expiration_date
+            
         return None
 
     def _check_for_mfa(self, sb) -> bool:
@@ -358,7 +202,7 @@ class MarriottPlugin(ProviderPlugin):
         result = {"balance": 0, "status": "Unknown", "expiration_date": None, "certificates": []}
         
         try:
-            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
+            with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
                 # 1. Open Marriott sign-in URL first. If already logged in, it will redirect to the dashboard.
                 sb.uc_open_with_reconnect("https://www.marriott.com/sign-in.mi", 4)
                 sb.sleep(5)
@@ -505,7 +349,7 @@ class MarriottPlugin(ProviderPlugin):
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to Marriott Bonvoy.
         """
-        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
+        with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
             sb.uc_open_with_reconnect("https://www.marriott.com/sign-in.mi", 4)
             sb.sleep(4)
             
