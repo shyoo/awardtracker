@@ -4,7 +4,7 @@ import time
 import re
 from bs4 import BeautifulSoup
 from seleniumbase import SB
-from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs, get_chrome_binary
 
 class WyndhamPlugin(ProviderPlugin):
     @property
@@ -171,41 +171,7 @@ class WyndhamPlugin(ProviderPlugin):
             pass
 
     def _get_chrome_path(self) -> Optional[str]:
-        import platform
-        import os
-        if platform.system() == "Windows":
-            import winreg
-            try:
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe") as key:
-                    path, _ = winreg.QueryValueEx(key, "")
-                    if path and os.path.exists(path):
-                        return path
-            except Exception:
-                pass
-            try:
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe") as key:
-                    path, _ = winreg.QueryValueEx(key, "")
-                    if path and os.path.exists(path):
-                        return path
-            except Exception:
-                pass
-            
-            # Standard locations
-            paths = [
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
-            ]
-            for p in paths:
-                if os.path.exists(p):
-                    return p
-                    
-        elif platform.system() == "Darwin":
-            path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-            if os.path.exists(path):
-                return path
-                
-        return None
+        return get_chrome_binary()
 
     def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str], Optional[datetime]]:
         """Extracts Wyndham Rewards points balance, status level, and fallback activity date."""
