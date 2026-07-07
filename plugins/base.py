@@ -29,6 +29,36 @@ def get_chrome_binary() -> str | None:
     system = platform.system()
 
     if system == "Darwin":
+        import subprocess
+
+        # 1. Proactively query Launch Services via osascript (most reliable)
+        try:
+            cmd = ["osascript", "-e", 'POSIX path of (path to application "Google Chrome")']
+            app_path = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").strip()
+            if app_path:
+                # Strip any trailing slash first
+                app_path = app_path.rstrip("/")
+                binary_path = f"{app_path}/Contents/MacOS/Google Chrome"
+                if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
+                    return binary_path
+        except Exception:
+            pass
+
+        # 2. Query Spotlight via mdfind as a second dynamic search option
+        try:
+            cmd = ["mdfind", "kMDItemCFBundleIdentifier == 'com.google.Chrome'"]
+            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").strip()
+            if output:
+                for line in output.splitlines():
+                    app_path = line.strip()
+                    if app_path:
+                        app_path = app_path.rstrip("/")
+                        binary_path = f"{app_path}/Contents/MacOS/Google Chrome"
+                        if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
+                            return binary_path
+        except Exception:
+            pass
+
         candidates = [
             # Standard installation in /Applications (most common)
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",

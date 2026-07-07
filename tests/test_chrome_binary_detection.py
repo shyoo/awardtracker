@@ -65,9 +65,54 @@ class TestGetChromeBinary(unittest.TestCase):
             result = get_chrome_binary()
             self.assertEqual(result, chromium_path)
 
-    def test_macos_not_found_returns_none(self):
-        """Returns None on macOS when no Chrome/Chromium executable is found."""
+    def test_macos_osascript_success(self):
+        """Returns path from osascript when Launch Services resolves it successfully."""
+        app_path = "/Custom/Applications/Google Chrome.app"
+        binary_path = "/Custom/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+        def fake_isfile(path):
+            return path == binary_path
+
+        def fake_access(path, mode):
+            return path == binary_path
+
         with patch("platform.system", return_value="Darwin"), \
+             patch("subprocess.check_output", return_value=app_path.encode("utf-8")), \
+             patch("os.path.isfile", side_effect=fake_isfile), \
+             patch("os.access", side_effect=fake_access):
+            result = get_chrome_binary()
+            self.assertEqual(result, binary_path)
+
+    def test_macos_mdfind_success(self):
+        """Returns path from mdfind when osascript fails but Spotlight succeeds."""
+        app_path = "/Volumes/Backup/Applications/Google Chrome.app"
+        binary_path = "/Volumes/Backup/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+        def fake_isfile(path):
+            return path == binary_path
+
+        def fake_access(path, mode):
+            return path == binary_path
+
+        def fake_check_output(cmd, **kwargs):
+            if "osascript" in cmd[0]:
+                raise subprocess.SubprocessError("Failed")
+            elif "mdfind" in cmd[0]:
+                return app_path.encode("utf-8")
+            raise ValueError("Unexpected command")
+
+        import subprocess
+        with patch("platform.system", return_value="Darwin"), \
+             patch("subprocess.check_output", side_effect=fake_check_output), \
+             patch("os.path.isfile", side_effect=fake_isfile), \
+             patch("os.access", side_effect=fake_access):
+            result = get_chrome_binary()
+            self.assertEqual(result, binary_path)
+
+    def test_macos_not_found_returns_none(self):
+        """Returns None on macOS when all detection methods fail."""
+        with patch("platform.system", return_value="Darwin"), \
+             patch("subprocess.check_output", side_effect=Exception("Failed")), \
              patch("os.path.isfile", return_value=False), \
              patch("os.access", return_value=False):
             result = get_chrome_binary()

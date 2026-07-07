@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError, add_months, get_sb_kwargs
+from .base import ProviderPlugin, PluginError, InteractionRequiredError, add_months, get_sb_kwargs, get_chrome_binary
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -444,32 +444,7 @@ class BritishAirwaysPlugin(ProviderPlugin):
                     print(f"Could not remove Chrome storage/session directory {d}: {e}")
 
     def _get_chrome_path(self) -> Optional[str]:
-        if platform.system() == "Windows":
-            if winreg is not None:
-                try:
-                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe") as key:
-                        path, _ = winreg.QueryValueEx(key, "")
-                        if path and os.path.exists(path):
-                            return path
-                except Exception:
-                    pass
-            
-            # Standard locations
-            paths = [
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
-            ]
-            for p in paths:
-                if os.path.exists(p):
-                    return p
-                    
-        elif platform.system() == "Darwin":
-            path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-            if os.path.exists(path):
-                return path
-                
-        return None
+        return get_chrome_binary()
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
         try:
