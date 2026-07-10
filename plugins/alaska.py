@@ -152,52 +152,8 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
         except Exception as e:
             print(f"Error restoring Alaska Airlines cookies: {e}")
 
-    def configure_session_restore(self, profile_dir: str) -> None:
-        if not profile_dir:
-            return
-        import os
-        import json
-        import stat
-        
-        pref_path = os.path.join(profile_dir, 'Default', 'Preferences')
-        os.makedirs(os.path.dirname(pref_path), exist_ok=True)
-        
-        data = {}
-        if os.path.exists(pref_path):
-            try:
-                # Make writable first to make sure we can read/write it
-                os.chmod(pref_path, stat.S_IWRITE)
-                with open(pref_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-            except Exception:
-                pass
-                
-        if 'session' not in data or not isinstance(data['session'], dict):
-            data['session'] = {}
-        data['session']['restore_on_startup'] = 1
-        
-        if 'profile' not in data or not isinstance(data['profile'], dict):
-            data['profile'] = {}
-        data['profile']['exit_type'] = "Normal"
-        data['profile']['exited_cleanly'] = True
-        
-        try:
-            with open(pref_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4)
-            # Keeping the Preferences file writable allows Chrome to cleanly exit and update its exit type.
-            print("Chrome session restore and clean exit preference configured successfully.")
-        except Exception as e:
-            print(f"Error configuring Chrome session restore preference: {e}")
-
-
-
     def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
         try:
-            if profile_dir:
-                try:
-                    self.configure_session_restore(profile_dir)
-                except Exception:
-                    pass
             agent = self.get_consistent_user_agent()
             with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
                 # Open homepage first so we can inject cookies into the domain context
@@ -410,11 +366,6 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
         try:
-            if profile_dir:
-                try:
-                    self.configure_session_restore(profile_dir)
-                except Exception:
-                    pass
             agent = self.get_consistent_user_agent()
             with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
                 # Open homepage first to inject any existing cookies
