@@ -553,6 +553,57 @@ def _clean_lock_files(profile_dir: str) -> None:
             except Exception:
                 pass
 
+def configure_session_restore(profile_dir: str) -> None:
+    """
+    Fix Chrome's exit-type and session-restore flags in the browser profile's
+    Preferences file so Chrome does not display the "didn't shut down correctly"
+    crash recovery dialog on next launch.
+
+    This is safe and does NOT affect authentication data:
+    - Session cookies are stored in cookies.json (custom JSON jar) and Default/Cookies (SQLite)
+    - MFA tokens live in cookies or localStorage/IndexedDB
+    - None of these reside in the Preferences file
+
+    Previously this logic was duplicated in 5 individual plugins (Alaska, British,
+    JetBlue, National, Wyndham).  It is now centralized here and called
+    automatically for ALL plugins via safe_call_plugin_method().
+    """
+    if not profile_dir:
+        return
+    import os
+    import json
+    import stat
+
+    pref_path = os.path.join(profile_dir, 'Default', 'Preferences')
+    os.makedirs(os.path.dirname(pref_path), exist_ok=True)
+
+    data = {}
+    if os.path.exists(pref_path):
+        try:
+            # Make writable first in case a previous run left it read-only
+            os.chmod(pref_path, stat.S_IWRITE | stat.S_IREAD)
+            with open(pref_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            # If the file is corrupted (unparsable JSON), start fresh
+            data = {}
+
+    if 'session' not in data or not isinstance(data['session'], dict):
+        data['session'] = {}
+    data['session']['restore_on_startup'] = 1
+
+    if 'profile' not in data or not isinstance(data['profile'], dict):
+        data['profile'] = {}
+    data['profile']['exit_type'] = "Normal"
+    data['profile']['exited_cleanly'] = True
+
+    try:
+        with open(pref_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+    except Exception:
+        pass
+
+
 def safe_call_plugin_method(method, *args, **kwargs):
     """
     Safely call a plugin method (like fetch_data or interactive_login) by only
@@ -580,6 +631,12 @@ def safe_call_plugin_method(method, *args, **kwargs):
     if profile_dir:
         try:
             wait_for_chrome_exit(profile_dir)
+        except Exception:
+            pass
+
+        # Fix Chrome's exit-type flags to prevent the "didn't shut down correctly" dialog
+        try:
+            configure_session_restore(profile_dir)
         except Exception:
             pass
         

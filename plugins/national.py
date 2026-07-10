@@ -118,39 +118,6 @@ class NationalPlugin(ProviderPlugin):
         except Exception as e:
             print(f"Failed to restore cookies: {e}")
 
-    def configure_session_restore(self, profile_dir: str) -> None:
-        if not profile_dir:
-            return
-        import os
-        import json
-        import stat
-        pref_path = os.path.join(profile_dir, 'Default', 'Preferences')
-        os.makedirs(os.path.dirname(pref_path), exist_ok=True)
-        
-        data = {}
-        if os.path.exists(pref_path):
-            try:
-                os.chmod(pref_path, stat.S_IWRITE)
-                with open(pref_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-            except Exception:
-                pass
-                
-        if 'session' not in data or not isinstance(data['session'], dict):
-            data['session'] = {}
-        data['session']['restore_on_startup'] = 1
-        
-        if 'profile' not in data or not isinstance(data['profile'], dict):
-            data['profile'] = {}
-        data['profile']['exit_type'] = "Normal"
-        data['profile']['exited_cleanly'] = True
-        
-        try:
-            with open(pref_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4)
-            print("Chrome session restore configured successfully for National.")
-        except Exception as e:
-            print(f"Error configuring Chrome session restore preference: {e}")
 
     def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str], Optional[datetime]]:
         """Extracts Emerald Club Free Days balance, status level, and fallback activity date."""
@@ -260,10 +227,6 @@ class NationalPlugin(ProviderPlugin):
         if profile_dir:
             from .base import wait_for_chrome_exit
             wait_for_chrome_exit(profile_dir)
-            try:
-                self.configure_session_restore(profile_dir)
-            except Exception:
-                pass
         
         try:
             agent = self.get_consistent_user_agent()
@@ -350,10 +313,6 @@ class NationalPlugin(ProviderPlugin):
         if profile_dir:
             from .base import wait_for_chrome_exit
             wait_for_chrome_exit(profile_dir)
-            try:
-                self.configure_session_restore(profile_dir)
-            except Exception:
-                pass
                 
         agent = self.get_consistent_user_agent()
         with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
