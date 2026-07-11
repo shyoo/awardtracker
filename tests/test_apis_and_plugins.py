@@ -1060,6 +1060,24 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertEqual(result_fallback["balance"], 120500)
         self.assertEqual(result_fallback["status"], "Member")
 
+        # 3. Test false-positive Diamond promotion exclusion
+        html_promo = """
+        <html>
+            <body>
+                <div class="asw-header-user">
+                    <span class="asw-header-user__mile">0</span>
+                </div>
+                <div class="promotion-banner">
+                    <p>Earn Diamond service status by flying 100,000 premium points!</p>
+                </div>
+            </body>
+        </html>
+        """
+        result_promo = plugin._parse_mileage_html(html_promo)
+        self.assertIsNotNone(result_promo)
+        self.assertEqual(result_promo["balance"], 0)
+        self.assertEqual(result_promo["status"], "Member")
+
     def test_ana_mileage_parsing_js_userdata_mile(self):
         plugin = plugin_manager.get_plugin('ana')
         self.assertIsNotNone(plugin)
@@ -1164,6 +1182,27 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertIsNotNone(result_empty["expiration_date"])
         # Should be formatted as ISO string
         self.assertTrue(result_empty["expiration_date"].endswith("T00:00:00Z"))
+
+        # 3. Balance <= 0 should set expiration_date to None
+        result_zero_bal = {"balance": 0, "status": "Member", "expiration_date": None}
+        html_zero = "<html><body><div>Your miles will expire on 2026/11/30.</div></body></html>"
+        mock_sb_zero = MockSB(html_zero)
+        plugin._fetch_expiration(mock_sb_zero, result_zero_bal)
+        self.assertIsNone(result_zero_bal["expiration_date"])
+
+        # 4. Dates without expiration keywords in parent hierarchy should be ignored
+        result_unrelated_date = {"balance": 100, "status": "Member", "expiration_date": None}
+        html_unrelated = """
+        <html>
+            <body>
+                <div>Transaction posted on 2029/05/15</div>
+            </body>
+        </html>
+        """
+        mock_sb_unrelated = MockSB(html_unrelated)
+        plugin._fetch_expiration(mock_sb_unrelated, result_unrelated_date)
+        self.assertIsNotNone(result_unrelated_date["expiration_date"])
+        self.assertNotEqual(result_unrelated_date["expiration_date"], "2029-05-15T00:00:00Z")
 
     def test_safe_call_plugin_method(self):
         from plugins.base import safe_call_plugin_method

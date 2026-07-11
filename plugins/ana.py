@@ -374,9 +374,34 @@ class ANAPlugin(ProviderPlugin):
             "bronze": "Bronze", "브론즈": "Bronze",
             "super flyers": "Super Flyers", "sfc": "Super Flyers", "슈퍼 플라이어즈": "Super Flyers"
         }
-        text_content = soup.get_text().lower()
+        
+        user_container = None
+        container_selectors = [
+            ".asw-header-user", ".asw-header-login",
+            "[class*='header-user']", "[class*='header-login']",
+            ".js-userdata", "[class*='user-info']", ".user-info",
+            ".member-info", "[class*='member-info']"
+        ]
+        for sel in container_selectors:
+            user_container = soup.select_one(sel)
+            if user_container:
+                break
+        
+        if not user_container and mile_el:
+            parent = mile_el.parent
+            for _ in range(5):
+                if parent:
+                    p_class = " ".join(parent.get("class", [])).lower() if parent.get("class") else ""
+                    if any(kw in p_class for kw in ["user", "login", "member"]):
+                        user_container = parent
+                        break
+                    parent = parent.parent
+                else:
+                    break
+                    
+        search_text = user_container.get_text().lower() if user_container else soup.get_text().lower()
         for kw, val in status_map.items():
-            if kw in text_content:
+            if kw in search_text:
                 status = val
                 break
 
@@ -388,6 +413,11 @@ class ANAPlugin(ProviderPlugin):
 
     def _fetch_expiration(self, sb, result: Dict[str, Any]) -> None:
         try:
+            if result.get("balance", 0) <= 0:
+                result["expiration_date"] = None
+                print("Balance is 0 or less. Skipping expiration date extraction.")
+                return
+
             html = sb.get_page_source()
             soup = BeautifulSoup(html, "html.parser")
             
@@ -399,6 +429,22 @@ class ANAPlugin(ProviderPlugin):
             
             for pattern in date_patterns:
                 for el in soup.find_all(string=re.compile(pattern, re.IGNORECASE)):
+                    # Validate context: check if any ancestor contains expiration-related keywords
+                    parent = el.parent
+                    is_exp_date = False
+                    for _ in range(4):
+                        if parent:
+                            p_text = parent.get_text().lower()
+                            if any(kw in p_text for kw in ["expir", "valid", "expiry", "유효", "만료", "有効", "期限"]):
+                                is_exp_date = True
+                                break
+                            parent = parent.parent
+                        else:
+                            break
+                    
+                    if not is_exp_date:
+                        continue
+
                     text = el.strip()
                     matches = re.findall(pattern, text, re.IGNORECASE)
                     for match in matches:
