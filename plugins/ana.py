@@ -309,11 +309,18 @@ class ANAPlugin(ProviderPlugin):
                 ".btn-confirm", ".btn-ok", ".btn-submit"
             ]:
                 if sb.is_element_visible(btn_sel):
-                    btn_text = sb.get_text(btn_sel).lower()
-                    if any(kw in btn_text for kw in [
-                        "confirm", "ok", "yes", "continue", "proceed", "agree", "accept", "register",
-                        "등록", "확인", "예", "送信", "決定", "はい"
-                    ]):
+                    btn_text_clean = sb.get_text(btn_sel).lower().strip()
+                    # Prevent matching partial words (e.g. "ok" inside "tokyo" or "booking")
+                    words = btn_text_clean.split()
+                    is_match = False
+                    if btn_text_clean in ["confirm", "ok", "yes", "continue", "proceed", "agree", "accept", "register", "확인", "예", "送信", "決定", "はい", "agree to all", "agree and proceed", "accept all"]:
+                        is_match = True
+                    elif any(w in words for w in ["confirm", "ok", "yes", "continue", "proceed", "agree", "accept", "register"]):
+                        is_match = True
+                    elif any(kw in btn_text_clean for kw in ["로그인", "등록"]):
+                        is_match = True
+
+                    if is_match:
                         print(f"Clicking modal confirmation button: {btn_sel}")
                         sb.click(btn_sel)
                         sb.sleep(1)
@@ -413,73 +420,177 @@ class ANAPlugin(ProviderPlugin):
 
     def _fetch_expiration(self, sb, result: Dict[str, Any]) -> None:
         try:
-            if result.get("balance", 0) <= 0:
-                result["expiration_date"] = None
-                print("Balance is 0 or less. Skipping expiration date extraction.")
-                return
 
-            html = sb.get_page_source()
+            def _get_num(txt: str) -> Optional[int]:
+                m = re.search(r'(?<!\d)(\d{1,3}(?:,\d{3})+|\d+)(?!\d)', txt)
+                return int(m.group(1).replace(',', '')) if m else None
+
+            # Navigate to the detailed mileage validity page
+            print("Navigating to ANA detailed mileage validity page...")
+            detailed_url = "https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/referenceDetail_e.jsp"
+            try:
+                sb.open(detailed_url)
+                sb.sleep(4)
+                html = sb.get_page_source()
+                # Check if we were blocked by the no mileage error or didn't get a proper page
+                if "no mileage" in html.lower() or "로그아웃" in html or "logout" in html or "sign out" in html:
+                    # Fallback to summary/performance report page
+                    print("Blocked by 'no mileage' or similar on detailed page. Falling back to summary page...")
+                    sb.open("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/reference_e.jsp")
+                    sb.sleep(4)
+                    html = sb.get_page_source()
+            except Exception as nav_e:
+                print(f"Failed to load detailed page: {nav_e}. Falling back to summary page...")
+                try:
+                    sb.open("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/reference_e.jsp")
+                    sb.sleep(4)
+                    html = sb.get_page_source()
+                except Exception as fallback_e:
+                    print(f"Failed to navigate to summary page: {fallback_e}")
+                    html = sb.get_page_source()
+
             soup = BeautifulSoup(html, "html.parser")
             
             dates = []
             date_patterns = [
                 r'20\d{2}[-/.]\d{2}[-/.]\d{2}',
-                r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+20\d{2}'
+                r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+20\d{2}',
+                r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*,?\s*20\d{2}',
+                r'\d{4}\s*년\s*\d{1,2}\s*월\s*(?:\d{1,2}\s*일)?'
             ]
             
-            for pattern in date_patterns:
-                for el in soup.find_all(string=re.compile(pattern, re.IGNORECASE)):
-                    # Validate context: check if any ancestor contains expiration-related keywords
-                    parent = el.parent
-                    is_exp_date = False
-                    for _ in range(4):
-                        if parent:
-                            p_text = parent.get_text().lower()
-                            if any(kw in p_text for kw in ["expir", "valid", "expiry", "유효", "만료", "有効", "期限"]):
-                                is_exp_date = True
-                                break
-                            parent = parent.parent
-                        else:
-                            break
-                    
-                    if not is_exp_date:
-                        continue
-
-                    text = el.strip()
-                    matches = re.findall(pattern, text, re.IGNORECASE)
-                    for match in matches:
-                        clean_date = match.replace('/', '-').replace('.', '-')
-                        try:
-                            if any(m in clean_date.lower() for m in ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]):
-                                clean_date_parsed = re.sub(r'\s+', ' ', clean_date).replace(',', '')
-                                d = None
-                                for fmt in ['%b %d %Y', '%B %d %Y', '%b %d, %Y', '%B %d, %Y']:
+            # 1. Try parsing the summary table structure specifically if present
+            table = soup.select_one("table.ffp_2021_table_mileage-expiration-date")
+            table_parsed = False
+            if table:
+                print("Found expiration table!")
+                table_parsed = True
+                rows = table.find_all("tr")
+                if len(rows) >= 2:
+                    date_headers = rows[0].find_all(["th", "td"])
+                    mileage_cells = rows[1].find_all(["th", "td"])
+                    for col_idx in range(1, min(len(date_headers), len(mileage_cells))):
+                        date_text = date_headers[col_idx].get_text(" ", strip=True)
+                        mileage_text = mileage_cells[col_idx].get_text(" ", strip=True)
+                        
+                        mileage_val = _get_num(mileage_text)
+                        if mileage_val is not None and mileage_val > 0:
+                            for pattern in date_patterns:
+                                matches = re.findall(pattern, date_text, re.IGNORECASE)
+                                for match in matches:
+                                    clean_date = match.replace('/', '-').replace('.', '-')
                                     try:
-                                        d = datetime.strptime(clean_date_parsed, fmt)
-                                        break
+                                        # Handle Korean date
+                                        ko_match = re.search(r'(\d{4})\s*년\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일)?', clean_date)
+                                        if ko_match:
+                                            y = int(ko_match.group(1))
+                                            m = int(ko_match.group(2))
+                                            d_str = ko_match.group(3)
+                                            if d_str:
+                                                d_val = int(d_str)
+                                            else:
+                                                import calendar
+                                                _, d_val = calendar.monthrange(y, m)
+                                            d = datetime(y, m, d_val)
+                                        elif any(m in clean_date.lower() for m in ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]):
+                                            clean_date_parsed = re.sub(r'\s+', ' ', clean_date).replace(',', '')
+                                            d = None
+                                            for fmt in ['%b %d %Y', '%B %d %Y', '%b %d, %Y', '%B %d, %Y', '%b %Y', '%B %Y', '%b,%Y', '%B,%Y']:
+                                                try:
+                                                    d = datetime.strptime(clean_date_parsed, fmt)
+                                                    if '%d' not in fmt:
+                                                        import calendar
+                                                        _, last_day = calendar.monthrange(d.year, d.month)
+                                                        d = d.replace(day=last_day)
+                                                    break
+                                                except ValueError:
+                                                    pass
+                                        else:
+                                            try:
+                                                d = datetime.strptime(clean_date[:10], '%Y-%m-%d')
+                                            except ValueError:
+                                                pass
+                                        if d and d > datetime.now():
+                                            dates.append(d)
+                                    except Exception:
+                                        pass
+
+            # 2. General page scanning fallback if table not parsed (e.g. on detailed page)
+            if not table_parsed:
+                for pattern in date_patterns:
+                    for el in soup.find_all(string=re.compile(pattern, re.IGNORECASE)):
+                        # Validate context: check if any ancestor contains expiration-related keywords
+                        parent = el.parent
+                        is_exp_date = False
+                        for _ in range(4):
+                            if parent:
+                                p_text = parent.get_text().lower()
+                                if any(kw in p_text for kw in ["expir", "valid", "expiry", "유효", "만료", "有効", "기한"]):
+                                    is_exp_date = True
+                                    break
+                                parent = parent.parent
+                            else:
+                                break
+                        
+                        if not is_exp_date:
+                            continue
+
+                        text = el.strip()
+                        matches = re.findall(pattern, text, re.IGNORECASE)
+                        for match in matches:
+                            clean_date = match.replace('/', '-').replace('.', '-')
+                            try:
+                                # Handle Korean date
+                                ko_match = re.search(r'(\d{4})\s*년\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일)?', clean_date)
+                                if ko_match:
+                                    y = int(ko_match.group(1))
+                                    m = int(ko_match.group(2))
+                                    d_str = ko_match.group(3)
+                                    if d_str:
+                                        d_val = int(d_str)
+                                    else:
+                                        import calendar
+                                        _, d_val = calendar.monthrange(y, m)
+                                    d = datetime(y, m, d_val)
+                                elif any(m in clean_date.lower() for m in ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]):
+                                    clean_date_parsed = re.sub(r'\s+', ' ', clean_date).replace(',', '')
+                                    d = None
+                                    for fmt in ['%b %d %Y', '%B %d %Y', '%b %d, %Y', '%B %d, %Y', '%b %Y', '%B %Y', '%b,%Y', '%B,%Y']:
+                                        try:
+                                            d = datetime.strptime(clean_date_parsed, fmt)
+                                            if '%d' not in fmt:
+                                                import calendar
+                                                _, last_day = calendar.monthrange(d.year, d.month)
+                                                d = d.replace(day=last_day)
+                                            break
+                                        except ValueError:
+                                            pass
+                                else:
+                                    try:
+                                        d = datetime.strptime(clean_date[:10], '%Y-%m-%d')
                                     except ValueError:
                                         pass
                                 if d and d > datetime.now():
                                     dates.append(d)
-                            else:
-                                d = datetime.strptime(clean_date[:10], '%Y-%m-%d')
-                                if d > datetime.now():
-                                    dates.append(d)
-                        except Exception:
-                            pass
+                            except Exception:
+                                pass
             
-            if dates:
+            if dates and result.get("balance", 0) > 0:
                 earliest = min(dates)
                 result["expiration_date"] = earliest.strftime("%Y-%m-%dT00:00:00Z")
                 print(f"Found expiration date: {result['expiration_date']}")
             else:
-                from datetime import timedelta
-                now = datetime.now()
-                year = now.year + 3
-                month = now.month
-                last_day = (datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)) - timedelta(days=1)
-                result["expiration_date"] = last_day.strftime("%Y-%m-%dT00:00:00Z")
-                print(f"Using default expiration fallback (36 months): {result['expiration_date']}")
+                if result.get("balance", 0) <= 0:
+                    result["expiration_date"] = None
+                    print("Balance is 0 or less and no dates found. Expiration date set to None.")
+                else:
+                    from datetime import timedelta
+                    now = datetime.now()
+                    year = now.year + 3
+                    month = now.month
+                    last_day = (datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)) - timedelta(days=1)
+                    result["expiration_date"] = last_day.strftime("%Y-%m-%dT00:00:00Z")
+                    print(f"Using default expiration fallback (36 months): {result['expiration_date']}")
         except Exception as e:
             self._raise_if_window_closed(e)
             print(f"Failed to fetch expiration details: {e}")

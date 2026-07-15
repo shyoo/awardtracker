@@ -355,6 +355,16 @@ subprocess.run(cmd, check=True)
 
 ---
 
+## 5. Debugging Guide & Log Locations
+
+For troubleshooting scraper issues, SeleniumBase step-by-step debug outputs, screenshots, and application log files are stored under the user AppData directory:
+* **Log Directory**: `%APPDATA%\AwardTracker\logs\` (usually maps to `C:\Users\<Username>\AppData\Roaming\AwardTracker\logs\`).
+* **Main Application Log**: `%APPDATA%\AwardTracker\logs\awardtracker_debug.log`.
+* **Step-by-step Browser Logs**: Under the daily directory structure, e.g., `%APPDATA%\AwardTracker\logs\YYYY-MM-DD\YYYYMMDD_HHMMSS-<ID>-<Provider_Name>\`.
+  * These directories contain sequential HTML page source files (`001_open.html`, etc.) and visual screenshots (`001_open.png`, etc.) for every WebDriver action, which are invaluable for debugging CAPTCHA lockouts, layout shifts, or modal prompt blockers.
+
+---
+
 ## 🧭 Summary Checklist for Agent
 - [ ] Staging and checking out a new branch
 - [ ] No remote pushes during coding
