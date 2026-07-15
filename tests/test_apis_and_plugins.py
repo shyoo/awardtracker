@@ -1236,6 +1236,46 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertIn("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/referenceDetail_e.jsp", mock_sb_fallback.opened_urls)
         self.assertIn("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/reference_e.jsp", mock_sb_fallback.opened_urls)
 
+    def test_hyatt_last_activity_date_extraction(self):
+        plugin = plugin_manager.get_plugin('hyatt')
+        self.assertIsNotNone(plugin)
+
+        class MockSB:
+            def __init__(self, text):
+                self.text = text
+            def open(self, url):
+                pass
+            def sleep(self, seconds):
+                pass
+            def get_text(self, selector):
+                return self.text
+
+        # 1. Past dates only (should return max: May 22, 2025)
+        text_past = """
+        Your Activity History:
+        - Points earning on May 22, 2025: +500 points
+        - Points earning on Jan 15, 2024: +1,000 points
+        """
+        mock_sb_past = MockSB(text_past)
+        res_date_past = plugin._fetch_last_activity_date(mock_sb_past)
+        self.assertIsNotNone(res_date_past)
+        self.assertEqual(res_date_past.strftime("%Y-%m-%d"), "2025-05-22")
+
+        # 2. Past dates + future dates (should ignore future dates and still return May 22, 2025)
+        future_year = datetime.now().year + 2
+        future_date_str = f"Aug 20, {future_year}"
+        text_mixed = f"""
+        Your Awards:
+        - Club Lounge Access Award (Expiring {future_date_str})
+        Your Activity History:
+        - Points earning on May 22, 2025: +500 points
+        - Points earning on Jan 15, 2024: +1,000 points
+        """
+        mock_sb_mixed = MockSB(text_mixed)
+        res_date_mixed = plugin._fetch_last_activity_date(mock_sb_mixed)
+        self.assertIsNotNone(res_date_mixed)
+        self.assertEqual(res_date_mixed.strftime("%Y-%m-%d"), "2025-05-22")
+
     def test_safe_call_plugin_method(self):
         from plugins.base import safe_call_plugin_method
         

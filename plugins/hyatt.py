@@ -252,7 +252,7 @@ class WorldofHyattPlugin(ProviderPlugin):
                         raise
                     raise PluginError(f"Scraping failed: {str(e)}")
 
-    def _fetch_last_activity_date(self, sb) -> str:
+    def _fetch_last_activity_date(self, sb) -> Optional[datetime]:
         try:
             print("Opening Hyatt account-activity page...")
             sb.open("https://www.hyatt.com/profile/account-activity")
@@ -263,12 +263,15 @@ class WorldofHyattPlugin(ProviderPlugin):
             matches = re.finditer(pattern, text)
             
             dates = []
+            now_dt = datetime.now()
             for match in matches:
                 date_str = match.group(0)
                 for fmt in ('%b %d, %Y', '%B %d, %Y'):
                     try:
                         dt = datetime.strptime(date_str, fmt)
-                        dates.append(dt)
+                        # Exclude future dates (e.g. future award expiration dates)
+                        if dt <= now_dt:
+                            dates.append(dt)
                         break
                     except ValueError:
                         pass
