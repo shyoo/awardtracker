@@ -1157,19 +1157,21 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertIsNotNone(plugin)
 
         class MockSB:
-            def __init__(self, html):
+            def __init__(self, html, urls_to_html=None):
                 self.html = html
+                self.urls_to_html = urls_to_html or {}
+                self.opened_urls = []
+            def open(self, url):
+                self.opened_urls.append(url)
+                if self.urls_to_html:
+                    self.html = self.urls_to_html.get(url, "")
+            def sleep(self, seconds):
+                pass
             def get_page_source(self):
                 return self.html
 
         # 1. Scraped specific date format
-        html_scraped = """
-        <html>
-            <body>
-                <div>Your miles will expire on 2026/11/30.</div>
-            </body>
-        </html>
-        """
+        html_scraped = "<html><body><div>Your miles will expire on 2026/11/30.</div></body></html>"
         mock_sb = MockSB(html_scraped)
         result = {"balance": 1000, "status": "Member", "expiration_date": None}
         plugin._fetch_expiration(mock_sb, result)
@@ -1180,7 +1182,6 @@ class TestAPIsAndPlugins(unittest.TestCase):
         result_empty = {"balance": 1000, "status": "Member", "expiration_date": None}
         plugin._fetch_expiration(mock_sb_empty, result_empty)
         self.assertIsNotNone(result_empty["expiration_date"])
-        # Should be formatted as ISO string
         self.assertTrue(result_empty["expiration_date"].endswith("T00:00:00Z"))
 
         # 3. Balance <= 0 should set expiration_date to None
@@ -1192,17 +1193,48 @@ class TestAPIsAndPlugins(unittest.TestCase):
 
         # 4. Dates without expiration keywords in parent hierarchy should be ignored
         result_unrelated_date = {"balance": 100, "status": "Member", "expiration_date": None}
-        html_unrelated = """
-        <html>
-            <body>
-                <div>Transaction posted on 2029/05/15</div>
-            </body>
-        </html>
-        """
+        html_unrelated = "<html><body><div>Transaction posted on 2029/05/15</div></body></html>"
         mock_sb_unrelated = MockSB(html_unrelated)
         plugin._fetch_expiration(mock_sb_unrelated, result_unrelated_date)
         self.assertIsNotNone(result_unrelated_date["expiration_date"])
         self.assertNotEqual(result_unrelated_date["expiration_date"], "2029-05-15T00:00:00Z")
+
+        # 5. Test detailed page navigation success and Month, Year parsing
+        html_detailed = "<html><body><div>Your miles will expire on Jan, 2029.</div></body></html>"
+        urls_to_html = {
+            "https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/referenceDetail_e.jsp": html_detailed
+        }
+        mock_sb_detailed = MockSB("", urls_to_html)
+        result_detailed = {"balance": 1000, "status": "Member", "expiration_date": None}
+        plugin._fetch_expiration(mock_sb_detailed, result_detailed)
+        self.assertEqual(result_detailed["expiration_date"], "2029-01-31T00:00:00Z")
+        self.assertIn("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/referenceDetail_e.jsp", mock_sb_detailed.opened_urls)
+
+        # 6. Test fallback to summary page and column mileage filtering
+        html_summary = """
+        <table class="ffp_2021_table_mileage-expiration-date">
+          <tr>
+            <th class="ffp_2021_table_title">Validity</th>
+            <th class="ffp_2021_table_content"><span>Valid until Jul, 2026</span></th>
+            <th class="ffp_2021_table_content"><span>Valid until Aug, 2026</span></th>
+          </tr>
+          <tr>
+            <th>Combined Mileage</th>
+            <td class="ffp_2021_table_right">0 miles</td>
+            <td class="ffp_2021_table_right">1,200 miles</td>
+          </tr>
+        </table>
+        """
+        urls_to_html_fallback = {
+            "https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/referenceDetail_e.jsp": "You have no mileage in your account.",
+            "https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/reference_e.jsp": html_summary
+        }
+        mock_sb_fallback = MockSB("", urls_to_html_fallback)
+        result_fallback = {"balance": 1200, "status": "Member", "expiration_date": None}
+        plugin._fetch_expiration(mock_sb_fallback, result_fallback)
+        self.assertEqual(result_fallback["expiration_date"], "2026-08-31T00:00:00Z")
+        self.assertIn("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/referenceDetail_e.jsp", mock_sb_fallback.opened_urls)
+        self.assertIn("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/reference_e.jsp", mock_sb_fallback.opened_urls)
 
     def test_safe_call_plugin_method(self):
         from plugins.base import safe_call_plugin_method
