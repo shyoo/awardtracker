@@ -278,15 +278,12 @@
         </div>
       </div>
       
-      <!-- Data & Backup -->
+      <!-- Backup Retention Window Dropdown -->
       <div class="pt-6 border-t border-slate-100">
         <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2 select-none">
-          <span>💾</span> Data & Backup
+          <span>💾</span> Backup Retention Policy
         </h2>
-        <div class="pl-6">
-          <p class="mt-1 text-xs text-slate-400 mb-6">Configure automatic daily backups of your Award Tracker database. Backups are created once per day and pruned after the selected retention window.</p>
-
-          <div class="max-w-xs">
+        <div class="pl-6 max-w-xs">
           <label for="db-backup-frequency" class="block text-xs font-semibold text-slate-500 uppercase">Backup Retention Window</label>
           <div class="mt-2">
             <select id="db-backup-frequency" name="db-backup-frequency" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 bg-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm">
@@ -297,11 +294,10 @@
             </select>
           </div>
           <p class="mt-2 text-[10px] text-slate-400 leading-relaxed">
-            Backup files are named <span class="font-mono bg-slate-50 px-1 rounded border border-slate-100">awardtracker_backup_YYYYMMDD.db</span> and stored in the <span class="font-mono bg-slate-50 px-1 rounded border border-slate-100">backups/</span> folder inside your AwardTracker data directory. A backup is automatically created at startup if yesterday's backup is missing.
+            Backup files are named <span class="font-mono bg-slate-50 px-1 rounded border border-slate-100">awardtracker_backup_YYYYMMDD.db</span> and stored in the <span class="font-mono bg-slate-50 px-1 rounded border border-slate-100">backups/</span> folder inside your default local AppData directory (<span class="font-mono bg-slate-50 px-1 rounded border border-slate-100">{{ default_db_path | replace('awardtracker.db', 'backups') }}</span>).
           </p>
         </div>
       </div>
-    </div>
 
       <!-- Point Valuations Configuration Card -->
       <div class="pt-6 border-t border-slate-100">
@@ -509,6 +505,127 @@
     </form>
   </div>
 
+  <!-- Data, Backup & Cloud Storage Location Card -->
+  <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
+    <h2 class="text-base font-bold leading-7 text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2 select-none">
+      <span>💾</span> Data, Backup & Cloud Storage Location
+    </h2>
+    <div class="pl-6 space-y-6">
+      <p class="mt-1 text-xs text-slate-400">Manage database storage location (e.g. Google Drive, Dropbox, or custom folder) and export/import database backups.</p>
+
+      <!-- Active Storage Location Card -->
+      <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4 sm:p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Active Database Path:</span>
+              {% if is_custom_db_location %}
+              <span class="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">
+                ☁️ Custom / Cloud Storage Folder
+              </span>
+              {% else %}
+              <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">
+                🏠 Default Local AppData Folder
+              </span>
+              {% endif %}
+            </div>
+            <div class="mt-1.5 font-mono text-xs text-slate-800 bg-white px-3 py-2 rounded-lg border border-slate-200 break-all select-all">
+              {{ active_db_path }}
+            </div>
+            <p class="mt-1.5 text-[10px] text-slate-400">
+              Automated daily backups are <strong>always</strong> stored safely in your default local AppData directory (<span class="font-mono bg-white px-1 py-0.5 rounded border border-slate-200">backups/</span>).
+            </p>
+          </div>
+          
+          {% if is_custom_db_location %}
+          <div class="shrink-0 self-start sm:self-center">
+            <form action="{{ url_for('reset_db_location') }}" method="POST" onsubmit="return confirm('Reset database location back to default %appdata%/AwardTracker/awardtracker.db?');">
+              <button type="submit" class="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+                ↩️ Restore Default Location
+              </button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Change DB Storage Location Form -->
+        <div class="mt-4 pt-4 border-t border-slate-200/80">
+          <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Change Storage Location</h3>
+          
+          <form action="{{ url_for('change_db_location') }}" method="POST" class="space-y-3">
+            <div>
+              <label for="new_db_location" class="block text-xs font-bold text-slate-700">New Database Directory or File Path:</label>
+              <div class="mt-1 flex items-center gap-2">
+                <input type="text" id="new_db_location" name="new_db_location" placeholder="e.g. D:\GoogleDrive\AwardTracker or C:\Users\Name\Dropbox\AwardTracker" value="{{ active_db_path }}" class="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-mono text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+                <button type="button" id="browse-db-folder-btn" onclick="browseDBFolder()" class="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors shadow-sm cursor-pointer select-none">
+                  <span>📁</span> Browse Folder...
+                </button>
+              </div>
+              <p class="mt-1 text-[10px] text-slate-400">Click "Browse Folder..." to select a folder visually, or enter a custom path ending in .db.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="copy_existing" name="copy_existing" checked class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+              <label for="copy_existing" class="text-xs text-slate-700 font-medium">Copy current database file to the new location if not present</label>
+            </div>
+            <div class="pt-1 flex flex-wrap items-center gap-3">
+              <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors cursor-pointer">
+                Update Storage Location
+              </button>
+              {% if is_custom_db_location %}
+              <button type="button" onclick="document.getElementById('reset-db-form-btn').click();" class="inline-flex items-center justify-center rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-600 transition-colors shadow-sm cursor-pointer">
+                ↩️ Restore Default Location
+              </button>
+              {% endif %}
+            </div>
+          </form>
+
+          {% if is_custom_db_location %}
+          <form id="reset-db-form-hidden" action="{{ url_for('reset_db_location') }}" method="POST" class="hidden" onsubmit="return confirm('Restore database storage location back to default %appdata%/AwardTracker/awardtracker.db?');">
+            <button id="reset-db-form-btn" type="submit"></button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Import & Export Actions -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Export Database Card -->
+        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <span>📤</span> Export Database
+            </h3>
+            <p class="mt-1 text-xs text-slate-400 leading-relaxed">
+              Download a complete backup copy of your active Award Tracker database file (`.db`) to your computer.
+            </p>
+          </div>
+          <div class="mt-4">
+            <a href="{{ url_for('export_database') }}" class="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors shadow-sm">
+              <span>⬇️</span> Download Database (.db)
+            </a>
+          </div>
+        </div>
+
+        <!-- Import Database Card -->
+        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <span>📥</span> Import Database
+            </h3>
+            <p class="mt-1 text-xs text-slate-400 leading-relaxed">
+              Upload and restore an existing Award Tracker database file. An emergency backup of your current database will be saved before importing.
+            </p>
+          </div>
+          <div class="mt-4">
+            <button type="button" onclick="document.getElementById('import-db-modal').classList.remove('hidden');" class="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-200 transition-colors shadow-sm cursor-pointer">
+              <span>📂</span> Import Database (.db)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Scraper Diagnostics & Debugging Card -->
   <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
     <div class="border-b border-slate-100 pb-4 mb-6">
@@ -685,7 +802,135 @@
   </div>
 </div>
 
+<!-- Import Database Modal -->
+<div id="import-db-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+      <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+        <span>📥</span> Import Database File (.db)
+      </h3>
+      <button type="button" onclick="document.getElementById('import-db-modal').classList.add('hidden');" class="text-slate-400 hover:text-slate-600 text-lg font-bold">&times;</button>
+    </div>
+    
+    <p class="text-xs text-slate-500 leading-relaxed">
+      Select an existing Award Tracker SQLite database file (`.db`) to import. 
+      <br><span class="text-amber-600 font-semibold">Note:</span> An emergency safety backup of your current database will be automatically created in your local <span class="font-mono bg-slate-100 px-1 rounded">backups/</span> folder before importing.
+    </p>
+
+    <form action="{{ url_for('import_database') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
+      <div class="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-primary transition-colors bg-slate-50/50">
+        <input type="file" name="db_file" accept=".db" required class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-blue-400 cursor-pointer">
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="document.getElementById('import-db-modal').classList.add('hidden');" class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-primary hover:bg-blue-400 rounded-lg shadow-sm transition-colors">
+          Import & Restore Database
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Database Conflict Modal -->
+{% if db_conflict_info and db_conflict_info.has_conflict %}
+<div id="conflict-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-rose-100 space-y-4">
+    <div class="flex items-center gap-3 text-rose-600 border-b border-slate-100 pb-3">
+      <span class="text-2xl">⚠️</span>
+      <div>
+        <h3 class="text-base font-bold text-slate-900">Database Conflict Detected</h3>
+        <p class="text-xs text-slate-500">The database file on disk was modified externally (e.g. cloud sync / another device).</p>
+      </div>
+    </div>
+
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-1.5 leading-relaxed">
+      <p class="font-bold">An external change was detected on disk:</p>
+      <ul class="list-disc pl-4 space-y-1 text-[11px]">
+        <li><strong>Disk file modified timestamp:</strong> {{ db_conflict_info.current_mtime }}</li>
+        <li><strong>Local session baseline:</strong> {{ db_conflict_info.saved_mtime }}</li>
+      </ul>
+    </div>
+
+    <p class="text-xs text-slate-600">Please select how you would like to resolve this conflict:</p>
+
+    <div class="space-y-2.5">
+      <!-- Option 1: Use Remote/Synced DB -->
+      <button type="button" onclick="resolveConflict('use_remote')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-primary hover:bg-blue-50/50 transition-all flex items-start gap-3 group">
+        <span class="text-lg">🔄</span>
+        <div>
+          <h4 class="text-xs font-bold text-slate-800 group-hover:text-primary">Use Synced / Disk Database (Reload)</h4>
+          <p class="text-[11px] text-slate-500">Discard local session state and reload the updated database file from disk.</p>
+        </div>
+      </button>
+
+      <!-- Option 2: Use Local State -->
+      <button type="button" onclick="resolveConflict('use_local')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-primary hover:bg-blue-50/50 transition-all flex items-start gap-3 group">
+        <span class="text-lg">💻</span>
+        <div>
+          <h4 class="text-xs font-bold text-slate-800 group-hover:text-primary">Use Local Database State (Overwrite Disk)</h4>
+          <p class="text-[11px] text-slate-500">Keep this local instance's data and update the metadata lock to overwrite disk state.</p>
+        </div>
+      </button>
+
+      <!-- Option 3: Smart Merge -->
+      <button type="button" onclick="resolveConflict('smart_merge')" class="w-full text-left p-3 rounded-xl border border-blue-200 bg-blue-50/30 hover:bg-blue-100/50 transition-all flex items-start gap-3 group">
+        <span class="text-lg">🔀</span>
+        <div>
+          <h4 class="text-xs font-bold text-primary flex items-center gap-1">
+            Smart Merge Databases
+            <span class="text-[9px] bg-primary text-white px-1.5 py-0.5 rounded font-semibold uppercase">Recommended</span>
+          </h4>
+          <p class="text-[11px] text-slate-600">Intelligently merge records: keep newest balances, append missing account history & vouchers.</p>
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
+  function resolveConflict(action) {
+    fetch("{{ url_for('api_resolve_db_conflict') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: action })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === "success") {
+        alert(data.message);
+        window.location.reload();
+      } else {
+        alert("Conflict resolution error: " + data.message);
+      }
+    })
+    .catch(err => alert("Failed to resolve conflict: " + err));
+  }
+</script>
+{% endif %}
+
+<script>
+  function browseDBFolder() {
+    const btn = document.getElementById('browse-db-folder-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span>⌛</span> Opening...';
+    
+    fetch("{{ url_for('api_browse_db_folder') }}", { method: "POST" })
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === "success" && data.path) {
+          document.getElementById('new_db_location').value = data.path;
+        }
+      })
+      .catch(err => console.error("Browse error:", err))
+      .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<span>📁</span> Browse Folder...';
+      });
+  }
+
   // Automatically scroll the console to the bottom when new logs are appended
   document.body.addEventListener('htmx:afterRequest', function(evt) {
     if (evt.detail.target.id === 'log-content') {
