@@ -73,10 +73,10 @@ Provides a tracking chart that shows points history over the times.
 * **JetBlue** (TrueBlue)
 * **Korean Air** (SKYPASS) — *includes automatic Mileage Validity Batch & Certificate recognition*
 * **Southwest Airlines** (Rapid Rewards)
-* **United Airlines** (MileagePlus)
+* **United Airlines** (MileagePlus) — *includes automatic United Club One-time pass certificate recognition*
 * **Virgin Atlantic** (Flying Club)
 
-> ⚠️ **Voucher & Certificate Support**: Automatic scraping of vouchers, coupons, and free-night certificates is currently supported for **Korean Air SKYPASS only**. Other programs display an informational notice on their account detail page.
+> ⚠️ **Voucher & Certificate Support**: Automatic scraping of vouchers, coupons, and certificates is currently supported for **Korean Air SKYPASS** and **United Airlines MileagePlus** (United Club One-time passes). Other programs display an informational notice on their account detail page.
 
 ### 🏨 Hotels
 * **Caesars Rewards**

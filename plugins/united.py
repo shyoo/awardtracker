@@ -292,6 +292,19 @@ class UnitedAirlinesPlugin(ProviderPlugin):
                         result["balance"] = balance
                         if status:
                             result["status"] = status
+                        
+                        # Fetch certificates
+                        try:
+                            print("Navigating to United Club passes page (session reuse)...")
+                            sb.open("https://www.united.com/en/us/mileageplus/unitedclubpass")
+                            sb.sleep(6)
+                            html_passes = sb.get_page_source()
+                            certs = self._parse_club_passes(html_passes)
+                            if certs:
+                                result["certificates"] = certs
+                        except Exception as e:
+                            print(f"Failed to fetch or parse United Club passes (session reuse): {e}")
+                            
                         return result
                 
                 # 2. Not logged in -> We must be on the sign-in page
@@ -335,6 +348,19 @@ class UnitedAirlinesPlugin(ProviderPlugin):
                 result["balance"] = balance
                 if status:
                     result["status"] = status
+                
+                # Fetch certificates
+                try:
+                    print("Navigating to United Club passes page...")
+                    sb.open("https://www.united.com/en/us/mileageplus/unitedclubpass")
+                    sb.sleep(6)
+                    html_passes = sb.get_page_source()
+                    certs = self._parse_club_passes(html_passes)
+                    if certs:
+                        result["certificates"] = certs
+                except Exception as e:
+                    print(f"Failed to fetch or parse United Club passes: {e}")
+                    
                 return result
                 
         except InteractionRequiredError:
@@ -391,3 +417,120 @@ class UnitedAirlinesPlugin(ProviderPlugin):
                 sb.sleep(3) # Let session write completely
             except Exception:
                 raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
+
+    def _parse_club_passes(self, html: str) -> list:
+        from bs4 import BeautifulSoup
+        import re
+        import datetime
+        
+        soup = BeautifulSoup(html, "html.parser")
+        certificates = []
+        
+        # Active passes are in sections with data-test-id="united-clubpass-section" or class containing 'Passes-styles__section'
+        sections = soup.find_all("section", attrs={"data-test-id": "united-clubpass-section"})
+        if not sections:
+            # Fallback to class name scan
+            sections = []
+            for sec in soup.find_all("section"):
+                classes = sec.get("class", [])
+                if not isinstance(classes, list):
+                    classes = [classes]
+                if any("Passes-styles__section" in str(cls) for cls in classes):
+                    sections.append(sec)
+                    
+        for sec in sections:
+            # 1. Title/Name
+            title_el = sec.find(attrs={"data-test-id": "united-clubpass-heading"})
+            if not title_el:
+                # Fallback to h2
+                title_el = sec.find("h2")
+            raw_title = title_el.text.strip() if title_el else ""
+            title = "United Club One-time pass"
+            
+            # 2. Find all infoRow divs
+            pass_number = None
+            expiry_date = None
+            purchase_date = None
+            
+            info_rows = []
+            for div in sec.find_all("div"):
+                classes = div.get("class", [])
+                if not isinstance(classes, list):
+                    classes = [classes]
+                if any("Passes-styles__infoRow" in str(cls) for cls in classes):
+                    info_rows.append(div)
+                    
+            if not info_rows:
+                # Fallback to any div containing label keywords
+                for div in sec.find_all("div"):
+                    text = div.get_text(" ", strip=True)
+                    if any(kw in text for kw in ["Pass #:", "Valid dates:", "Purchase date:"]):
+                        # To avoid nesting, only pick if it doesn't contain child divs with same keywords
+                        child_has_kw = False
+                        for child in div.find_all("div"):
+                            if any(kw in child.get_text() for kw in ["Pass #:", "Valid dates:", "Purchase date:"]):
+                                child_has_kw = True
+                                break
+                        if not child_has_kw:
+                            info_rows.append(div)
+                
+            for row in info_rows:
+                row_text = row.get_text(" ", strip=True)
+                
+                # Pass Number
+                if "Pass #:" in row_text:
+                    m = re.search(r'Pass\s*#:\s*(\d+)', row_text)
+                    if m:
+                        pass_number = m.group(1)
+                        
+                # Valid dates / Expiration
+                elif "Valid dates:" in row_text:
+                    if "through" in row_text:
+                        parts = row_text.split("through")
+                        date_part = parts[-1].strip()
+                        # Try to parse it
+                        for fmt in ("%B %d, %Y", "%b %d, %Y"):
+                            try:
+                                dt = datetime.datetime.strptime(date_part, fmt)
+                                expiry_date = dt.strftime("%Y-%m-%d")
+                                break
+                            except ValueError:
+                                pass
+                    else:
+                        # Generic date regex search
+                        matches = re.findall(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}, \d{4}', row_text)
+                        if matches:
+                            # Take the last date found (which is usually the expiration/end of range)
+                            for date_str in reversed(matches):
+                                for fmt in ("%B %d, %Y", "%b %d, %Y"):
+                                    try:
+                                        dt = datetime.datetime.strptime(date_str, fmt)
+                                        expiry_date = dt.strftime("%Y-%m-%d")
+                                        break
+                                    except ValueError:
+                                        pass
+                                if expiry_date:
+                                    break
+
+                # Purchase Date
+                elif "Purchase date:" in row_text:
+                    m = re.search(r'Purchase\s*date:\s*(.*)', row_text)
+                    if m:
+                        purchase_date = m.group(1).strip()
+                        
+            details = {}
+            if pass_number:
+                details["Code"] = pass_number
+                details["Coupon Number"] = pass_number
+            if purchase_date:
+                details["Purchase Date"] = purchase_date
+            if raw_title and "One-time pass:" in raw_title:
+                details["Source"] = raw_title.replace("One-time pass:", "").strip()
+                
+            certificates.append({
+                "name": title,
+                "expiration_date": expiry_date,
+                "details": details
+            })
+            
+        return certificates
