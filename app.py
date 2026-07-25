@@ -1536,12 +1536,248 @@ def create_app(config_class=Config):
                 })
                 seen_custom_keys.add(key)
 
+        from config import get_active_db_path, write_dir
+        from db_manager import check_db_conflict
+
+        active_db_path = get_active_db_path()
+        default_db_path = os.path.abspath(os.path.join(write_dir, 'awardtracker.db'))
+        is_custom_db_location = (active_db_path != default_db_path)
+        db_conflict_info = check_db_conflict(active_db_path)
+
         return render_template(
             'settings.html',
             settings=settings_data,
             standard_valuations=standard_valuations,
-            custom_valuations=custom_valuations
+            custom_valuations=custom_valuations,
+            active_db_path=active_db_path,
+            default_db_path=default_db_path,
+            is_custom_db_location=is_custom_db_location,
+            db_conflict_info=db_conflict_info
         )
+
+    @app.route('/settings/db/export')
+    def export_database():
+        from flask import send_file
+        from config import get_active_db_path
+        db_path = get_active_db_path()
+        if not os.path.exists(db_path):
+            flash("Database file not found.")
+            return redirect(url_for('settings'))
+            
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return send_file(
+            db_path,
+            as_attachment=True,
+            download_name=f"awardtracker_export_{timestamp}.db",
+            mimetype="application/x-sqlite3"
+        )
+
+    @app.route('/settings/db/import', methods=['POST'])
+    def import_database():
+        from flask import send_file
+        from config import get_active_db_path
+        from db_manager import validate_db_file, create_emergency_backup, update_db_meta
+        import tempfile
+        import shutil
+
+        if 'db_file' not in request.files:
+            flash("No file selected for import.")
+            return redirect(url_for('settings'))
+
+        file = request.files['db_file']
+        if not file or file.filename == '':
+            flash("No file selected for import.")
+            return redirect(url_for('settings'))
+
+        # Save to temporary file for validation
+        temp_fd, temp_path = tempfile.mkstemp(suffix=".db")
+        os.close(temp_fd)
+
+        try:
+            file.save(temp_path)
+            valid, msg = validate_db_file(temp_path)
+            if not valid:
+                flash(f"Import failed: {msg}")
+                return redirect(url_for('settings'))
+
+            active_db_path = get_active_db_path()
+
+            # 1. Create emergency backup of current database
+            backup_path = create_emergency_backup(active_db_path, prefix="awardtracker_pre_import")
+
+            # 2. Close active DB connections
+            db.engine.dispose()
+
+            # 3. Copy imported database over active database
+            shutil.copy2(temp_path, active_db_path)
+
+            # 4. Update metadata lock fingerprint
+            update_db_meta(active_db_path)
+
+            flash(f"Database imported successfully. (Safety backup created at {os.path.basename(backup_path)})")
+            return redirect(url_for('index'))
+        except Exception as e:
+            flash(f"Error importing database: {str(e)}")
+            return redirect(url_for('settings'))
+        finally:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+
+    @app.route('/settings/db/change-location', methods=['POST'])
+    def change_db_location():
+        from config import get_active_db_path, write_dir
+        from db_manager import update_db_meta, validate_db_file
+        import json
+        import shutil
+
+        new_location = request.form.get('new_db_location', '').strip()
+        copy_existing = request.form.get('copy_existing') == 'on'
+
+        if not new_location:
+            flash("Please specify a valid folder or database file path.")
+            return redirect(url_for('settings'))
+
+        # If user passed a directory path, append awardtracker.db
+        if os.path.isdir(new_location) or not new_location.lower().endswith('.db'):
+            target_db_path = os.path.abspath(os.path.join(new_location, 'awardtracker.db'))
+        else:
+            target_db_path = os.path.abspath(new_location)
+
+        target_dir = os.path.dirname(target_db_path)
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+        except Exception as e:
+            flash(f"Could not create target directory: {str(e)}")
+            return redirect(url_for('settings'))
+
+        active_db_path = get_active_db_path()
+
+        try:
+            # Create target DB file if it doesn't exist or if copy is requested
+            if not os.path.exists(target_db_path) or (copy_existing and active_db_path != target_db_path):
+                if copy_existing and os.path.exists(active_db_path):
+                    shutil.copy2(active_db_path, target_db_path)
+                elif not os.path.exists(target_db_path):
+                    # Initialize clean SQLite DB at target location
+                    from sqlalchemy import create_engine
+                    temp_uri = 'sqlite:///' + target_db_path.replace('\\', '/')
+                    temp_engine = create_engine(temp_uri)
+                    db.metadata.create_all(bind=temp_engine)
+                    temp_engine.dispose()
+
+            # Validate target database
+            valid, msg = validate_db_file(target_db_path)
+            if not valid:
+                flash(f"Cannot switch to database at new location: {msg}")
+                return redirect(url_for('settings'))
+
+            # Update settings.json with custom_db_path
+            settings_path = os.path.join(write_dir, 'settings.json')
+            settings_data = {}
+            if os.path.exists(settings_path):
+                try:
+                    with open(settings_path, 'r', encoding='utf-8') as f:
+                        settings_data = json.load(f)
+                except Exception:
+                    pass
+
+            settings_data['custom_db_path'] = target_db_path
+            with open(settings_path, 'w', encoding='utf-8') as f:
+                json.dump(settings_data, f, indent=2)
+
+            # Update Flask SQLAlchemy URI & engine
+            db.engine.dispose()
+            app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + target_db_path.replace('\\', '/')
+
+            # Update metadata lock fingerprint
+            update_db_meta(target_db_path)
+
+            flash(f"Database storage location updated to: {target_db_path}")
+            return redirect(url_for('settings'))
+        except Exception as e:
+            flash(f"Error changing database location: {str(e)}")
+            return redirect(url_for('settings'))
+
+    @app.route('/settings/db/reset-location', methods=['POST'])
+    def reset_db_location():
+        from config import write_dir
+        from db_manager import update_db_meta
+        import json
+
+        settings_path = os.path.join(write_dir, 'settings.json')
+        if os.path.exists(settings_path):
+            try:
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    settings_data = json.load(f)
+                settings_data.pop('custom_db_path', None)
+                with open(settings_path, 'w', encoding='utf-8') as f:
+                    json.dump(settings_data, f, indent=2)
+            except Exception as e:
+                flash(f"Error resetting location: {str(e)}")
+                return redirect(url_for('settings'))
+
+        default_db_path = os.path.abspath(os.path.join(write_dir, 'awardtracker.db'))
+        db.engine.dispose()
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + default_db_path.replace('\\', '/')
+        update_db_meta(default_db_path)
+
+        flash("Database storage location reset to default.")
+        return redirect(url_for('settings'))
+
+    @app.route('/api/db/check-conflict')
+    def api_check_db_conflict():
+        from db_manager import check_db_conflict
+        from flask import jsonify
+        res = check_db_conflict()
+        return jsonify(res)
+
+    @app.route('/api/db/resolve-conflict', methods=['POST'])
+    def api_resolve_db_conflict():
+        from flask import jsonify
+        from config import get_active_db_path, write_dir
+        from db_manager import update_db_meta, create_emergency_backup, smart_merge_databases
+        
+        data = request.get_json(silent=True) or request.form
+        action = data.get('action')
+        
+        active_db_path = get_active_db_path()
+        if not action:
+            return jsonify({'status': 'error', 'message': 'Missing resolution action.'})
+            
+        try:
+            if action in ('use_remote', 'reload_disk'):
+                db.engine.dispose()
+                update_db_meta(active_db_path)
+                return jsonify({'status': 'success', 'message': 'Loaded synced database from disk.'})
+                
+            elif action in ('use_local', 'overwrite_disk'):
+                db.session.commit()
+                update_db_meta(active_db_path)
+                return jsonify({'status': 'success', 'message': 'Local database state preserved.'})
+                
+            elif action == 'smart_merge':
+                backup_path = create_emergency_backup(active_db_path, prefix="awardtracker_conflict_snapshot")
+                res = smart_merge_databases(backup_path, active_db_path)
+                update_db_meta(active_db_path)
+                db.engine.dispose()
+                return jsonify({'status': 'success', 'message': 'Databases merged successfully.', 'details': res.get('stats', {})})
+            else:
+                return jsonify({'status': 'error', 'message': f'Unknown action: {action}'})
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': str(e)})
+
+    @app.route('/api/db/browse-folder', methods=['POST'])
+    def api_browse_db_folder():
+        from db_manager import open_native_folder_picker
+        from flask import jsonify
+        folder_path = open_native_folder_picker()
+        if folder_path:
+            return jsonify({'status': 'success', 'path': folder_path})
+        return jsonify({'status': 'cancelled', 'path': ''})
+
 
 
 

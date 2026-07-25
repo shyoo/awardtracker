@@ -6,7 +6,7 @@ import sys
 from datetime import datetime
 
 # Setup rotating log
-from config import write_dir
+from config import write_dir, get_active_db_path
 
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(funcName)s(%(lineno)d) %(message)s')
 log_file = os.path.join(write_dir, 'logs', 'awardtracker_debug.log')
@@ -245,7 +245,7 @@ def backup_database():
     import shutil
     from datetime import timedelta
 
-    db_file = os.path.join(write_dir, 'awardtracker.db')
+    db_file = get_active_db_path()
     backup_dir = os.path.join(write_dir, 'backups')
     today_str = datetime.now().strftime('%Y%m%d')
     backup_file = os.path.join(backup_dir, f'awardtracker_backup_{today_str}.db')
