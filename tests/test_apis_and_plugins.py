@@ -584,6 +584,85 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertEqual(last_act.month, 6)
         self.assertEqual(last_act.day, 10)
 
+    def test_ihg_status_extraction(self):
+        plugin = plugin_manager.get_plugin('ihg')
+        self.assertIsNotNone(plugin)
+
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        # Scenario 1: Platinum Elite member with a marketing banner for Diamond Elite
+        html_promo = """
+        <html>
+            <body>
+                <div class="marketing-offer">
+                    <h2>Upgrade to Diamond Elite</h2>
+                    <p>Earn Diamond Elite status by staying 70 nights or earning 120,000 points.</p>
+                </div>
+                <div class="profile-card">
+                    <span class="member-tier">Platinum Elite</span>
+                </div>
+            </body>
+        </html>
+        """
+        mock_sb = MockSB(html_promo)
+        _, status = plugin._extract_data(mock_sb)
+        self.assertEqual(status, "Platinum Elite")
+
+        # Scenario 2: Extracting from digitalData script (unquoted keys)
+        html_digital_data = """
+        <html>
+            <script>
+                window.digitalData = {
+                    user: [{
+                        profile: [{
+                            profileInfo: {
+                                loyaltyLevel: "Diamond Elite"
+                            }
+                        }]
+                    }]
+                };
+            </script>
+        </html>
+        """
+        mock_sb_dd = MockSB(html_digital_data)
+        _, status_dd = plugin._extract_data(mock_sb_dd)
+        self.assertEqual(status_dd, "Diamond Elite")
+
+        # Scenario 3: Standard Club Member with generic tier marketing
+        html_club = """
+        <html>
+            <body>
+                <div class="qualify-info">How to earn Gold Elite or Platinum Elite</div>
+                <div class="user-status-container">
+                    <div class="user-status">Club Member</div>
+                </div>
+            </body>
+        </html>
+        """
+        mock_sb_club = MockSB(html_club)
+        _, status_club = plugin._extract_data(mock_sb_club)
+        self.assertEqual(status_club, "Club Member")
+
+        # Scenario 4: Live layout with .header-member-level-name and status progress tracker
+        html_live = """
+        <html>
+            <body>
+                <h2 class="header-member-level-name capitalize">platinum eliteMember</h2>
+                <div class="current-status-body">
+                    Current status Platinum Elite
+                    3 nights 67 more to Diamond Elite
+                </div>
+            </body>
+        </html>
+        """
+        mock_sb_live = MockSB(html_live)
+        _, status_live = plugin._extract_data(mock_sb_live)
+        self.assertEqual(status_live, "Platinum Elite")
+
     def test_aircanada_status_extraction(self):
         plugin = plugin_manager.get_plugin('aircanada')
         self.assertIsNotNone(plugin)

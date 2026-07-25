@@ -69,37 +69,91 @@ class IHGRewardsPlugin(ProviderPlugin):
                             
             # 2. Extract Status
             status = "Club Member"
-            # Try specific selectors first to avoid marketing false-positives
-            status_selectors = [
-                ".member-tier",
-                ".tier-level",
-                ".status-level",
-                "[class*='tier']",
-                "[class*='status']"
-            ]
             found_status = False
-            for sel in status_selectors:
-                try:
-                    for elem in soup.select(sel):
-                        txt = elem.get_text(strip=True).lower()
-                        if any(t in txt for t in ("diamond", "platinum", "gold", "silver", "club")):
-                            for tier in ["Diamond Elite", "Platinum Elite", "Gold Elite", "Silver Elite", "Club Member", "Club"]:
-                                if tier.lower() in txt:
-                                    status = tier
-                                    found_status = True
-                                    break
-                        if found_status:
+
+            # Try digitalData or metadata regex first (very reliable)
+            import re
+            for pattern in [
+                r'[\'"]?loyaltyLevel[\'"]?\s*:\s*[\'"]([^\'"]+)[\'"]',
+                r'[\'"]?tier[\'"]?\s*:\s*[\'"]([^\'"]+)[\'"]',
+                r'[\'"]?tierLevel[\'"]?\s*:\s*[\'"]([^\'"]+)[\'"]',
+                r'[\'"]?rewards_level[\'"]?\s*:\s*[\'"]([^\'"]+)[\'"]'
+            ]:
+                match = re.search(pattern, html, re.IGNORECASE)
+                if match:
+                    val = match.group(1).strip()
+                    for tier in ["Diamond Elite", "Platinum Elite", "Gold Elite", "Silver Elite", "Club Member", "Club"]:
+                        if tier.lower() in val.lower():
+                            status = "Club Member" if tier == "Club" else tier
+                            found_status = True
                             break
-                except Exception:
-                    pass
                 if found_status:
                     break
-                    
+
+            if not found_status:
+                # Promo word exclusion list to filter out marketing text
+                promo_words = [
+                    "earn", "reach", "qualify", "benefit", "choice", "gift", 
+                    "how to", "status match", "requirements", "nights", "points", 
+                    "upgrade", "promotion", "exclusive", "explore", "discover",
+                    "more to", "to next", "next status", "milestone", "lounge"
+                ]
+
+                # Specific status selectors first
+                specific_selectors = [
+                    ".header-member-level-name",
+                    ".member-tier",
+                    ".tier-level",
+                    ".status-level",
+                    ".member-status",
+                    ".user-status",
+                    ".rewards-tier"
+                ]
+                for sel in specific_selectors:
+                    try:
+                        for elem in soup.select(sel):
+                            txt = elem.get_text(strip=True).lower()
+                            if len(txt) < 30 and not any(w in txt for w in promo_words):
+                                for tier in ["Diamond Elite", "Platinum Elite", "Gold Elite", "Silver Elite", "Club Member", "Club"]:
+                                    if tier.lower() in txt:
+                                        status = "Club Member" if tier == "Club" else tier
+                                        found_status = True
+                                        break
+                            if found_status:
+                                break
+                    except Exception:
+                        pass
+                    if found_status:
+                        break
+
+            if not found_status:
+                # Broader class selectors as fallback
+                broad_selectors = [
+                    "[class*='tier']",
+                    "[class*='status']"
+                ]
+                for sel in broad_selectors:
+                    try:
+                        for elem in soup.select(sel):
+                            txt = elem.get_text(strip=True).lower()
+                            if len(txt) < 30 and not any(w in txt for w in promo_words):
+                                for tier in ["Diamond Elite", "Platinum Elite", "Gold Elite", "Silver Elite", "Club Member", "Club"]:
+                                    if tier.lower() in txt:
+                                        status = "Club Member" if tier == "Club" else tier
+                                        found_status = True
+                                        break
+                            if found_status:
+                                break
+                    except Exception:
+                        pass
+                    if found_status:
+                        break
+
             if not found_status:
                 text_content = soup.get_text().lower()
                 for tier in ["Diamond Elite", "Platinum Elite", "Gold Elite", "Silver Elite", "Club Member", "Club"]:
                     if tier.lower() in text_content:
-                        status = tier
+                        status = "Club Member" if tier == "Club" else tier
                         break
         except Exception:
             pass
