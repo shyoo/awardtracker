@@ -25,53 +25,201 @@ class HiltonHonorsPlugin(ProviderPlugin):
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Points expire after 24 months of inactivity. Any earning or redemption transaction extends them."
 
-    def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str], Any]:
-        """Extracts points balance, status, and last activity date from the Hilton Activity DOM."""
+    def _extract_last_activity_date(self, html: str) -> Optional[datetime]:
+        """Extracts the latest qualifying activity date found in the HTML source."""
+        import re
+        from datetime import datetime
+        import calendar
+
+        dates = []
+        today = datetime.now()
+
+        # 1. Full dates: Month DD, YYYY (e.g. Mar 15, 2025, March 15, 2025)
+        pattern_month_day = r'\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(20\d{2})\b'
+        for m in re.finditer(pattern_month_day, html, re.IGNORECASE):
+            try:
+                m_str, d_str, y_str = m.group(1), m.group(2), m.group(3)
+                for fmt in ('%b %d %Y', '%B %d %Y'):
+                    try:
+                        dt = datetime.strptime(f"{m_str} {d_str} {y_str}", fmt)
+                        if dt <= today:
+                            dates.append(dt)
+                        break
+                    except ValueError:
+                        pass
+            except Exception:
+                pass
+
+        # 2. Full dates: DD Month YYYY (e.g. 15 Mar 2025, 15 March 2025)
+        pattern_day_month = r'\b(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?),?\s+(20\d{2})\b'
+        for m in re.finditer(pattern_day_month, html, re.IGNORECASE):
+            try:
+                d_str, m_str, y_str = m.group(1), m.group(2), m.group(3)
+                for fmt in ('%d %b %Y', '%d %B %Y'):
+                    try:
+                        dt = datetime.strptime(f"{d_str} {m_str} {y_str}", fmt)
+                        if dt <= today:
+                            dates.append(dt)
+                        break
+                    except ValueError:
+                        pass
+            except Exception:
+                pass
+
+        # 3. ISO / Dash dates: YYYY-MM-DD (e.g. 2025-03-15)
+        for m in re.findall(r'\b(20\d{2}-\d{2}-\d{2})\b', html):
+            try:
+                dt = datetime.strptime(m, "%Y-%m-%d")
+                if dt <= today:
+                    dates.append(dt)
+            except Exception:
+                pass
+
+        # 4. Dot dates: YYYY.MM.DD (e.g. 2025.03.15 or 2025. 03. 15)
+        for m in re.findall(r'\b20\d{2}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}\b', html):
+            try:
+                clean = re.sub(r'\s+', '', m)
+                parts = clean.split('.')
+                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+                if dt <= today:
+                    dates.append(dt)
+            except Exception:
+                pass
+
+        # 5. Slash dates: MM/DD/YYYY or M/D/YYYY (e.g. 03/15/2025, 3/15/2025)
+        for m in re.findall(r'\b(\d{1,2}/\d{1,2}/20\d{2})\b', html):
+            try:
+                dt = datetime.strptime(m, "%m/%d/%Y")
+                if dt <= today:
+                    dates.append(dt)
+            except Exception:
+                pass
+
+        # 6. Korean full dates: YYYY년 MM월 DD일
+        for m in re.findall(r'20\d{2}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일', html):
+            try:
+                nums = re.findall(r'\d+', m)
+                if len(nums) == 3:
+                    dt = datetime(int(nums[0]), int(nums[1]), int(nums[2]))
+                    if dt <= today:
+                        dates.append(dt)
+            except Exception:
+                pass
+
+        # 7. Month-Year only: Month YYYY (e.g. Mar 2025, March 2025)
+        pattern_month_year = r'(?<!\d\s)(?<!\d)(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(20\d{2})(?!\s*\d)'
+        for m in re.finditer(pattern_month_year, html, re.IGNORECASE):
+            try:
+                m_str = m.group(0).split()[0]
+                y_str = m.group(1)
+                for fmt in ('%b %Y', '%B %Y'):
+                    try:
+                        parsed = datetime.strptime(f"{m_str} {y_str}", fmt)
+                        _, last_day = calendar.monthrange(parsed.year, parsed.month)
+                        dt = datetime(parsed.year, parsed.month, last_day)
+                        if dt > today:
+                            dt = datetime(parsed.year, parsed.month, min(today.day, last_day))
+                        if dt <= today:
+                            dates.append(dt)
+                        break
+                    except ValueError:
+                        pass
+            except Exception:
+                pass
+
+        # 8. ISO Month-Year: YYYY-MM (e.g. 2025-03)
+        for m in re.finditer(r'(?<!\d)(20\d{2})-(\d{2})(?!-\d)', html):
+            try:
+                y, mon = int(m.group(1)), int(m.group(2))
+                if 1 <= mon <= 12:
+                    _, last_day = calendar.monthrange(y, mon)
+                    dt = datetime(y, mon, last_day)
+                    if dt > today:
+                        dt = datetime(y, mon, min(today.day, last_day))
+                    if dt <= today:
+                        dates.append(dt)
+            except Exception:
+                pass
+
+        # 9. Korean Month-Year: YYYY년 MM월
+        for m in re.finditer(r'(20\d{2})\s*년\s*(\d{1,2})\s*월(?!\s*\d{1,2}\s*일)', html):
+            try:
+                y, mon = int(m.group(1)), int(m.group(2))
+                if 1 <= mon <= 12:
+                    _, last_day = calendar.monthrange(y, mon)
+                    dt = datetime(y, mon, last_day)
+                    if dt > today:
+                        dt = datetime(y, mon, min(today.day, last_day))
+                    if dt <= today:
+                        dates.append(dt)
+            except Exception:
+                pass
+
+        if dates:
+            return max(dates)
+        return None
+
+    def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str], Optional[datetime]]:
+        """Extracts points balance, status, and last activity date from the Hilton DOM."""
         balance, status, last_activity_date = None, None, None
         
         try:
+            import re
             html = sb.get_page_source()
             soup = BeautifulSoup(html, "html.parser")
-
             
-            # 1. Extract Points
-            for p in soup.find_all("p"):
-                text = p.get_text().strip()
-                if "points total" in text.lower():
-                    clean_points = "".join(filter(str.isdigit, text))
-                    if clean_points:
-                        balance = int(clean_points)
+            # 1. Extract Points using specific regex patterns
+            patterns_points = [
+                r'([\d,]+)\s*points\s*total',
+                r'total\s*points[:\s]+([\d,]+)',
+                r'([\d,]+)\s*hilton\s*honors\s*points',
+                r'([\d,]+)\s*total\s*honors\s*points',
+            ]
+            for pat in patterns_points:
+                m = re.search(pat, html, re.IGNORECASE)
+                if m:
+                    clean = m.group(1).replace(",", "").strip()
+                    if clean.isdigit():
+                        balance = int(clean)
                         break
+
+            # Fallback to leaf DOM elements if regex didn't match
+            if balance is None:
+                for el in soup.find_all(["p", "span", "h1", "h2", "h3", "div"]):
+                    if not el.find_all(True):  # Leaf node
+                        text = el.get_text(strip=True)
+                        if "points total" in text.lower() and len(text) < 30:
+                            m = re.search(r'[\d,]+', text)
+                            if m:
+                                clean = m.group(0).replace(",", "").strip()
+                                if clean.isdigit():
+                                    balance = int(clean)
+                                    break
                         
             # 2. Extract Status
-            for p in soup.find_all("p"):
-                text = p.get_text().strip()
-                if "status" in text.lower() and len(text) < 40:
-                    status = text.replace("Status", "").strip()
+            patterns_status = [
+                r'\b(Diamond|Gold|Silver|Member)\s+Status\b',
+                r'\b(Diamond|Gold|Silver|Member)\s+Tier\b',
+            ]
+            for pat in patterns_status:
+                m = re.search(pat, html, re.IGNORECASE)
+                if m:
+                    status = m.group(1).capitalize()
                     break
+
+            if not status:
+                for tier in ["Diamond", "Gold", "Silver", "Member"]:
+                    for el in soup.find_all(["p", "span", "h1", "h2", "h3"]):
+                        if not el.find_all(True):
+                            t = el.get_text(strip=True)
+                            if t.lower() == tier.lower() or t.lower() == f"{tier.lower()} member" or t.lower() == f"{tier.lower()} status":
+                                status = tier
+                                break
+                    if status:
+                        break
+
             # 3. Extract Last Activity Date
-            try:
-                import re
-                from datetime import datetime
-                text = sb.get_text('body')
-                pattern = r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}, \d{4}'
-                matches = re.finditer(pattern, text)
-                
-                dates = []
-                for match in matches:
-                    date_str = match.group(0)
-                    for fmt in ('%b %d, %Y', '%B %d, %Y'):
-                        try:
-                            dt = datetime.strptime(date_str, fmt)
-                            dates.append(dt)
-                            break
-                        except ValueError:
-                            pass
-                            
-                if dates:
-                    last_activity_date = max(dates)
-            except Exception:
-                pass
+            last_activity_date = self._extract_last_activity_date(html)
                 
         except Exception:
             pass
@@ -99,40 +247,21 @@ class HiltonHonorsPlugin(ProviderPlugin):
         
         sb.wait_for_element_visible(pass_selector, timeout=10)
         try:
-            if auto_submit:
-                # Pressing Enter in password field triggers form submission reliably
-                sb.type(pass_selector, password + "\n")
-            else:
-                sb.type(pass_selector, password)
+            sb.type(pass_selector, password)
         except Exception:
             pass
         sb.sleep(0.5)
         
-        # Safe verify and fallback using JS with arguments (fully escaped/safe)
-        try:
-            user_el = sb.find_element(user_selector)
-            pass_el = sb.find_element(pass_selector)
-            
-            sb.execute_script("arguments[0].value = arguments[1];", user_el, username)
-            sb.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", user_el)
-            sb.execute_script("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", user_el)
-            
-            sb.execute_script("arguments[0].value = arguments[1];", pass_el, password)
-            sb.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", pass_el)
-            sb.execute_script("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", pass_el)
-            
-            if auto_submit:
-                sb.sleep(0.5)
-                if sb.is_element_visible(submit_selector):
-                    try:
-                        sb.click(submit_selector)
-                    except Exception:
-                        btn = sb.find_element(submit_selector)
-                        sb.execute_script("arguments[0].click();", btn)
-            elif not auto_submit and sb.is_element_visible(submit_selector):
-                sb.click(submit_selector)
-        except Exception:
-            pass
+        if auto_submit:
+            if sb.is_element_visible(submit_selector):
+                try:
+                    sb.click(submit_selector)
+                except Exception:
+                    sb.type(pass_selector, "\n")
+            else:
+                sb.type(pass_selector, "\n")
+        elif not auto_submit and sb.is_element_visible(submit_selector):
+            sb.click(submit_selector)
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
         result = {
@@ -144,38 +273,39 @@ class HiltonHonorsPlugin(ProviderPlugin):
         
         try:
             with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
-                # 1. Open Hilton sign-in URL first. If already logged in, it will redirect to the activity page or dashboard.
+                # 1. Open Hilton sign-in URL first
                 sb.uc_open_with_reconnect("https://www.hilton.com/en/hilton-honors/login/", 4)
-                sb.sleep(10) # Let React render dynamic client-side elements if redirected
+                sb.sleep(8)
                 
-                # Check if we were redirected to the activity page/dashboard
-                balance, status, last_activity = self._extract_data(sb)
-                if balance is not None:
-                    result["balance"] = balance
-                    if status:
-                        result["status"] = status
-                    if last_activity:
-                        result["last_activity_date"] = last_activity
-                    return result
-
-                # 2. Not logged in (still on login page) -> Fill login form
-                self._fill_login_form(sb, username, password, auto_submit=True)
-                
-                # 3. Wait for redirect to finish and load activity page
-                sb.sleep(10)
-                
-                # Force navigate to activity page if it didn't auto-redirect
-                if "activity" not in sb.get_current_url():
-                    sb.open("https://www.hilton.com/en/hilton-honors/guest/activity/")
+                # Check if login form is presented
+                user_selector = "input[name='username']"
+                if sb.is_element_visible(user_selector):
+                    self._fill_login_form(sb, username, password, auto_submit=True)
                     sb.sleep(10)
-                    
-                # 4. Extract data
+
+                # 2. Always navigate to the activity page to extract transactions/stays & last activity date
+                curr_url = sb.get_current_url()
+                if "activity" not in curr_url:
+                    sb.open("https://www.hilton.com/en/hilton-honors/guest/activity/")
+                    sb.sleep(8)
+
+                # 3. Extract data from activity page
                 balance, status, last_activity = self._extract_data(sb)
                 if balance is None:
                     # Fallback refresh in case of slow API response rendering
                     sb.refresh()
                     sb.sleep(8)
                     balance, status, last_activity = self._extract_data(sb)
+
+                # 4. If balance was not found on activity page, fallback to overview / dashboard
+                if balance is None:
+                    sb.open("https://www.hilton.com/en/hilton-honors/guest/overview/")
+                    sb.sleep(8)
+                    overview_balance, overview_status, _ = self._extract_data(sb)
+                    if overview_balance is not None:
+                        balance = overview_balance
+                        if not status:
+                            status = overview_status
                     
                 if balance is None:
                     # Dump the HTML for debug
@@ -213,11 +343,10 @@ class HiltonHonorsPlugin(ProviderPlugin):
             
             # Wait up to 5 minutes for the user to resolve MFA and reach the dashboard
             try:
-                # We check for the presence of the "points total" text in the DOM
                 start_time = time.time()
                 success = False
                 while time.time() - start_time < 300:
-                    balance, _ = self._extract_data(sb)
+                    balance, _, _ = self._extract_data(sb)
                     if balance is not None:
                         success = True
                         break

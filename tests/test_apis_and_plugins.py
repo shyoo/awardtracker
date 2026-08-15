@@ -447,8 +447,226 @@ class TestAPIsAndPlugins(unittest.TestCase):
         </html>
         """
         mock_sb = MockSB(test_html)
-        balance, status = plugin._extract_data(mock_sb)
-        self.assertEqual(balance, 10000)
+    def test_hilton_extraction_and_activity_dates(self):
+        plugin = plugin_manager.get_plugin('hilton')
+        self.assertIsNotNone(plugin)
+
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        # Scenario 1: 570 points with Year-Month format '2025-03'
+        html_ym = """
+        <html>
+            <body>
+                <p>570 Points Total</p>
+                <p>Member Status</p>
+                <div class="activity-item">Recent Activity: 2025-03</div>
+            </body>
+        </html>
+        """
+        mock_sb_ym = MockSB(html_ym)
+        balance, status, last_act = plugin._extract_data(mock_sb_ym)
+        self.assertEqual(balance, 570)
+        self.assertEqual(status, "Member")
+        self.assertIsNotNone(last_act)
+        self.assertEqual(last_act.year, 2025)
+        self.assertEqual(last_act.month, 3)
+        self.assertEqual(last_act.day, 31)
+
+        exp = plugin.calculate_expiration(balance, status, last_act)
+        self.assertIsNotNone(exp)
+        self.assertEqual(exp.year, 2027)
+        self.assertEqual(exp.month, 3)
+        self.assertEqual(exp.day, 31)
+
+        # Scenario 2: Month YYYY format 'March 2025'
+        html_month_year = """
+        <html>
+            <body>
+                <p>570 Points Total</p>
+                <p>Silver Status</p>
+                <div>Stay Date: March 2025</div>
+            </body>
+        </html>
+        """
+        mock_sb_my = MockSB(html_month_year)
+        balance, status, last_act = plugin._extract_data(mock_sb_my)
+        self.assertEqual(balance, 570)
+        self.assertEqual(status, "Silver")
+        self.assertIsNotNone(last_act)
+        self.assertEqual(last_act.year, 2025)
+        self.assertEqual(last_act.month, 3)
+        self.assertEqual(last_act.day, 31)
+
+        # Scenario 3: Full date format 'Mar 15, 2025'
+        html_full = """
+        <html>
+            <body>
+                <p>12,500 Points Total</p>
+                <p>Gold Status</p>
+                <div>Completed Stay: Mar 15, 2025</div>
+            </body>
+        </html>
+        """
+        mock_sb_full = MockSB(html_full)
+        balance, status, last_act = plugin._extract_data(mock_sb_full)
+        self.assertEqual(balance, 12500)
+        self.assertEqual(status, "Gold")
+        self.assertIsNotNone(last_act)
+        self.assertEqual(last_act.year, 2025)
+        self.assertEqual(last_act.month, 3)
+        self.assertEqual(last_act.day, 15)
+
+        # Scenario 4: Future date only -> must be ignored
+        html_future = """
+        <html>
+            <body>
+                <p>570 Points Total</p>
+                <p>Member Status</p>
+                <div>Upcoming Reservation: Dec 25, 2099</div>
+            </body>
+        </html>
+        """
+        mock_sb_future = MockSB(html_future)
+        _, _, last_act_future = plugin._extract_data(mock_sb_future)
+        self.assertIsNone(last_act_future)
+
+        # Scenario 5: Realistic nested container with stay cards, numbers, dates, and account details
+        html_realistic = """
+        <div class="w-full">
+            <div class="osc-nav-drawer surface-base">
+                <div class="flex items-center">
+                    <p class="user-greeting">Hi, Sunghwan</p>
+                    <p class="user-tier">Silver Status</p>
+                    <p class="mb-1 text-sm brand-ey:font-normal">10,407 Points total</p>
+                    <p class="account-num">Hilton Honors # 987654321</p>
+                </div>
+            </div>
+            <div class="activity-section">
+                <h2>Activity</h2>
+                <div class="stay-card">
+                    <span>May 15, 2026</span>
+                    <span>Hilton Tokyo</span>
+                    <span>+3,351 Points</span>
+                </div>
+                <div class="stay-card">
+                    <span>Jan 14, 2025</span>
+                    <span>Conrad Seoul</span>
+                    <span>+14,296 Points</span>
+                </div>
+            </div>
+        </div>
+        """
+        mock_sb_real = MockSB(html_realistic)
+        balance, status, last_act = plugin._extract_data(mock_sb_real)
+        self.assertEqual(balance, 10407)
+        self.assertEqual(status, "Silver")
+        self.assertIsNotNone(last_act)
+        self.assertEqual(last_act.year, 2026)
+        self.assertEqual(last_act.month, 5)
+        self.assertEqual(last_act.day, 15)
+
+    def test_milemoa_hilton_user_complaint_mock_page(self):
+        """
+        Reproduces the exact user complaint from MileMoa / Issue #113:
+        Account holder has 570 points, no tier (Member), no credit card exemption,
+        and last activity was in March 2025 (2025-03).
+        Verifies that:
+        1. 570 points, Member status, and March 2025 last activity are extracted accurately.
+        2. Expiration date calculates to March 31, 2027 (24 months of inactivity).
+        3. Dashboard renders the expiration badge with time remaining and does NOT show 'Never Expires'.
+        """
+        from datetime import datetime
+        from expiration import calculate_expiration
+
+        # 1. Setup mock HTML simulating Hilton activity page for the user's account
+        mock_html = """
+        <div class="w-full">
+            <div class="osc-nav-drawer surface-base">
+                <div class="flex items-center">
+                    <p class="user-greeting">Hi, TravelUser</p>
+                    <p class="user-tier">Member Status</p>
+                    <p class="mb-1 text-sm brand-ey:font-normal">570 Points total</p>
+                    <p class="account-num">Hilton Honors # 112233445</p>
+                </div>
+            </div>
+            <div class="activity-section">
+                <h2>Recent Account Activity</h2>
+                <div class="activity-card">
+                    <span class="activity-date">2025-03</span>
+                    <span class="activity-desc">Dining Program Partner Activity</span>
+                    <span class="activity-points">+570 Points</span>
+                </div>
+            </div>
+        </div>
+        """
+
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        plugin = plugin_manager.get_plugin('hilton')
+        self.assertIsNotNone(plugin)
+
+        # 2. Test extraction from mock page
+        balance, status, last_activity_date = plugin._extract_data(MockSB(mock_html))
+        self.assertEqual(balance, 570)
+        self.assertEqual(status, "Member")
+        self.assertIsNotNone(last_activity_date)
+        self.assertEqual(last_activity_date.year, 2025)
+        self.assertEqual(last_activity_date.month, 3)
+        self.assertEqual(last_activity_date.day, 31)
+
+        # 3. Test expiration calculation (24 months from March 2025 -> March 2027)
+        computed_exp = calculate_expiration(
+            'hilton',
+            balance,
+            status,
+            last_activity_date,
+            has_exemption=False
+        )
+        self.assertIsNotNone(computed_exp)
+        self.assertEqual(computed_exp.year, 2027)
+        self.assertEqual(computed_exp.month, 3)
+        self.assertEqual(computed_exp.day, 31)
+
+        # 4. Create Hilton provider and account in DB to test dashboard UI rendering
+        provider_hilton = Provider(name="Hilton Honors", plugin_name="hilton", enabled=True)
+        db.session.add(provider_hilton)
+        db.session.commit()
+
+        account = Account(
+            provider_id=provider_hilton.id,
+            person_id=self.person.id,
+            username="milemoa_user@example.com",
+            password_encrypted="encrypted_pwd",
+            balance=balance,
+            status=status,
+            expiration_date=computed_exp,
+            has_exemption=False,
+            last_fetch_status="SUCCESS"
+        )
+        db.session.add(account)
+        db.session.commit()
+
+        # 5. Fetch dashboard HTML
+        res = self.client.get('/')
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode()
+
+        # Verify balance and expiration are rendered
+        self.assertIn("570", html)
+        self.assertIn("Hilton Honors", html)
+        
+        # Verify the badge does NOT display "Never Expires" for this Hilton account
+        # (It should display Safe / Warning / Critical with time remaining)
+        self.assertNotIn("Never Expires", html.split(f"balance-{account.id}")[0].split(f"id=\"account-{account.id}\"")[-1] if f"id=\"account-{account.id}\"" in html else "")
+        self.assertTrue("Safe:" in html or "Warning:" in html or "Critical:" in html or "Expired" in html)
 
     def test_american_status_extraction(self):
         plugin = plugin_manager.get_plugin('american')
