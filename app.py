@@ -445,6 +445,11 @@ def create_app(config_class=Config):
                     acc_status = 'warning'
                 else:
                     acc_status = 'safe'
+            elif not acc.has_exemption and acc.balance > 0 and (
+                (acc.expiration_meta and acc.expiration_meta.get('at_risk')) or
+                (acc.provider.plugin_name == 'hilton' and not acc.expiration_date)
+            ):
+                acc_status = 'at_risk'
             
             acc.days_left = acc_days_left
             acc.expiration_status = acc_status
@@ -609,6 +614,12 @@ def create_app(config_class=Config):
                 account.expiration_status = 'warning'
             else:
                 account.expiration_status = 'safe'
+        elif not account.has_exemption and account.balance > 0 and (
+            (account.expiration_meta and account.expiration_meta.get('at_risk')) or
+            (account.provider.plugin_name == 'hilton' and not account.expiration_date)
+        ):
+            account.days_left = None
+            account.expiration_status = 'at_risk'
         else:
             account.days_left = None
             account.expiration_status = 'none'

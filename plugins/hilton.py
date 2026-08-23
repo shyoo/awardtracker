@@ -318,6 +318,11 @@ class HiltonHonorsPlugin(ProviderPlugin):
                     result["status"] = status
                 if last_activity:
                     result["last_activity_date"] = last_activity
+                elif balance > 0:
+                    result["expiration_meta"] = {
+                        "at_risk": True,
+                        "reason": "No activity recorded in the last 12 months"
+                    }
                 
                 return result
                 

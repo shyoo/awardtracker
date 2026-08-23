@@ -668,6 +668,119 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertNotIn("Never Expires", html.split(f"balance-{account.id}")[0].split(f"id=\"account-{account.id}\"")[-1] if f"id=\"account-{account.id}\"" in html else "")
         self.assertTrue("Safe:" in html or "Warning:" in html or "Critical:" in html or "Expired" in html)
 
+    def test_issue_115_hilton_expiry_at_risk(self):
+        """
+        Tests Issue #115: When a Hilton account has non-zero points, no exemption,
+        and no activity records in the last 12 months, the dashboard and account detail
+        pages must display 'Expiry at Risk' instead of 'Never Expires'.
+        """
+        plugin = plugin_manager.get_plugin('hilton')
+        self.assertIsNotNone(plugin)
+
+        # Mock HTML page with no recent activity
+        mock_html_no_activity = """
+        <div class="w-full">
+            <div class="osc-nav-drawer surface-base">
+                <div class="flex items-center">
+                    <p class="user-greeting">Hi, DiamondUser</p>
+                    <p class="user-tier">Member Status</p>
+                    <p class="mb-1 text-sm brand-ey:font-normal">5,000 Points total</p>
+                    <p class="account-num">Hilton Honors # 554433221</p>
+                </div>
+            </div>
+            <div class="activity-section">
+                <h2>Account Activity</h2>
+                <div class="no-activity-message">You have no account activity in the last 12 months.</div>
+            </div>
+        </div>
+        """
+
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        balance, status, last_activity_date = plugin._extract_data(MockSB(mock_html_no_activity))
+        self.assertEqual(balance, 5000)
+        self.assertEqual(status, "Member")
+        self.assertIsNone(last_activity_date)
+
+        provider_hilton = Provider(name="Hilton Honors", plugin_name="hilton", enabled=True)
+        db.session.add(provider_hilton)
+        db.session.commit()
+
+        # 1. Standard non-exempt account with 5,000 points and no activity date
+        account_at_risk = Account(
+            provider_id=provider_hilton.id,
+            person_id=self.person.id,
+            username="hilton_at_risk@example.com",
+            password_encrypted="encrypted_pwd",
+            balance=5000,
+            status="Member",
+            expiration_date=None,
+            has_exemption=False,
+            last_fetch_status="SUCCESS"
+        )
+        account_at_risk.expiration_meta = {"at_risk": True, "reason": "No activity recorded in the last 12 months"}
+        db.session.add(account_at_risk)
+        db.session.commit()
+
+        # Check Dashboard rendering
+        res = self.client.get('/')
+        self.assertEqual(res.status_code, 200)
+        dash_html = res.data.decode()
+        self.assertIn("Expiry at Risk", dash_html)
+        self.assertIn("5,000", dash_html)
+
+        # Check Account Detail rendering
+        res_detail = self.client.get(f'/accounts/{account_at_risk.id}')
+        self.assertEqual(res_detail.status_code, 200)
+        detail_html = res_detail.data.decode()
+        self.assertIn("Expiry at Risk", detail_html)
+        self.assertIn("No activity in 12+ mos", detail_html)
+
+        # 2. Account with credit card exemption -> should display Never Expires (Exempt)
+        account_exempt = Account(
+            provider_id=provider_hilton.id,
+            person_id=self.person.id,
+            username="hilton_exempt@example.com",
+            password_encrypted="encrypted_pwd",
+            balance=5000,
+            status="Member",
+            expiration_date=None,
+            has_exemption=True,
+            last_fetch_status="SUCCESS"
+        )
+        db.session.add(account_exempt)
+        db.session.commit()
+
+        res_exempt = self.client.get(f'/accounts/{account_exempt.id}')
+        self.assertEqual(res_exempt.status_code, 200)
+        exempt_html = res_exempt.data.decode()
+        self.assertIn("Never Expires (Exempt)", exempt_html)
+        self.assertNotIn("Expiry at Risk", exempt_html)
+
+        # 3. Account with 0 balance -> should NOT show Expiry at Risk
+        account_zero = Account(
+            provider_id=provider_hilton.id,
+            person_id=self.person.id,
+            username="hilton_zero@example.com",
+            password_encrypted="encrypted_pwd",
+            balance=0,
+            status="Member",
+            expiration_date=None,
+            has_exemption=False,
+            last_fetch_status="SUCCESS"
+        )
+        db.session.add(account_zero)
+        db.session.commit()
+
+        res_zero = self.client.get(f'/accounts/{account_zero.id}')
+        self.assertEqual(res_zero.status_code, 200)
+        zero_html = res_zero.data.decode()
+        self.assertNotIn("Expiry at Risk", zero_html)
+
     def test_american_status_extraction(self):
         plugin = plugin_manager.get_plugin('american')
         self.assertIsNotNone(plugin)
