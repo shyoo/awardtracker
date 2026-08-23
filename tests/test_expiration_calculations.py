@@ -170,11 +170,11 @@ class TestMarriottExpirationParsing(unittest.TestCase):
         self.assertEqual(result, datetime(2027, 6, 1))
 
     def test_explicit_english_iso_expiration(self):
-        """Under older code, future date (2026-08-20) is ignored; only past date (2024-08-19) is used."""
+        """Future expiration date in text (2029-08-20) is ignored; only past activity date (2024-08-19) is used."""
         plugin = self._get_plugin()
         html = """
         <html><body>
-          <p>Your points will expire on 2026-08-20.</p>
+          <p>Your points will expire on 2029-08-20.</p>
           <p>Stay recorded: 2024-08-19</p>
         </body></html>
         """

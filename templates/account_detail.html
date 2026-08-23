@@ -127,6 +127,11 @@
           <span class="text-lg font-bold text-amber-600">Warning</span>
           <span class="custom-tooltip inline-flex items-center rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">{{ account.expiration_date.strftime('%Y-%m-%d') }} ({{ format_time_remaining(account.days_left) }})</span>
         </div>
+        {% elif account.expiration_status == 'at_risk' %}
+        <div class="flex items-center justify-between">
+          <span class="text-lg font-bold text-amber-600">Expiry at Risk</span>
+          <span class="custom-tooltip inline-flex items-center rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20" data-tooltip="No activity recorded in the last 12 months. Points expire after 24 months of inactivity and may be at risk.">No activity in 12+ mos</span>
+        </div>
         {% elif account.expiration_status == 'safe' %}
         <div class="flex items-center justify-between">
           <span class="text-lg font-bold text-emerald-600">Safe</span>

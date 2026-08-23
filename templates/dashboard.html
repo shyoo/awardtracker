@@ -298,6 +298,8 @@
                 <span class="custom-tooltip inline-flex items-center rounded-md bg-rose-100 px-2 py-1 text-[11px] font-bold text-rose-800 ring-1 ring-inset ring-rose-600/20 animate-pulse" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">Critical: {{ format_time_remaining(account.days_left) }}</span>
                 {% elif account.expiration_status == 'warning' %}
                 <span class="custom-tooltip inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">Warning: {{ format_time_remaining(account.days_left) }}</span>
+                {% elif account.expiration_status == 'at_risk' %}
+                <span class="custom-tooltip inline-flex items-center rounded-md bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20" data-tooltip="No activity recorded in the last 12 months. Points expire after 24 months of inactivity and may be at risk.">Expiry at Risk</span>
                 {% elif account.expiration_status == 'safe' %}
                 <span class="custom-tooltip inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-600/20" data-tooltip="{{ get_program_rule_description(account.provider.plugin_name, account.status) }}">Safe: {{ format_time_remaining(account.days_left) }}</span>
                 {% else %}
