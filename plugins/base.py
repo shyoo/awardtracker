@@ -9,6 +9,27 @@ from seleniumbase import BaseCase
 active_drivers = {}
 active_drivers_lock = threading.Lock()
 
+# Accounts whose active browser session was cancelled by the user. Checked by
+# the patched SeleniumBase methods below so a cancelled run stops making
+# Selenium calls entirely, instead of relying solely on the killed browser
+# process to raise an exception -- uc=True mode has its own reconnect/resilience
+# machinery that can otherwise silently relaunch a fresh Chrome window after the
+# original one is killed, making cancellation look like it didn't work.
+cancelled_accounts = set()
+cancelled_accounts_lock = threading.Lock()
+
+def mark_cancelled(account_id) -> None:
+    with cancelled_accounts_lock:
+        cancelled_accounts.add(account_id)
+
+def is_cancelled(account_id) -> bool:
+    with cancelled_accounts_lock:
+        return account_id in cancelled_accounts
+
+def clear_cancelled(account_id) -> None:
+    with cancelled_accounts_lock:
+        cancelled_accounts.discard(account_id)
+
 
 def get_chrome_binary() -> str | None:
     """
@@ -132,14 +153,65 @@ def cancel_active_driver(account_id) -> bool:
     with active_drivers_lock:
         sb = active_drivers.get(account_id)
     if sb:
+        # Mark cancelled first so the patched methods below refuse to make any
+        # further Selenium calls even if killing the process races with the
+        # running plugin thread's next call.
+        mark_cancelled(account_id)
         try:
             if hasattr(sb, 'driver') and sb.driver:
                 sb.driver.quit()
             elif hasattr(sb, 'quit'):
                 sb.quit()
-            return True
         except Exception:
-            return True
+            pass
+
+        # driver.quit() doesn't always fully terminate the underlying Chrome
+        # process in uc=True headed mode, which can leave a still-running,
+        # still-navigating window behind that looks like cancel did nothing
+        # (or that the window "popped back up"). Force-kill any Chrome process
+        # tied to this account's browser profile as a fallback, mirroring
+        # wait_for_chrome_exit()'s psutil-with-subprocess-fallback approach
+        # (psutil isn't an actual dependency of this project).
+        import os
+        import platform
+        import subprocess
+        profile_marker = os.path.join('browser_profiles', str(account_id)).lower()
+        try:
+            import psutil
+            for proc in psutil.process_iter(['name', 'cmdline']):
+                try:
+                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
+                        cmdline = proc.info['cmdline']
+                        if cmdline and profile_marker in ' '.join(cmdline).lower():
+                            proc.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except ImportError:
+            try:
+                if platform.system() == "Windows":
+                    escaped_marker = profile_marker.replace("'", "''")
+                    cmd = f"Get-CimInstance Win32_Process | Where-Object {{ $_.Name -like '*chrome*' -and $_.CommandLine -like '*{escaped_marker}*' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"
+                    subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True)
+                else:
+                    output = subprocess.check_output(
+                        "ps -ef | grep -i chrome | grep -v grep",
+                        shell=True,
+                        stderr=subprocess.DEVNULL
+                    ).decode(errors='ignore')
+                    for line in output.splitlines():
+                        if profile_marker in line.lower():
+                            parts = line.split()
+                            if len(parts) > 1:
+                                try:
+                                    os.kill(int(parts[1]), 9)
+                                except Exception:
+                                    pass
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        return True
     return False
 
 def is_hidden_node(node) -> bool:
@@ -345,7 +417,17 @@ def _apply_selenium_patches():
                         import debug_logger
                     except ImportError:
                         return orig_method(self, *args, **kwargs)
-                        
+
+                    # If the user cancelled this account's session, refuse to make
+                    # any further Selenium calls at all -- including this one --
+                    # rather than letting a dead/killed browser's next call reach
+                    # uc=True mode's own reconnect/resilience logic, which can
+                    # otherwise silently relaunch a fresh Chrome window and make
+                    # cancellation appear to not have worked.
+                    cancel_account_id = getattr(debug_logger._log_context, 'account_id', None)
+                    if cancel_account_id and is_cancelled(cancel_account_id):
+                        raise PluginError("Cancelled by user.")
+
                     # Re-entry guard to prevent recursion if screenshot/html methods trigger wrappers
                     in_logger = getattr(debug_logger._log_context, 'in_logger', False)
                     if in_logger:
@@ -614,7 +696,12 @@ def safe_call_plugin_method(method, *args, **kwargs):
     account_id = kwargs.pop('_account_id', None)
     provider_name = kwargs.pop('_provider_name', None)
     current_balance = kwargs.pop('_current_balance', None)
-    
+
+    # A new run is starting for this account -- clear any stale cancellation
+    # flag from a previous run so this one isn't refused before it starts.
+    if account_id:
+        clear_cancelled(account_id)
+
     # Initialize debug log context if metadata is provided
     try:
         import debug_logger
