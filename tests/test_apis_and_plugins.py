@@ -569,6 +569,142 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertEqual(last_act.month, 5)
         self.assertEqual(last_act.day, 15)
 
+    def test_hilton_free_night_award_parsing(self):
+        plugin = plugin_manager.get_plugin('hilton')
+        self.assertIsNotNone(plugin)
+
+        html = """
+        <div id="tab-panel-currentRewards" aria-hidden="false" role="tabpanel" class="w-full">
+          <section>
+            <div data-testid="rewards-available">
+              <h3>Ready to use (1)</h3>
+              <div data-testid="award-card-FNC">
+                <h4>Amex Aspire Anniversary Free Night</h4>
+                <p>Certificate # ••••• 7724</p>
+                <p>Valid until 03/15/2028</p>
+              </div>
+            </div>
+            <div data-testid="no-rewards-reserved">
+              <h3>Reserved for upcoming stay (0)</h3>
+              <p>You haven't used any rewards yet to an upcoming stay.</p>
+            </div>
+          </section>
+        </div>
+        <div id="tab-panel-usedRewards" aria-hidden="true" role="tabpanel" class="w-full hidden">
+          <div data-testid="rewards-used">
+            <h3>Your used rewards (1)</h3>
+            <div data-testid="award-card-FNC">
+              <h4>Sunset Reef, an SLH Hotel</h4>
+              <p>Certificate # ••••• 5061</p>
+              <p>Redeemed 11/02/2025</p>
+            </div>
+          </div>
+        </div>
+        """
+
+        certs = plugin._parse_free_night_awards(html)
+
+        # Only the unredeemed "Ready to use" card should be captured; the used one must be excluded.
+        self.assertEqual(len(certs), 1)
+        cert = certs[0]
+        self.assertEqual(cert["name"], "Amex Aspire Anniversary Free Night")
+        self.assertEqual(cert["expiration_date"], "2028-03-15")
+        self.assertEqual(cert["details"]["Certificate #"], "••••• 7724")
+
+        # No current-rewards tab present at all -> empty list, no crash
+        self.assertEqual(plugin._parse_free_night_awards("<html><body>no rewards section</body></html>"), [])
+
+    def test_hilton_free_night_award_parsing_zero_awards(self):
+        plugin = plugin_manager.get_plugin('hilton')
+        self.assertIsNotNone(plugin)
+
+        html = """
+        <div id="tab-panel-currentRewards" aria-hidden="false" role="tabpanel" class="w-full">
+          <section>
+            <div data-testid="rewards-available">
+              <h3>Ready to use (0)</h3>
+              <p>You don't have any rewards to use right now.</p>
+            </div>
+            <div data-testid="no-rewards-reserved">
+              <h3>Reserved for upcoming stay (0)</h3>
+              <p>You haven't used any rewards yet to an upcoming stay.</p>
+            </div>
+          </section>
+        </div>
+        <div id="tab-panel-usedRewards" aria-hidden="true" role="tabpanel" class="w-full hidden">
+          <div data-testid="rewards-used">
+            <h3>Your used rewards (0)</h3>
+          </div>
+        </div>
+        """
+
+        self.assertEqual(plugin._parse_free_night_awards(html), [])
+
+    def test_hilton_free_night_award_parsing_multiple_awards(self):
+        plugin = plugin_manager.get_plugin('hilton')
+        self.assertIsNotNone(plugin)
+
+        # Two awards with different expiration dates
+        html_different_dates = """
+        <div id="tab-panel-currentRewards" aria-hidden="false" role="tabpanel" class="w-full">
+          <section>
+            <div data-testid="rewards-available">
+              <h3>Ready to use (2)</h3>
+              <div data-testid="award-card-FNC">
+                <h4>Amex Aspire Anniversary Free Night</h4>
+                <p>Certificate # ••••• 1122</p>
+                <p>Valid until 03/15/2028</p>
+              </div>
+              <div data-testid="award-card-FNC">
+                <h4>Amex Surpass Anniversary Free Night</h4>
+                <p>Certificate # ••••• 3344</p>
+                <p>Valid until 09/01/2027</p>
+              </div>
+            </div>
+          </section>
+        </div>
+        """
+
+        certs = plugin._parse_free_night_awards(html_different_dates)
+        self.assertEqual(len(certs), 2)
+        self.assertEqual(certs[0]["name"], "Amex Aspire Anniversary Free Night")
+        self.assertEqual(certs[0]["expiration_date"], "2028-03-15")
+        self.assertEqual(certs[0]["details"]["Certificate #"], "••••• 1122")
+        self.assertEqual(certs[1]["name"], "Amex Surpass Anniversary Free Night")
+        self.assertEqual(certs[1]["expiration_date"], "2027-09-01")
+        self.assertEqual(certs[1]["details"]["Certificate #"], "••••• 3344")
+
+        # Two awards sharing the same expiration date must both be kept, not deduplicated
+        html_same_date = """
+        <div id="tab-panel-currentRewards" aria-hidden="false" role="tabpanel" class="w-full">
+          <section>
+            <div data-testid="rewards-available">
+              <h3>Ready to use (2)</h3>
+              <div data-testid="award-card-FNC">
+                <h4>Amex Aspire Anniversary Free Night</h4>
+                <p>Certificate # ••••• 5566</p>
+                <p>Valid until 12/25/2027</p>
+              </div>
+              <div data-testid="award-card-FNC">
+                <h4>Amex Aspire Anniversary Free Night</h4>
+                <p>Certificate # ••••• 7788</p>
+                <p>Valid until 12/25/2027</p>
+              </div>
+            </div>
+          </section>
+        </div>
+        """
+
+        certs_same_date = plugin._parse_free_night_awards(html_same_date)
+        self.assertEqual(len(certs_same_date), 2)
+        self.assertEqual(certs_same_date[0]["expiration_date"], "2027-12-25")
+        self.assertEqual(certs_same_date[1]["expiration_date"], "2027-12-25")
+        # Distinct certificate numbers confirm these are two separate awards, not one duplicated
+        self.assertNotEqual(
+            certs_same_date[0]["details"]["Certificate #"],
+            certs_same_date[1]["details"]["Certificate #"]
+        )
+
     def test_milemoa_hilton_user_complaint_mock_page(self):
         """
         Reproduces the exact user complaint from MileMoa / Issue #113:

@@ -226,6 +226,47 @@ class HiltonHonorsPlugin(ProviderPlugin):
             
         return balance, status, last_activity_date
 
+    def _parse_free_night_awards(self, html: str) -> list:
+        """Extracts unredeemed Free Night Certificates from the Rewards section of the my-account page."""
+        import re
+
+        soup = BeautifulSoup(html, "html.parser")
+        certificates = []
+
+        # Only the "Current rewards" tab (Ready to use / Reserved for upcoming stay) holds
+        # certificates still available to use; the "Used rewards" tab is intentionally skipped.
+        current_tab = soup.find(id="tab-panel-currentRewards")
+        if not current_tab:
+            return certificates
+
+        for card in current_tab.find_all("div", attrs={"data-testid": "award-card-FNC"}):
+            name_el = card.find("h4")
+            name = name_el.get_text(strip=True) if name_el else "Hilton Free Night Certificate"
+
+            card_text = card.get_text(" ", strip=True)
+
+            details = {}
+            cert_match = re.search(r'Certificate\s*#\s*([•\d\s]+\d)', card_text)
+            if cert_match:
+                details["Certificate #"] = re.sub(r'\s+', ' ', cert_match.group(1)).strip()
+
+            expiration_date = None
+            valid_match = re.search(r'Valid until\s+(\d{1,2}/\d{1,2}/\d{4})', card_text)
+            if valid_match:
+                try:
+                    dt = datetime.strptime(valid_match.group(1), "%m/%d/%Y")
+                    expiration_date = dt.strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+
+            certificates.append({
+                "name": name,
+                "expiration_date": expiration_date,
+                "details": details
+            })
+
+        return certificates
+
     def _fill_login_form(self, sb, username: str, password: str, auto_submit: bool = True) -> None:
         """Fills the Hilton login form and submits."""
         user_selector = "input[name='username']"
@@ -283,13 +324,23 @@ class HiltonHonorsPlugin(ProviderPlugin):
                     self._fill_login_form(sb, username, password, auto_submit=True)
                     sb.sleep(10)
 
-                # 2. Always navigate to the activity page to extract transactions/stays & last activity date
+                # 2. Capture Free Night Certificates immediately if login already landed on the account page,
+                # to avoid an extra round-trip back to it later
                 curr_url = sb.get_current_url()
+                certificates_captured = False
+                if "my-account" in curr_url:
+                    try:
+                        result["certificates"] = self._parse_free_night_awards(sb.get_page_source())
+                        certificates_captured = True
+                    except Exception:
+                        pass
+
+                # 3. Always navigate to the activity page to extract transactions/stays & last activity date
                 if "activity" not in curr_url:
                     sb.open("https://www.hilton.com/en/hilton-honors/guest/activity/")
                     sb.sleep(8)
 
-                # 3. Extract data from activity page
+                # 4. Extract data from activity page
                 balance, status, last_activity = self._extract_data(sb)
                 if balance is None:
                     # Fallback refresh in case of slow API response rendering
@@ -297,7 +348,7 @@ class HiltonHonorsPlugin(ProviderPlugin):
                     sb.sleep(8)
                     balance, status, last_activity = self._extract_data(sb)
 
-                # 4. If balance was not found on activity page, fallback to overview / dashboard
+                # 5. If balance was not found on activity page, fallback to overview / dashboard
                 if balance is None:
                     sb.open("https://www.hilton.com/en/hilton-honors/guest/overview/")
                     sb.sleep(8)
@@ -323,7 +374,16 @@ class HiltonHonorsPlugin(ProviderPlugin):
                         "at_risk": True,
                         "reason": "No activity recorded in the last 12 months"
                     }
-                
+
+                # 6. Navigate to the account page to extract Free Night Certificates, if not already captured above
+                if not certificates_captured:
+                    try:
+                        sb.open("https://www.hilton.com/en/hilton-honors/guest/my-account/")
+                        sb.sleep(8)
+                        result["certificates"] = self._parse_free_night_awards(sb.get_page_source())
+                    except Exception:
+                        pass
+
                 return result
                 
         except InteractionRequiredError:
