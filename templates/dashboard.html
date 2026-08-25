@@ -244,8 +244,6 @@
                   <div class="flex items-center gap-1" id="sync-status-{{ account.id }}">
                       {% if account.is_manual %}
                           <span class="text-indigo-500 font-medium">Updated {{ time_ago(account.last_updated) }}</span>
-                      {% elif account.last_fetch_status == 'SUCCESS' and account.last_error and 'interactive login succeeded' in account.last_error.lower() %}
-                          <span class="text-amber-600 font-medium" title="{{ account.last_error }}">Interactive sign-in passed, but sync is pending</span>
                       {% elif account.last_fetch_status == 'SUCCESS' %}
                           <span class="text-emerald-600 font-medium">Synced ({{ time_ago(account.last_updated) }})</span>
                       {% elif account.last_fetch_status == 'FAILED' %}

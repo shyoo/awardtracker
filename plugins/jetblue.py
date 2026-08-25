@@ -406,7 +406,7 @@ class JetBluePlugin(ProviderPlugin):
     def _get_chrome_path(self) -> Optional[str]:
         return get_chrome_binary()
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         try:
             if profile_dir:
                 try:
@@ -464,6 +464,7 @@ class JetBluePlugin(ProviderPlugin):
                         self._save_cache(profile_dir, result)
                         self.save_cookies_to_json(sb, profile_dir)
                     print(f"Successfully captured JetBlue TrueBlue balance: {result['balance']}")
+                    return result
                 else:
                     raise PluginError(
                         "Successfully logged in, but could not read TrueBlue balance from the dashboard. "

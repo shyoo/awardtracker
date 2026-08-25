@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 import time
 import inspect
@@ -771,9 +771,20 @@ class ProviderPlugin(ABC):
         pass
 
     @abstractmethod
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Opens a visible browser so the user can manually bypass MFA/Captchas.
+
+        May optionally return a data dict in the same shape as fetch_data()'s
+        return value (balance/status/etc.), scraped directly from the
+        already-authenticated session before it closes. When a dict is returned,
+        the caller persists it immediately instead of launching a separate
+        fetch_data() call — avoiding a second browser session that may not
+        inherit the login (e.g. on sites that gate every login behind MFA/2FA
+        with no way to stay signed in). Plugins that can't scrape data from
+        within the login flow (e.g. manual mode using a native, non-automated
+        browser) should keep returning None, which falls back to a normal
+        fetch_data() call afterward.
         """
         pass
 
