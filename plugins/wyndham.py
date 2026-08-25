@@ -399,7 +399,7 @@ class WyndhamPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to Wyndham.
         """
@@ -454,7 +454,17 @@ class WyndhamPlugin(ProviderPlugin):
             if balance is None:
                 raise PluginError("Failed to extract account details after interactive login. Please check if you signed in successfully.")
 
-
+            result = {
+                "balance": balance,
+                "status": status or "Unknown",
+                "expiration_date": None,
+                "certificates": [],
+                # Set to None so app.py doesn't overwrite computed_expiration, matching fetch_data().
+                "last_activity_date": None
+            }
+            expiration_date = self._extract_expiration(sb, balance)
+            if expiration_date:
+                result["expiration_date"] = expiration_date.strftime("%Y-%m-%dT%H:%M:%S")
 
             if profile_dir:
                 try:
@@ -462,3 +472,4 @@ class WyndhamPlugin(ProviderPlugin):
                 except Exception:
                     pass
             print(f"Interactive login succeeded. Balance: {balance}, Status: {status}")
+            return result

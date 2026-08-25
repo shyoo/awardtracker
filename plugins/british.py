@@ -415,7 +415,7 @@ class BritishAirwaysPlugin(ProviderPlugin):
     def _get_chrome_path(self) -> Optional[str]:
         return get_chrome_binary()
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         try:
             if profile_dir:
                 try:
@@ -477,6 +477,7 @@ class BritishAirwaysPlugin(ProviderPlugin):
                         self._save_cache(profile_dir, result)
                         self.save_cookies_to_json(sb, profile_dir)
                     print(f"Successfully captured British Airways Avios balance: {result['balance']}")
+                    return result
                 else:
                     raise PluginError(
                         "Successfully logged in, but could not read Avios balance from the dashboard. "

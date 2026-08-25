@@ -2228,28 +2228,100 @@ class TestAPIsAndPlugins(unittest.TestCase):
             # Verify safe_call was only called for the normal account (once)
             self.assertEqual(mock_safe_call.call_count, 1)
 
-    def test_dashboard_renders_interactive_login_passed_sync_pending(self):
-        # Create an account in the interactive-login-succeeded-but-sync-pending state
+    def test_interactive_login_persists_data_in_same_run(self):
+        """
+        When a manual-mode plugin's interactive_login() returns scraped data directly,
+        the /accounts/<id>/interactive route must persist it immediately and must NOT
+        fall back to a second fetch_data() call/browser launch.
+        """
+        from unittest.mock import patch
+
+        provider_british = Provider(name="British Airways Executive Club", plugin_name="british", enabled=True)
+        db.session.add(provider_british)
+        db.session.commit()
+
         account = Account(
-            provider_id=self.provider_auto.id,
+            provider_id=provider_british.id,
             person_id=self.person.id,
-            username="pending_sync_user",
-            password_encrypted=security_manager.encrypt("pass"),
+            username="ba_user",
+            password_encrypted=security_manager.encrypt("ba_pass"),
             is_manual=False,
             balance=1000,
-            status="Silver",
-            last_fetch_status="SUCCESS",
-            last_error="Interactive Login succeeded. Please click 'Sync Now' to synchronize your points."
+            status="Bronze",
+            last_fetch_status="FAILED"
         )
         db.session.add(account)
         db.session.commit()
-        
-        # Request the index page
-        res = self.client.get('/')
-        self.assertEqual(res.status_code, 200)
-        
-        # Verify it renders the specific status text
-        self.assertIn(b"Interactive sign-in passed, but sync is pending", res.data)
+
+        def fake_safe_call(func, *args, **kwargs):
+            if func.__name__ == 'interactive_login':
+                return {
+                    'balance': 5000,
+                    'status': 'Gold',
+                    'last_activity_date': datetime(2026, 1, 1)
+                }
+            raise AssertionError(
+                f"fetch_data() must not be called when interactive_login() already "
+                f"returned data in the same run (got call to {func.__name__})"
+            )
+
+        with patch('app.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
+            response = self.client.post(f'/accounts/{account.id}/interactive', follow_redirects=False)
+            self.assertEqual(response.status_code, 302)
+
+            # Only the interactive_login call should have happened -- no separate fetch_data call
+            self.assertEqual(mock_safe_call.call_count, 1)
+
+        db.session.refresh(account)
+        self.assertEqual(account.balance, 5000)
+        self.assertEqual(account.status, "Gold")
+        self.assertEqual(account.last_fetch_status, "SUCCESS")
+
+    def test_interactive_login_failure_does_not_attempt_fetch_data(self):
+        """
+        When interactive_login() itself fails (e.g. MFA not completed), the route must
+        flash the failure and leave the account entirely untouched -- it must NOT attempt
+        a fetch_data() fallback, since no authenticated session exists to scrape from.
+        """
+        from unittest.mock import patch
+
+        provider_british = Provider(name="British Airways Executive Club", plugin_name="british", enabled=True)
+        db.session.add(provider_british)
+        db.session.commit()
+
+        account = Account(
+            provider_id=provider_british.id,
+            person_id=self.person.id,
+            username="ba_user",
+            password_encrypted=security_manager.encrypt("ba_pass"),
+            is_manual=False,
+            balance=1000,
+            status="Bronze",
+            last_fetch_status="SUCCESS"
+        )
+        db.session.add(account)
+        db.session.commit()
+
+        def fake_safe_call(func, *args, **kwargs):
+            if func.__name__ == 'interactive_login':
+                raise Exception("Interactive login timed out after 5 minutes.")
+            raise AssertionError(
+                f"fetch_data() must not be attempted after interactive_login() failed "
+                f"(got call to {func.__name__})"
+            )
+
+        with patch('app.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
+            response = self.client.post(f'/accounts/{account.id}/interactive', follow_redirects=False)
+            self.assertEqual(response.status_code, 302)
+
+            # Only the failed interactive_login call should have happened
+            self.assertEqual(mock_safe_call.call_count, 1)
+
+        # Account must be completely untouched -- no partial/empty data written
+        db.session.refresh(account)
+        self.assertEqual(account.balance, 1000)
+        self.assertEqual(account.status, "Bronze")
+        self.assertEqual(account.last_fetch_status, "SUCCESS")
 
     def test_dashboard_renders_generic_sync_failure_both_options(self):
         # Create an account with a generic/vague failure
