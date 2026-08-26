@@ -673,7 +673,8 @@ class ANAPlugin(ProviderPlugin):
                     return cached
             raise PluginError(f"ANA scraping failed: {e}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
+        result = None
         try:
             with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir, headed=True)) as sb:
                 sb.open("https://www.ana.co.jp/en/jp/amc/")
@@ -718,6 +719,7 @@ class ANAPlugin(ProviderPlugin):
                     sb.sleep(5)
                 if not logged_in:
                     raise PluginError("Interactive login timed out or failed.")
+                return result
         except Exception as e:
             self._raise_if_window_closed(e)
             raise PluginError(f"Interactive login error: {e}")

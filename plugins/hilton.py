@@ -391,7 +391,7 @@ class HiltonHonorsPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         """
         Opens an interactive browser window for the user to resolve MFA.
         Uses the same user_data_dir so cookies are saved for future headless runs.
@@ -411,16 +411,42 @@ class HiltonHonorsPlugin(ProviderPlugin):
                 start_time = time.time()
                 success = False
                 while time.time() - start_time < 300:
-                    balance, _, _ = self._extract_data(sb)
+                    balance, status, last_activity = self._extract_data(sb)
                     if balance is not None:
                         success = True
                         break
                     time.sleep(2)
-                
+
                 if not success:
                     raise PluginError("Interactive login timed out after 5 minutes or points were not found.")
-                
+
                 # Let it settle so cookies save
                 sb.sleep(5)
+
+                # Navigate to the dedicated activity page for the last activity date, matching
+                # fetch_data() — the login-redirect page found above may lack transaction history,
+                # so last_activity here can't be trusted the way fetch_data()'s can.
+                try:
+                    sb.open("https://www.hilton.com/en/hilton-honors/guest/activity/")
+                    sb.sleep(8)
+                    activity_balance, activity_status, activity_last_activity = self._extract_data(sb)
+                    if activity_balance is not None:
+                        balance = activity_balance
+                    if activity_status:
+                        status = activity_status
+                    if activity_last_activity:
+                        last_activity = activity_last_activity
+                except Exception as e:
+                    print(f"Warning: Could not fetch Hilton activity page for last activity date: {e}")
+
+                result = {
+                    "balance": balance,
+                    "status": status or "Unknown",
+                    "expiration_date": None,
+                    "certificates": []
+                }
+                if last_activity:
+                    result["last_activity_date"] = last_activity
+                return result
             except Exception:
                 raise PluginError("Interactive login timed out after 5 minutes or activity page failed to load.")

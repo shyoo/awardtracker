@@ -296,7 +296,7 @@ class IHGRewardsPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         """
         Opens an interactive browser window for the user to resolve MFA.
         Uses the same user_data_dir so cookies are saved for future headless runs.
@@ -343,15 +343,22 @@ class IHGRewardsPlugin(ProviderPlugin):
                 sb.sleep(8)
 
             # Confirm we can read the balance (validates the session is live)
-            balance, _ = self._extract_data(sb)
+            balance, status = self._extract_data(sb)
             if balance is None:
                 sb.refresh()
                 sb.sleep(8)
-                balance, _ = self._extract_data(sb)
+                balance, status = self._extract_data(sb)
 
             # Let cookies flush to disk before closing
             sb.sleep(3)
 
             if balance is None:
                 raise PluginError("Interactive login completed but could not read points balance on account overview.")
+
+            return {
+                "balance": balance,
+                "status": status or "Unknown",
+                "expiration_date": None,
+                "certificates": []
+            }
 

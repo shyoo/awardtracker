@@ -303,7 +303,7 @@ class EnterprisePlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to Enterprise.
         """
@@ -329,27 +329,35 @@ class EnterprisePlugin(ProviderPlugin):
             try:
                 start_time = time.time()
                 success = False
+                status, last_activity = None, None
                 while time.time() - start_time < 300:
-                    balance, _, _ = self._extract_data(sb)
+                    balance, status, last_activity = self._extract_data(sb)
                     if balance is not None:
                         success = True
                         break
-                    
+
                     if sb.is_element_visible("a#tab_reward"):
                         try:
                             sb.click("a#tab_reward")
                             sb.sleep(3)
-                            balance, _, _ = self._extract_data(sb)
+                            balance, status, last_activity = self._extract_data(sb)
                             if balance is not None:
                                 success = True
                                 break
                         except Exception:
                             pass
                     time.sleep(2)
-                    
+
                 if not success:
                     raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
-                    
+
                 sb.sleep(5)
+                return {
+                    "balance": balance,
+                    "status": status or "Unknown",
+                    "expiration_date": None,
+                    "certificates": [],
+                    "last_activity_date": last_activity
+                }
             except Exception:
                 raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")

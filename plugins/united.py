@@ -368,7 +368,7 @@ class UnitedAirlinesPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         """
         Interactive login to allow the user to resolve captchas and log in to United.
         """
@@ -405,16 +405,34 @@ class UnitedAirlinesPlugin(ProviderPlugin):
                     if "myunited" in curr_url and not sb.is_element_visible("input#password"):
                         # Settle and verify points can be extracted
                         sb.sleep(5)
-                        balance, _ = self._extract_data(sb)
+                        balance, status = self._extract_data(sb)
                         if balance is not None:
                             success = True
                             break
                     time.sleep(2)
-                
+
                 if not success:
                     raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
-                
+
                 sb.sleep(3) # Let session write completely
+
+                result = {
+                    "balance": balance,
+                    "status": status or "Member",
+                    "expiration_date": None,  # United MileagePlus miles never expire
+                    "certificates": []
+                }
+                try:
+                    print("Navigating to United Club passes page...")
+                    sb.open("https://www.united.com/en/us/mileageplus/unitedclubpass")
+                    sb.sleep(6)
+                    html_passes = sb.get_page_source()
+                    certs = self._parse_club_passes(html_passes)
+                    if certs:
+                        result["certificates"] = certs
+                except Exception as e:
+                    print(f"Failed to fetch or parse United Club passes: {e}")
+                return result
             except Exception:
                 raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
 

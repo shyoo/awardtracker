@@ -329,7 +329,7 @@ class CaesarsRewardsPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to Caesars Rewards.
         """
@@ -361,15 +361,22 @@ class CaesarsRewardsPlugin(ProviderPlugin):
                         # Auto-skip MFA enrollment promo during interactive login if it shows up
                         self._handle_mfa_enrollment_promo(sb)
                         
-                        balance, _, _ = self._extract_data(sb)
+                        balance, status, last_activity = self._extract_data(sb)
                         if balance is not None:
                             success = True
                             break
                     time.sleep(2)
-                    
+
                 if not success:
                     raise PluginError("Interactive login timed out after 5 minutes or profile page failed to load.")
-                    
+
                 sb.sleep(5) # Let session save
+                return {
+                    "balance": balance,
+                    "status": status or "Unknown",
+                    "expiration_date": None,
+                    "certificates": [],
+                    "last_activity_date": last_activity
+                }
             except Exception:
                 raise PluginError("Interactive login timed out after 5 minutes or profile page failed to load.")
