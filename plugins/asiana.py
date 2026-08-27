@@ -447,7 +447,7 @@ class AsianaAirlinesPlugin(ProviderPlugin):
                     return cached
             raise PluginError(f"Asiana Airlines scraping failed: {e}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir, headed=True)) as sb:
             sb.open("https://flyasiana.com/")
             sb.sleep(6)
@@ -486,7 +486,7 @@ class AsianaAirlinesPlugin(ProviderPlugin):
                                 if profile_dir:
                                     self._save_cache(profile_dir, result)
                                 print(f"Successfully captured Asiana mileage: {result['balance']}")
-                                break
+                                return result
                     sb.sleep(5)
             except Exception as e:
                 print(f"Interactive login wait interrupted: {e}")

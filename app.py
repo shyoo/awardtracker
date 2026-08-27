@@ -1257,6 +1257,10 @@ def create_app(config_class=Config):
             send_desktop_notification("Sync Successful", f"{account.display_name} balance updated successfully to {account.balance:,} points.")
             flash(f'{account.display_name} logged in and synced successfully.')
         except Exception as e:
+            # Discard any partial mutations _persist_fetch_result staged before raising
+            # (e.g. balance/status already set, old certificates marked for deletion)
+            # so only the FAILED status below gets committed, not a half-applied sync.
+            db.session.rollback()
             account.last_fetch_status = 'FAILED'
             account.last_error = str(e)
             account.last_updated = datetime.utcnow()

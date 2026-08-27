@@ -709,7 +709,7 @@ class AirCanadaPlugin(ProviderPlugin):
             except Exception as e:
                 raise PluginError(f"Air Canada scraping failed: {e}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             print("Opening Air Canada home page for interactive login...")
             sb.open("https://www.aircanada.com/ca/en/aco/home.html")
@@ -773,26 +773,47 @@ class AirCanadaPlugin(ProviderPlugin):
                         sb.sleep(8)
                         
                         html = sb.get_page_source()
-                        balance, _, _ = self._extract_data(html)
-                        
+                        balance, status, expiration_date = self._extract_data(html)
+
                         # Fallback to my-aeroplan.html if first extraction gets None
                         if balance is None:
                             print("Navigating to My Aeroplan dashboard directly as fallback...")
                             sb.open("https://www.aircanada.com/ca/en/aco/home/aeroplan/my-aeroplan.html")
                             sb.sleep(8)
                             html = sb.get_page_source()
-                            balance, _, _ = self._extract_data(html)
-                            
+                            balance, status, expiration_date = self._extract_data(html)
+
                         if balance is not None:
                             success = True
                             print(f"Interactive login successful! Found balance: {balance}.")
                             break
-                        
+
                     time.sleep(4)
-                    
+
                 if not success:
                     raise PluginError("Interactive login timed out or failed to reach Aeroplan dashboard.")
                 sb.sleep(3)
+
+                # Fetch last activity date from detailed transaction activity page, matching
+                # fetch_data()'s extraction so expiration is computed the same way.
+                last_activity_date = None
+                try:
+                    print("Navigating to detailed Aeroplan Member Activity page to fetch transaction history...")
+                    sb.open("https://www.aircanada.com/aeroplan/member/dashboard/activity")
+                    sb.sleep(8)
+                    if not self._is_error_page(sb):
+                        activity_html = sb.get_page_source()
+                        last_activity_date = self._extract_last_activity_date(activity_html)
+                        print(f"Scraped Aeroplan last activity date: {last_activity_date}")
+                except Exception as e:
+                    print(f"Warning: Could not fetch last activity history: {e}")
+
+                return {
+                    "balance": balance,
+                    "status": status,
+                    "last_activity_date": last_activity_date,
+                    "expiration_date": expiration_date
+                }
             except WebDriverException as e:
                 if "invalid session id" in str(e).lower():
                     raise PluginError("Air Canada browser session was lost or closed. Please keep the browser open until the dashboard is fully loaded.")

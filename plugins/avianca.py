@@ -77,8 +77,12 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                         num_str = m.group(1).replace(",", "").replace(".", "")
                         if num_str.isdigit():
                             val = int(num_str)
-                            # Make sure we don't accidentally parse small menu counts or dates
-                            if val > 100 or any(kw in text.lower() for kw in ["mile", "lm", "puntos"]):
+                            # Make sure we don't accidentally parse small menu counts or dates.
+                            # A bare 0 is allowed through unconditionally: it's a legitimate
+                            # balance value (e.g. a new/depleted account) and, unlike other
+                            # small numbers, isn't plausibly confused with a menu badge or date
+                            # fragment, so it doesn't need the keyword-adjacency check below.
+                            if val == 0 or val > 100 or any(kw in text.lower() for kw in ["mile", "lm", "puntos"]):
                                 balance = val
                                 break
             except Exception:
@@ -259,25 +263,46 @@ class AviancaLifemilesPlugin(ProviderPlugin):
         """
         import datetime as dt
         latest_accrual = None
+        rows = []
         has_redemptions = False
         has_accruals = False
         
         # List of potential transaction history URLs
         urls = [
+            "https://www.lifemiles.com/account/activity",
             "https://www.lifemiles.com/profile/transactions",
             "https://www.lifemiles.com/member/transactions",
             "https://www.lifemiles.com/profile/activity",
             "https://www.lifemiles.com/transactions"
         ]
-        
+
         # Try navigating directly
         navigated = False
         for url in urls:
             try:
                 sb.open(url)
                 sb.sleep(6)
-                # Check if we landed on a page with transactions
-                if "transaction" in sb.get_current_url().lower() or "actividad" in sb.get_current_url().lower() or "activity" in sb.get_current_url().lower():
+                # Check if we landed on a real page (matching URL alone isn't enough —
+                # a dead guessed URL like /profile/transactions still contains
+                # "transaction" even on its own 404/"does not exist" error page).
+                curr_url = sb.get_current_url().lower()
+                # Only scan rendered, visible text (not the raw page source) for error
+                # phrases — this is a React SPA, and the raw HTML includes the full JS
+                # bundle, which ships generic error-boundary/404-handling code as text
+                # on every page regardless of whether an error actually occurred.
+                # Normalize curly/smart apostrophes (e.g. "can't") to straight ones so the
+                # keyword match below isn't broken by the site's typography.
+                error_check_soup = BeautifulSoup(sb.get_page_source(), "html.parser")
+                for tag in error_check_soup(["script", "style"]):
+                    tag.decompose()
+                page_text = error_check_soup.get_text(" ").lower().replace("’", "'").replace("‘", "'")
+                looks_like_error = any(kw in page_text for kw in [
+                    "page not found", "can't be found", "cannot be found",
+                    "does not exist", "no existe", "404", "no encontrada", "página no encontrada"
+                ])
+                if not looks_like_error and (
+                    "transaction" in curr_url or "actividad" in curr_url or "activity" in curr_url
+                ):
                     navigated = True
                     break
             except Exception:
@@ -324,7 +349,7 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                     rows.append(line)
                     
             rows = list(set(rows))
-            
+
             months = {
                 "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
                 "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
@@ -381,7 +406,7 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                     
         except Exception as e:
             print("Error parsing transactions page:", e)
-            
+
         no_accruals_warning = (has_redemptions and not has_accruals) or (has_redemptions and not latest_accrual)
         return latest_accrual, no_accruals_warning
 
@@ -693,7 +718,7 @@ class AviancaLifemilesPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Avianca LifeMiles scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         """
         Launches a headed browser window, helps pre-fill credentials when the Keycloak
         form is reached, and automatically closes the browser once active session data is parsed.
@@ -743,7 +768,7 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                     # Verify if redirected back to lifemiles and points balance is loaded
                     if "lifemiles.com" in parsed.netloc:
                         html = sb.get_page_source()
-                        balance, _ = self._extract_data(html)
+                        balance, status = self._extract_data(html)
                         if balance is not None:
                             success = True
                             print(f"Interactive login successful! Found balance: {balance}. Auto-closing browser in 5 seconds...")
@@ -752,6 +777,33 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                 except Exception:
                     pass
                 time.sleep(4)
-                
+
             if not success:
+                try:
+                    with open("avianca_interactive_timeout_dump.html", "w", encoding="utf-8") as f:
+                        f.write(sb.get_page_source())
+                    print(f"Saved timeout debug dump. Final URL: {sb.get_current_url()}")
+                except Exception:
+                    pass
                 raise PluginError("Interactive login timed out or failed to reach dashboard.")
+
+            result = {
+                "balance": balance,
+                "status": status or "Clásico",
+                "expiration_date": None,
+                "certificates": []
+            }
+            # The overview page directly displays an explicit "Expiration date" field
+            # (e.g. "Dec 31, 2026"), so unlike last_activity_date-based expiration
+            # calculations, this doesn't need the fragile transactions-page URL hunt
+            # in _fetch_last_accrual_date() — it's parsed straight from the page
+            # already captured above.
+            try:
+                exp_date = self._extract_expiration_date(html)
+                if exp_date:
+                    from datetime import datetime
+                    result["expiration_date"] = datetime.strptime(exp_date, "%Y-%m-%d")
+            except Exception as de:
+                print("Error parsing expiration date:", de)
+
+            return result

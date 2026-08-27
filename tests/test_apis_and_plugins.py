@@ -2323,6 +2323,285 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertEqual(account.status, "Bronze")
         self.assertEqual(account.last_fetch_status, "SUCCESS")
 
+    # ==========================================
+    # Interactive-login "returns data directly" coverage for assisted-mode plugins
+    # (aircanada, american, ana, asiana, avianca, caesars, enterprise, eva, hertz,
+    # hilton, ihg, korean, marriott, national, southwest, united, virgin).
+    #
+    # Each plugin's interactive_login() runs a polling loop that, once it detects a
+    # successful login (via a URL check, element visibility, or similar site-specific
+    # signal), calls that plugin's own extraction helper(s) and returns a dict rather
+    # than None. These tests mock the browser (SB) and patch each plugin's extraction
+    # helper(s) directly -- not the raw HTML/DOM -- since the extraction logic itself
+    # is already covered by each plugin's existing fetch_data() tests. The goal here
+    # is narrower: confirm interactive_login() correctly detects success and returns
+    # the extracted data in the same run, per the reviewer's request on PR #120.
+    # ==========================================
+
+    def _mock_sb(self, current_url="https://example.com/", page_source="<html></html>"):
+        """Builds a MagicMock simulating an `sb` instance plus the context manager
+        wrapper matching `with SB(...) as sb:` usage in interactive_login()."""
+        from unittest.mock import MagicMock
+        mock_sb = MagicMock()
+        mock_sb.get_current_url.return_value = current_url
+        mock_sb.get_page_source.return_value = page_source
+        mock_sb.is_element_visible.return_value = False
+        mock_sb.is_element_present.return_value = False
+
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_sb
+        mock_context.__exit__.return_value = False
+        return mock_sb, mock_context
+
+    def test_hilton_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('hilton')
+        mock_sb, mock_context = self._mock_sb()
+
+        with patch('plugins.hilton.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(5000, 'Gold', datetime(2026, 1, 1))):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 5000)
+        self.assertEqual(result['status'], 'Gold')
+
+    def test_united_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('united')
+        mock_sb, mock_context = self._mock_sb(current_url="https://www.united.com/en/us/myunited")
+
+        with patch('plugins.united.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(12345, 'Premier Gold')):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 12345)
+        self.assertEqual(result['status'], 'Premier Gold')
+
+    def test_national_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('national')
+        mock_sb, mock_context = self._mock_sb()
+
+        with patch('plugins.national.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(1000, 'Silver', datetime(2026, 1, 1))):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 1000)
+        self.assertEqual(result['status'], 'Silver')
+
+    def test_american_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('american')
+        mock_sb, mock_context = self._mock_sb(
+            current_url="https://www.aa.com/aadvantage-program/profile/account-summary"
+        )
+
+        with patch('plugins.american.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(5000, 'Gold', None, None)):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 5000)
+        self.assertEqual(result['status'], 'Gold')
+
+    def test_ihg_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('ihg')
+        mock_sb, mock_context = self._mock_sb(
+            current_url="https://www.ihg.com/rewardsclub/us/en/account-mgmt/home"
+        )
+
+        with patch('plugins.ihg.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(3000, 'Gold Elite')):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 3000)
+        self.assertEqual(result['status'], 'Gold Elite')
+
+    def test_southwest_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('southwest')
+        mock_sb, mock_context = self._mock_sb(current_url="https://www.southwest.com/loyalty/myaccount/")
+
+        with patch('plugins.southwest.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data_from_page', return_value=(2000, 'A-List')):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 2000)
+        self.assertEqual(result['status'], 'A-List')
+
+    def test_avianca_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('avianca')
+        mock_sb, mock_context = self._mock_sb(current_url="https://www.lifemiles.com/account/overview")
+
+        with patch('plugins.avianca.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(15000, 'Clásico Plus')), \
+             patch.object(plugin, '_extract_expiration_date', return_value=None):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 15000)
+        self.assertEqual(result['status'], 'Clásico Plus')
+
+    def test_aircanada_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('aircanada')
+        mock_sb, mock_context = self._mock_sb(
+            current_url="https://www.aircanada.com/aeroplan/member/dashboard"
+        )
+
+        with patch('plugins.aircanada.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(8000, 'Prestige 25K', None)):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 8000)
+        self.assertEqual(result['status'], 'Prestige 25K')
+
+    def test_marriott_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('marriott')
+        mock_sb, mock_context = self._mock_sb(
+            current_url="https://www.marriott.com/en/loyalty/myAccount/default.mi"
+        )
+
+        with patch('plugins.marriott.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_from_datalayer', return_value=(6000, 'Titanium Elite')), \
+             patch.object(plugin, '_extract_expiration_date', return_value=None):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 6000)
+        self.assertEqual(result['status'], 'Titanium Elite')
+
+    def test_enterprise_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('enterprise')
+        mock_sb, mock_context = self._mock_sb()
+
+        with patch('plugins.enterprise.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(500, 'Plus', None)):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 500)
+        self.assertEqual(result['status'], 'Plus')
+
+    def test_hertz_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('hertz')
+        mock_sb, mock_context = self._mock_sb(current_url="https://www.hertz.com/rentacar/emember/profile.do")
+
+        with patch('plugins.hertz.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(700, 'Five Star', None)):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 700)
+        self.assertEqual(result['status'], 'Five Star')
+
+    def test_caesars_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('caesars')
+        mock_sb, mock_context = self._mock_sb(current_url="https://www.caesars.com/myrewards/profile/")
+
+        with patch('plugins.caesars.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(900, 'Diamond', None)):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 900)
+        self.assertEqual(result['status'], 'Diamond')
+
+    def test_virgin_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('virgin')
+        mock_sb, mock_context = self._mock_sb(
+            current_url="https://www.virginatlantic.com/flying-club/account/overview"
+        )
+
+        with patch('plugins.virgin.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(25000, 'Gold')):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 25000)
+        self.assertEqual(result['status'], 'Gold')
+
+    def test_ana_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('ana')
+        mock_sb, mock_context = self._mock_sb()
+        canned_result = {'balance': 4000, 'status': 'Bronze', 'expiration_date': None, 'certificates': []}
+
+        with patch('plugins.ana.SB', return_value=mock_context), \
+             patch.object(plugin, '_check_logged_in', return_value=True), \
+             patch.object(plugin, '_parse_mileage_html', return_value=canned_result), \
+             patch.object(plugin, '_fetch_expiration', return_value=None):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 4000)
+        self.assertEqual(result['status'], 'Bronze')
+
+    def test_asiana_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('asiana')
+        mock_sb, mock_context = self._mock_sb(current_url="https://flyasiana.com/my-asiana/dashboard")
+        canned_result = {'balance': 3500, 'status': 'Silver', 'expiration_date': None, 'certificates': []}
+
+        with patch('plugins.asiana.SB', return_value=mock_context), \
+             patch.object(plugin, '_parse_mileage_html', return_value=canned_result), \
+             patch.object(plugin, '_fetch_expiration', return_value=None):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 3500)
+        self.assertEqual(result['status'], 'Silver')
+
+    def test_eva_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('eva')
+        mock_sb, mock_context = self._mock_sb(
+            current_url="https://eservice.evaair.com/flyeva/eva/ffp/frequent-flyer.aspx"
+        )
+        canned_result = {'balance': 6500, 'status': 'Gold', 'expiration_date': None, 'certificates': []}
+
+        with patch('plugins.eva.SB', return_value=mock_context), \
+             patch.object(plugin, '_check_logged_in', return_value=True), \
+             patch.object(plugin, '_parse_account_html', return_value=canned_result):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 6500)
+        self.assertEqual(result['status'], 'Gold')
+
+    def test_korean_interactive_login_returns_data(self):
+        from unittest.mock import patch, mock_open
+        plugin = plugin_manager.get_plugin('korean')
+        mock_sb, mock_context = self._mock_sb(
+            current_url="https://www.koreanair.com/us/en/my-mileage/overview",
+            page_source='<html><body><span class="mileage-my__point">7777</span></body></html>'
+        )
+        canned_result = {'balance': 7777, 'status': 'Morning Calm Premium', 'expiration_date': None, 'certificates': []}
+
+        with patch('plugins.korean.SB', return_value=mock_context), \
+             patch.object(plugin, '_parse_mileage_html', return_value=canned_result), \
+             patch.object(plugin, '_fetch_korean_expiration_data', return_value=(None, None)), \
+             patch.object(plugin, '_fetch_korean_coupon_data', return_value=[]), \
+             patch('builtins.open', mock_open()):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 7777)
+        self.assertEqual(result['status'], 'Morning Calm Premium')
+
     def test_dashboard_renders_generic_sync_failure_both_options(self):
         # Create an account with a generic/vague failure
         account = Account(
