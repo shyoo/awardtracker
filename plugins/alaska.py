@@ -1,7 +1,9 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
+from bs4 import BeautifulSoup
+import re
 import time
 
 class AlaskaAirlinesPlugin(ProviderPlugin):
@@ -152,6 +154,110 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
         except Exception as e:
             print(f"Error restoring Alaska Airlines cookies: {e}")
 
+    def _extract_balance_status(self, html: str) -> Tuple[Optional[int], str]:
+        """Parses Mileage Plan points balance and tier status from dashboard HTML."""
+        soup = BeautifulSoup(html, "html.parser")
+
+        balance = None
+        status = "Member"
+
+        # 1. Search by points-value class (direct and robust on modern dashboard)
+        points_val_el = soup.find(class_=re.compile(r"points-value"))
+        if points_val_el:
+            text_val = points_val_el.text.strip().replace(",", "")
+            if text_val.isdigit():
+                balance = int(text_val)
+                print(f"Found balance via points-value class: {balance}")
+
+        # 2. Look for "Available Points" or "Available Miles" (legacy/alternative layouts)
+        if balance is None:
+            avail_texts = soup.find_all(string=re.compile(r"Available Points|Available Miles|Total Miles", re.I))
+            for at in avail_texts:
+                parent = at.parent
+                if not parent:
+                    continue
+
+                # Check sibling elements in parent container
+                parent_container = parent.parent
+                if parent_container:
+                    sibling_val = parent_container.find(class_=re.compile(r"points-value|display-sm|display-xs"))
+                    if sibling_val:
+                        text_val = sibling_val.text.strip().replace(",", "")
+                        if text_val.isdigit():
+                            balance = int(text_val)
+                            break
+
+                parent_text = parent.text.strip()
+                grandparent_text = parent_container.text.strip() if parent_container else ""
+
+                matches = re.findall(r"([\d,]+)\s*Available", parent_text, re.I)
+                if not matches:
+                    matches = re.findall(r"([\d,]+)\s*Available", grandparent_text, re.I)
+                if not matches:
+                    matches = re.findall(r"([\d,]+)", parent_text)
+                if not matches:
+                    matches = re.findall(r"([\d,]+)", grandparent_text)
+
+                for m in matches:
+                    clean_m = m.replace(",", "")
+                    if clean_m.isdigit():
+                        balance = int(clean_m)
+                        break
+                if balance is not None:
+                    break
+
+        # 3. Look for specific class 'display-xs' as fallback
+        if balance is None:
+            spans = soup.find_all(class_="display-xs")
+            for span in spans:
+                text_val = span.text.strip().replace(",", "")
+                if text_val.isdigit() and len(text_val) < 8:
+                    balance = int(text_val)
+                    break
+
+        # Check tier status. Alaska rebranded Mileage Plan's MVP tiers to Atmos
+        # Rewards (Atmos Silver/Gold/Platinum/Titanium -- see
+        # https://www.alaskaair.com/atmosrewards/content/faq/status), but legacy
+        # "MVP Gold 75K/100K" wording can still appear for grandfathered members,
+        # so both naming schemes are recognized. A bare "Gold"/"Platinum"/etc.
+        # mention (no "MVP" prefix) is treated as the current Atmos branding,
+        # since that's what the live dashboard shows going forward.
+        tier_rank = {
+            "Member": 0, "Atmos Member": 1, "MVP": 2, "Atmos Silver": 3,
+            "MVP Gold": 4, "Atmos Gold": 4, "MVP Gold 75K": 5, "Atmos Platinum": 5,
+            "MVP Gold 100K": 6, "Atmos Titanium": 6,
+        }
+        tier_texts = soup.find_all(string=re.compile(r"MVP|Atmos", re.I))
+        for t in tier_texts:
+            t_str = t.strip()
+            if len(t_str) >= 50:
+                continue
+
+            candidate = None
+            if "100K" in t_str:
+                candidate = "MVP Gold 100K"
+            elif "75K" in t_str:
+                candidate = "MVP Gold 75K"
+            elif "Titanium" in t_str:
+                candidate = "Atmos Titanium"
+            elif "Platinum" in t_str:
+                candidate = "Atmos Platinum"
+            elif "MVP Gold" in t_str:
+                candidate = "MVP Gold"
+            elif "Gold" in t_str:
+                candidate = "Atmos Gold"
+            elif "Silver" in t_str:
+                candidate = "Atmos Silver"
+            elif "MVP" in t_str:
+                candidate = "MVP"
+            elif "Atmos" in t_str or "ATMOS REWARDS MEMBER" in t_str.upper():
+                candidate = "Atmos Member"
+
+            if candidate and tier_rank.get(candidate, -1) > tier_rank.get(status, -1):
+                status = candidate
+
+        return balance, status
+
     def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
         try:
             agent = self.get_consistent_user_agent()
@@ -263,84 +369,8 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
                     
                 sb.sleep(2)
                 html = sb.get_page_source()
-                from bs4 import BeautifulSoup
-                import re
-                soup = BeautifulSoup(html, "html.parser")
-                
-                balance = None
-                status = "Member"
-                
-                # 1. Search by points-value class (direct and robust on modern dashboard)
-                points_val_el = soup.find(class_=re.compile(r"points-value"))
-                if points_val_el:
-                    text_val = points_val_el.text.strip().replace(",", "")
-                    if text_val.isdigit():
-                        balance = int(text_val)
-                        print(f"Found balance via points-value class: {balance}")
-                
-                # 2. Look for "Available Points" or "Available Miles" (legacy/alternative layouts)
-                if balance is None:
-                    avail_texts = soup.find_all(string=re.compile(r"Available Points|Available Miles|Total Miles", re.I))
-                    for at in avail_texts:
-                        parent = at.parent
-                        if not parent:
-                            continue
-                        
-                        # Check sibling elements in parent container
-                        parent_container = parent.parent
-                        if parent_container:
-                            sibling_val = parent_container.find(class_=re.compile(r"points-value|display-sm|display-xs"))
-                            if sibling_val:
-                                text_val = sibling_val.text.strip().replace(",", "")
-                                if text_val.isdigit():
-                                    balance = int(text_val)
-                                    break
-                                    
-                        parent_text = parent.text.strip()
-                        grandparent_text = parent_container.text.strip() if parent_container else ""
-                        
-                        matches = re.findall(r"([\d,]+)\s*Available", parent_text, re.I)
-                        if not matches:
-                            matches = re.findall(r"([\d,]+)\s*Available", grandparent_text, re.I)
-                        if not matches:
-                            matches = re.findall(r"([\d,]+)", parent_text)
-                        if not matches:
-                            matches = re.findall(r"([\d,]+)", grandparent_text)
-                        
-                        for m in matches:
-                            clean_m = m.replace(",", "")
-                            if clean_m.isdigit():
-                                balance = int(clean_m)
-                                break
-                        if balance is not None:
-                            break
-                            
-                # 3. Look for specific class 'display-xs' as fallback
-                if balance is None:
-                    spans = soup.find_all(class_="display-xs")
-                    for span in spans:
-                        text_val = span.text.strip().replace(",", "")
-                        if text_val.isdigit() and len(text_val) < 8:
-                            balance = int(text_val)
-                            break
-                            
-                # Check tier status
-                tier_texts = soup.find_all(string=re.compile(r"MVP|Atmos™ Member|Member|ATMOS REWARDS MEMBER", re.I))
-                for t in tier_texts:
-                    t_str = t.strip()
-                    if len(t_str) < 50:
-                        if "100K" in t_str:
-                            status = "MVP Gold 100K"
-                            break
-                        elif "75K" in t_str and status != "MVP Gold 100K":
-                            status = "MVP Gold 75K"
-                        elif "Gold" in t_str and status not in ["MVP Gold 100K", "MVP Gold 75K"]:
-                            status = "MVP Gold"
-                        elif "MVP" in t_str and status not in ["MVP Gold 100K", "MVP Gold 75K", "MVP Gold"]:
-                            status = "MVP"
-                        elif ("Atmos" in t_str or "ATMOS REWARDS MEMBER" in t_str.upper()) and status == "Member":
-                            status = "Atmos Member"
-                
+                balance, status = self._extract_balance_status(html)
+
                 if balance is None:
                     raise PluginError("Could not find balance on the Alaska Airlines dashboard.")
                 
@@ -364,7 +394,7 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
             raise PluginError(f"Alaska Airlines scraping failed: {e}")
 
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         try:
             agent = self.get_consistent_user_agent()
             with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir, agent=agent)) as sb:
@@ -395,18 +425,19 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
                     print(f"Error pre-filling Alaska Auth0 credentials: {e}")
                     
                 print("Please log in manually if needed. Waiting for the dashboard URL...")
+                success = False
                 try:
                     for _ in range(60):  # Wait up to 5 minutes
                         current_url = sb.get_current_url()
                         # Help the user by auto-clicking any "Not now" or "Skip" MFA buttons
                         if not self.is_mfa_challenge(sb, current_url):
                             for selector in [
-                                "button:contains('Not now')", 
-                                "a:contains('Not now')", 
-                                "button:contains('Skip')", 
-                                "a:contains('Skip')", 
-                                "button:contains('Skip for now')", 
-                                "a:contains('Skip for now')", 
+                                "button:contains('Not now')",
+                                "a:contains('Not now')",
+                                "button:contains('Skip')",
+                                "a:contains('Skip')",
+                                "button:contains('Skip for now')",
+                                "a:contains('Skip for now')",
                                 "button:contains('No, thanks')",
                                 "a:contains('No, thanks')",
                                 "button:contains('Remind me later')",
@@ -417,7 +448,7 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
                                     sb.click(selector)
                                     sb.sleep(2)
                                     break
-                                
+
                         current_url = sb.get_current_url()
                         if "myaccount" in current_url.lower() or "mileage-plan" in current_url.lower() or "atmosrewards" in current_url.lower():
                             if not self.is_auth_url(current_url):
@@ -428,9 +459,39 @@ class AlaskaAirlinesPlugin(ProviderPlugin):
                                         self.save_cookies_to_json(sb, profile_dir)
                                     except Exception:
                                         pass
+                                success = True
                                 break
                         sb.sleep(5)
                 except Exception as e:
                     print(f"Interactive login wait interrupted: {e}")
+
+                if not success:
+                    return None
+
+                # Wait for balance-bearing elements to render, matching fetch_data()'s
+                # dashboard-load polling -- a single fixed sleep isn't reliable on a
+                # slower render of this React SPA.
+                for _ in range(15):
+                    if (sb.is_element_visible("div:contains('Available')") or
+                        sb.is_element_visible("div.display-xs") or
+                        sb.is_element_visible(".points-value") or
+                        sb.is_element_visible("div.points-value") or
+                        sb.is_element_visible("div.points-label")):
+                        break
+                    sb.sleep(2)
+
+                html = sb.get_page_source()
+                balance, status = self._extract_balance_status(html)
+                if balance is None:
+                    raise PluginError("Logged in successfully, but could not find balance on the Alaska Airlines dashboard.")
+
+                return {
+                    "balance": balance,
+                    "status": status,
+                    "expiration_date": None
+                }
+        except PluginError:
+            raise
         except Exception as e:
             print(f"Interactive login error: {e}")
+            return None

@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
@@ -49,8 +49,10 @@ class JAPANAirlinesPlugin(ProviderPlugin):
         return urls.get(region, "https://www121.jal.co.jp/JmbWeb/JR/JmbTop_en.do")
 
     def _regional_homepage(self, region: str) -> str:
-        urls = {"AR": "https://www.jal.co.jp/ar/en/", "ER": "https://www.jal.co.jp/er/en/",
-                "SR": "https://www.jal.co.jp/sr/en/"}
+        # All three confirmed live -- JAL migrated from the old /ar/en/, /er/en/,
+        # /sr/en/ region-code paths to locale-style codes (en-us, en-gb, en-sg).
+        urls = {"AR": "https://www.jal.co.jp/en-us/", "ER": "https://www.jal.co.jp/en-gb/",
+                "SR": "https://www.jal.co.jp/en-sg/"}
         return urls.get(region, "https://www.jal.co.jp/jp/en/")
 
     def _dismiss_cookie_banners(self, sb) -> None:
@@ -200,13 +202,26 @@ class JAPANAirlinesPlugin(ProviderPlugin):
             except Exception as e:
                 print(f"Worldwide Sites dropdown fallback failed: {e}")
 
+        left_worldwide_sites = False
         if clicked:
             for _ in range(15):
                 sb.sleep(1)
-                if "jal.com/index" not in sb.get_current_url().lower():
+                try:
+                    still_ww = "jal.com/index" in sb.get_current_url().lower() or "worldwide sites" in sb.get_title().lower()
+                except Exception:
+                    still_ww = True
+                if not still_ww:
+                    left_worldwide_sites = True
                     break
         sb.sleep(3)
-        return True
+
+        # Only report "handled" if the click/selection actually got us off the
+        # Worldwide Sites page. Returning True unconditionally here caused the
+        # caller to keep re-opening the (possibly stale/redirecting) region start
+        # URL every time this page was detected, producing an infinite bounce
+        # between the Worldwide Sites page and the start URL when the region
+        # selectors no longer match the site's current layout.
+        return left_worldwide_sites
 
     # -------------------------------------------------------------------------
     # Login helpers
@@ -362,6 +377,85 @@ class JAPANAirlinesPlugin(ProviderPlugin):
     # Core: fetch_data
     # -------------------------------------------------------------------------
 
+    def _extract_balance_status_expiration(self, sb) -> Tuple[Optional[int], Optional[str], Optional[Any]]:
+        """
+        Extracts balance/status/expiration_date from whichever JAL page the
+        (already-authenticated) session is currently on -- the modern JMB page or
+        the legacy www121 region page -- clicking through to the mileage detail
+        page for expiration in either case.
+        """
+        current_url = sb.get_current_url().lower()
+        on_jmb_page = "jal.co.jp/en/jmb" in current_url
+        on_www121 = sb.is_element_visible("span#JS_121_mileBalance")
+
+        if self.is_auth_url(current_url) or (not on_jmb_page and not on_www121):
+            raise InteractionRequiredError("JAL login required. Please use Interactive Login.")
+
+        soup = BeautifulSoup(sb.get_page_source(), "html.parser")
+
+        if on_jmb_page:
+            balance, status = self._parse_jmb_page(soup)
+            expiration_date = None
+            try:
+                clicked = sb.execute_script("""
+                    const a = Array.from(document.querySelectorAll('a')).find(el => {
+                        const href = (el.getAttribute('href') || '').toLowerCase();
+                        const text = (el.textContent || '').toLowerCase();
+                        return href.includes('mile') || text.includes('expir') || text.includes('detail');
+                    });
+                    if (a) { a.click(); return true; }
+                    return false;
+                """)
+                if clicked:
+                    sb.sleep(5)
+                    expiration_date = self.extract_expiration_date(
+                        BeautifulSoup(sb.get_page_source(), "html.parser"))
+            except Exception:
+                pass
+        else:
+            sb.wait_for_element_visible("span#JS_121_mileBalance", timeout=20)
+            sb.sleep(3)
+            soup = BeautifulSoup(sb.get_page_source(), "html.parser")
+
+            balance_el = soup.find(id="JS_121_mileBalance")
+            if not balance_el:
+                raise PluginError("Could not retrieve mileage balance from JAL.")
+            balance = int(re.sub(r"\D", "", balance_el.text.strip()) or 0)
+
+            status_el = soup.find(id="JS_jmbStatusNameText")
+            status = self._normalize_status(status_el.text if status_el else "")
+
+            # Navigate to mileage detail page for expiration
+            try:
+                if not sb.execute_script(
+                    'const f = document.querySelector(\'form[name="mileDetailFrm"]\');'
+                    'if (f) { f.submit(); return true; } return false;'
+                ):
+                    sb.execute_script("""
+                        let el = Array.from(document.querySelectorAll('a')).find(a => {
+                            const t = (a.textContent || '').toLowerCase();
+                            const h = a.getAttribute('href') || '';
+                            return t.includes('mile') && (h.includes('javascript') || h.includes('CnfMlg'));
+                        });
+                        if (!el) {
+                            const sp = document.querySelector('span#JS_121_mileBalance');
+                            if (sp) el = sp.closest('a');
+                        }
+                        if (el) el.click();
+                    """)
+            except Exception:
+                pass
+
+            try:
+                sb.wait_for_element_visible("table.termmile", timeout=20)
+            except Exception:
+                sb.sleep(5)
+
+            expiration_date = self.extract_expiration_date(
+                BeautifulSoup(sb.get_page_source(), "html.parser"))
+
+        return balance, status, expiration_date
+
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
         region = (kwargs.get("region") or "JR").upper()
         with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
@@ -424,76 +518,7 @@ class JAPANAirlinesPlugin(ProviderPlugin):
                         continue
                     break
 
-                current_url = sb.get_current_url().lower()
-                on_jmb_page = "jal.co.jp/en/jmb" in current_url
-                on_www121   = sb.is_element_visible("span#JS_121_mileBalance")
-
-                if self.is_auth_url(current_url) or (not on_jmb_page and not on_www121):
-                    raise InteractionRequiredError("JAL login required. Please use Interactive Login.")
-
-                soup = BeautifulSoup(sb.get_page_source(), "html.parser")
-
-                if on_jmb_page:
-                    balance, status = self._parse_jmb_page(soup)
-                    expiration_date = None
-                    try:
-                        clicked = sb.execute_script("""
-                            const a = Array.from(document.querySelectorAll('a')).find(el => {
-                                const href = (el.getAttribute('href') || '').toLowerCase();
-                                const text = (el.textContent || '').toLowerCase();
-                                return href.includes('mile') || text.includes('expir') || text.includes('detail');
-                            });
-                            if (a) { a.click(); return true; }
-                            return false;
-                        """)
-                        if clicked:
-                            sb.sleep(5)
-                            expiration_date = self.extract_expiration_date(
-                                BeautifulSoup(sb.get_page_source(), "html.parser"))
-                    except Exception:
-                        pass
-                else:
-                    sb.wait_for_element_visible("span#JS_121_mileBalance", timeout=20)
-                    sb.sleep(3)
-                    soup = BeautifulSoup(sb.get_page_source(), "html.parser")
-
-                    balance_el = soup.find(id="JS_121_mileBalance")
-                    if not balance_el:
-                        raise PluginError("Could not retrieve mileage balance from JAL.")
-                    balance = int(re.sub(r"\D", "", balance_el.text.strip()) or 0)
-
-                    status_el = soup.find(id="JS_jmbStatusNameText")
-                    status = self._normalize_status(status_el.text if status_el else "")
-
-                    # Navigate to mileage detail page for expiration
-                    try:
-                        if not sb.execute_script(
-                            'const f = document.querySelector(\'form[name="mileDetailFrm"]\');'
-                            'if (f) { f.submit(); return true; } return false;'
-                        ):
-                            sb.execute_script("""
-                                let el = Array.from(document.querySelectorAll('a')).find(a => {
-                                    const t = (a.textContent || '').toLowerCase();
-                                    const h = a.getAttribute('href') || '';
-                                    return t.includes('mile') && (h.includes('javascript') || h.includes('CnfMlg'));
-                                });
-                                if (!el) {
-                                    const sp = document.querySelector('span#JS_121_mileBalance');
-                                    if (sp) el = sp.closest('a');
-                                }
-                                if (el) el.click();
-                            """)
-                    except Exception:
-                        pass
-
-                    try:
-                        sb.wait_for_element_visible("table.termmile", timeout=20)
-                    except Exception:
-                        sb.sleep(5)
-
-                    expiration_date = self.extract_expiration_date(
-                        BeautifulSoup(sb.get_page_source(), "html.parser"))
-
+                balance, status, expiration_date = self._extract_balance_status_expiration(sb)
                 return {"balance": balance, "status": status, "expiration_date": expiration_date}
 
             except InteractionRequiredError:
@@ -505,12 +530,22 @@ class JAPANAirlinesPlugin(ProviderPlugin):
     # Core: interactive_login
     # -------------------------------------------------------------------------
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         region = (kwargs.get("region") or "JR").upper()
         with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
             try:
                 for attempt in range(2):
                     print(f"Interactive login attempt {attempt + 1}, region: {region}")
+                    # Establish a normal browsing session on the regional homepage
+                    # before attempting the deep JMB member-area link -- cold-opening
+                    # an authenticated-area URL directly appears to trigger JAL's
+                    # region-detection/Worldwide-Sites redirect defensively, the same
+                    # anti-bot-style pattern other airline sites in this codebase
+                    # (British Airways, Avianca, Virgin Atlantic) already work around
+                    # by visiting the homepage first.
+                    sb.open(self._regional_homepage(region))
+                    sb.sleep(3)
+                    self._dismiss_cookie_banners(sb)
                     sb.open(self._start_url(region))
                     sb.sleep(3)
 
@@ -551,9 +586,18 @@ class JAPANAirlinesPlugin(ProviderPlugin):
                             sb.sleep(5)
                             break
                         if self._handle_worldwide_sites(sb, region):
-                            sb.sleep(3)
-                            sb.open(self._start_url(region))
-                            sb.sleep(5)
+                            # Confirmed via live logs: selecting a region here means
+                            # login already succeeded (Worldwide Sites is JAL's normal
+                            # one-time post-login "confirm your region" step, not a
+                            # bot-reject). The regional homepage it lands on already
+                            # shows the mileage balance in its header using the same
+                            # element (span#JS_121_mileBalance) as logged_in_sel, so no
+                            # further navigation is needed at all -- just let the next
+                            # loop iteration's own top-of-loop check detect it there.
+                            # Re-opening the deep SSO login link here (the previous
+                            # approach) forces a brand new authentication handshake,
+                            # which is what was actually causing the observed bounce
+                            # back to the region picker.
                             continue
                         correct_region = self._detect_region_mismatch(sb)
                         if correct_region and correct_region != region:
@@ -569,3 +613,21 @@ class JAPANAirlinesPlugin(ProviderPlugin):
 
             except Exception as e:
                 print(f"Interactive login interrupted: {e}")
+                return None
+
+            # The inner wait loop above can also exit by exhausting its 60 iterations
+            # without ever detecting a logged-in state, so verify before extracting.
+            logged_in_sel = "span#JS_121_mileBalance"
+            try:
+                current_url = sb.get_current_url().lower()
+            except Exception:
+                return None
+            if not (sb.is_element_visible(logged_in_sel) and not self.is_auth_url(current_url)):
+                return None
+
+            try:
+                balance, status, expiration_date = self._extract_balance_status_expiration(sb)
+            except Exception as e:
+                raise PluginError(f"Logged in successfully, but failed to read JAL mileage balance: {e}")
+
+            return {"balance": balance, "status": status, "expiration_date": expiration_date}

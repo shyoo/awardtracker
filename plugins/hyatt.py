@@ -282,7 +282,7 @@ class WorldofHyattPlugin(ProviderPlugin):
             pass
         return None
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Opens an interactive browser window for the user to resolve MFA.
         Uses clean profiles and saves cookies dynamically to bypass Akamai bot blocks.
@@ -333,13 +333,49 @@ class WorldofHyattPlugin(ProviderPlugin):
                 except Exception:
                     pass
                 
-                # Wait up to 5 minutes for the user to resolve MFA/captcha and reach the dashboard
-                try:
-                    sb.wait_for_element_visible('[data-locator="points-balance"]', timeout=300)
-                    sb.sleep(5) 
-                except Exception:
+                # Wait up to 5 minutes for the user to resolve MFA/captcha and leave
+                # the sign-in page. Waiting directly for the points-balance locator
+                # (the previous approach) could time out entirely: Hyatt's natural
+                # post-login redirect doesn't reliably land on account-overview, the
+                # only page that locator actually appears on -- fetch_data() always
+                # force-navigates there explicitly rather than trusting the redirect.
+                left_sign_in = False
+                for _ in range(60):
+                    try:
+                        if "sign-in" not in sb.get_current_url().lower():
+                            left_sign_in = True
+                            break
+                    except Exception:
+                        pass
+                    sb.sleep(5)
+                if not left_sign_in:
                     raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
-                
+                sb.sleep(3)
+
+                # Force open account-overview regardless of where the post-login
+                # redirect landed, matching fetch_data()'s reliable navigation.
+                if "profile" not in sb.get_current_url():
+                    print("Opening Hyatt account-overview page...")
+                    sb.open("https://www.hyatt.com/profile/account-overview")
+                    sb.sleep(5)
+
+                balance, status = self._extract_data(sb)
+                if balance is None:
+                    # Fallback refresh in case of slow API render, matching fetch_data().
+                    sb.refresh()
+                    sb.sleep(6)
+                    balance, status = self._extract_data(sb)
+                if balance is None:
+                    raise PluginError("Logged in successfully, but could not find points on Hyatt account overview page.")
+
+                result = {
+                    "balance": balance,
+                    "status": status or "Unknown",
+                    "expiration_date": None,
+                    "certificates": []
+                }
+                result["last_activity_date"] = self._fetch_last_activity_date(sb)
+
                 # Save cookies dynamically
                 if cookie_file:
                     try:
@@ -349,7 +385,9 @@ class WorldofHyattPlugin(ProviderPlugin):
                         print(f"Saved interactive login session cookies to {cookie_file}")
                     except Exception as save_err:
                         print(f"Failed to save cookies after interactive login: {save_err}")
-                        
+
+                return result
+
         except Exception as e:
             if cookie_file and os.path.exists(cookie_file):
                 print("Interactive login failed. Purging session cookies...")
