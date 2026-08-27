@@ -226,6 +226,17 @@ class HiltonHonorsPlugin(ProviderPlugin):
             
         return balance, status, last_activity_date
 
+    def _extract_member_number(self, html: str) -> Optional[str]:
+        """Extracts Hilton Honors membership number from the account page HTML."""
+        import re
+        m = re.search(r'Hilton\s+Honors\s*#?\s*(\d{7,12})', html, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+        m = re.search(r'(?:Honors|Account)\s*#\s*(\d{7,12})', html, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+        return None
+
     def _parse_free_night_awards(self, html: str) -> list:
         """Extracts unredeemed Free Night Certificates from the Rewards section of the my-account page."""
         import re
@@ -374,6 +385,14 @@ class HiltonHonorsPlugin(ProviderPlugin):
                         "at_risk": True,
                         "reason": "No activity recorded in the last 12 months"
                     }
+
+                # 5. Extract Member Number if visible
+                try:
+                    member_num = self._extract_member_number(sb.get_page_source())
+                    if member_num:
+                        result["member_number"] = member_num
+                except Exception:
+                    pass
 
                 # 6. Navigate to the account page to extract Free Night Certificates, if not already captured above
                 if not certificates_captured:

@@ -247,6 +247,12 @@ def _persist_fetch_result(account, provider, data):
     account.expiration_date = computed_expiration
     account.expiration_meta = data.get('expiration_meta', {})
 
+    member_number = data.get('member_number') or data.get('account_number')
+    if member_number:
+        meta = account.extra_metadata
+        meta['membership_number'] = str(member_number)
+        account.extra_metadata = meta
+
     # Spam-filtered warning notifications
     warning_threshold_setting = Settings.query.filter_by(key='warning_threshold').first()
     warning_threshold_days = int(warning_threshold_setting.value) if warning_threshold_setting else 30
@@ -327,45 +333,93 @@ def create_app(config_class=Config):
     @app.context_processor
     def inject_helpers():
         from expiration import get_program_rule_description, get_never_expires_reason
+
+        domains = {
+            'hyatt': 'hyatt.com',
+            'hilton': 'hilton.com',
+            'caesars': 'caesars.com',
+            'hertz': 'hertz.com',
+            'enterprise': 'enterprise.com',
+            'national': 'nationalcar.com',
+            'wyndham': 'wyndhamhotels.com',
+            'marriott': 'marriott.com',
+            'ihg': 'ihg.com',
+            'alaska': 'alaskaair.com',
+            'korean': 'koreanair.com',
+            'delta': 'delta.com',
+            'united': 'united.com',
+            'southwest': 'southwest.com',
+            'american': 'aa.com',
+            'avianca': 'avianca.com',
+            'virgin': 'virginatlantic.com',
+            'british': 'britishairways.com',
+            'jetblue': 'jetblue.com',
+            'asiana': 'flyasiana.com',
+            'aircanada': 'aircanada.com',
+            'jal': 'jal.co.jp',
+            'ana': 'ana.co.jp',
+            'chase': 'chase.com',
+            'amex': 'americanexpress.com',
+            'citi': 'citi.com',
+            'capitalone': 'capitalone.com',
+            'wellsfargo': 'wellsfargo.com',
+            'bilt': 'biltrewards.com',
+            'eva': 'evaair.com',
+        }
         
         def get_logo_url(plugin_name):
-            domains = {
-                'hyatt': 'hyatt.com',
-                'hilton': 'hilton.com',
-                'caesars': 'caesars.com',
-                'hertz': 'hertz.com',
-                'enterprise': 'enterprise.com',
-                'national': 'nationalcar.com',
-                'wyndham': 'wyndhamhotels.com',
-                'marriott': 'marriott.com',
-                'ihg': 'ihg.com',
-                'alaska': 'alaskaair.com',
-                'korean': 'koreanair.com',
-                'delta': 'delta.com',
-                'united': 'united.com',
-                'southwest': 'southwest.com',
-                'american': 'aa.com',
-                'avianca': 'avianca.com',
-                'virgin': 'virginatlantic.com',
-                'british': 'britishairways.com',
-                'jetblue': 'jetblue.com',
-                'asiana': 'flyasiana.com',
-                'aircanada': 'aircanada.com',
-                'jal': 'jal.co.jp',
-                'ana': 'ana.co.jp',
-                'chase': 'chase.com',
-                'amex': 'americanexpress.com',
-                'citi': 'citi.com',
-                'capitalone': 'capitalone.com',
-                'wellsfargo': 'wellsfargo.com',
-                'bilt': 'biltrewards.com',
-                'eva': 'evaair.com',
-            }
             domain = domains.get(plugin_name.lower())
             if domain:
                 settings = load_settings()
                 token = settings.get('LOGO_DEV_TOKEN') or os.environ.get('LOGO_DEV_TOKEN', 'pk_YOUR_TOKEN_HERE')
                 return f"https://img.logo.dev/{domain}?token={token}&size=256"
+            return ""
+
+        def get_provider_homepage_url(plugin_name, custom_url=None):
+            if custom_url:
+                return custom_url
+            if not plugin_name:
+                return ""
+            plugin = plugin_manager.get_plugin(plugin_name)
+            if plugin and getattr(plugin, 'homepage_url', None):
+                return plugin.homepage_url
+            homepage_map = {
+                'chase': 'https://www.chase.com',
+                'amex': 'https://www.americanexpress.com',
+                'citi': 'https://www.thankyou.com',
+                'capitalone': 'https://www.capitalone.com',
+                'wellsfargo': 'https://www.wellsfargo.com',
+                'bilt': 'https://www.biltrewards.com',
+                'hyatt': 'https://world.hyatt.com',
+                'hilton': 'https://www.hilton.com/en/hilton-honors/',
+                'marriott': 'https://www.marriott.com/loyalty.mi',
+                'ihg': 'https://www.ihg.com/onerewards/',
+                'wyndham': 'https://www.wyndhamhotels.com/wyndham-rewards',
+                'caesars': 'https://www.caesars.com/myrewards',
+                'delta': 'https://www.delta.com/skymiles',
+                'united': 'https://www.united.com/ual/en/us/fly/mileageplus.html',
+                'southwest': 'https://www.southwest.com/rapidrewards/',
+                'american': 'https://www.aa.com/aadvantage-program/',
+                'alaska': 'https://www.alaskaair.com/mileageplan',
+                'korean': 'https://www.koreanair.com/skypass',
+                'asiana': 'https://flyasiana.com/C/US/EN/contents/asiana-club-overview',
+                'aircanada': 'https://www.aircanada.com/aeroplan',
+                'british': 'https://www.britishairways.com/executive-club',
+                'avianca': 'https://www.lifemiles.com',
+                'virgin': 'https://flywith.virginatlantic.com/gb/en/flying-club.html',
+                'jetblue': 'https://trueblue.jetblue.com',
+                'jal': 'https://www.jal.co.jp/ar/en/jmb/',
+                'ana': 'https://www.ana.co.jp/en/us/amc/',
+                'eva': 'https://www.evaair.com/en-us/infinity-mileagelands/',
+                'hertz': 'https://www.hertz.com/rentacar/goldplusrewards/',
+                'enterprise': 'https://www.enterprise.com/en/loyalty-program.html',
+                'national': 'https://www.nationalcar.com/en/emerald-club.html',
+            }
+            if plugin_name.lower() in homepage_map:
+                return homepage_map[plugin_name.lower()]
+            domain = domains.get(plugin_name.lower())
+            if domain:
+                return f"https://www.{domain}"
             return ""
 
         def time_ago(dt):
@@ -444,6 +498,7 @@ def create_app(config_class=Config):
             get_never_expires_reason=get_never_expires_reason,
             format_time_remaining=format_time_remaining,
             get_logo_url=get_logo_url,
+            get_provider_homepage_url=get_provider_homepage_url,
             get_interactive_login_hint=get_interactive_login_hint,
             get_interactive_login_instructions=get_interactive_login_instructions,
             time_ago=time_ago,
@@ -804,6 +859,10 @@ def create_app(config_class=Config):
             person_id = request.form.get('person_id')
 
             provider = Provider.query.get(provider_id) if provider_id else None
+            if not provider_id or not provider:
+                flash('Please select a valid provider.')
+                return redirect(url_for('add_account'))
+
             is_manual = provider and provider.plugin_name in MANUAL_PLUGIN_IDS
 
             if is_manual:
@@ -822,6 +881,9 @@ def create_app(config_class=Config):
                     metadata = {}
                     if custom_program_name:
                         metadata['custom_program_name'] = custom_program_name
+                    membership_number = request.form.get('membership_number', '').strip()
+                    if membership_number:
+                        metadata['membership_number'] = membership_number
 
                     expiration_date_str = request.form.get('expiration_date')
                     expiration_date = None
@@ -861,8 +923,8 @@ def create_app(config_class=Config):
                 username = request.form.get('username')
                 password = request.form.get('password')
 
-                if not all([provider_id, username, password]):
-                    flash('Provider, Username and Password are required.')
+                if not all([username, password]):
+                    flash('Username and Password are required.')
                     return redirect(url_for('add_account'))
 
                 # Clean Korean Air skypass username if spaces are present
@@ -875,6 +937,9 @@ def create_app(config_class=Config):
 
                     # Parse metadata fields
                     metadata = {}
+                    membership_number = request.form.get('membership_number', '').strip()
+                    if membership_number:
+                        metadata['membership_number'] = membership_number
                     for key, value in request.form.items():
                         if key.startswith('meta_') and value:
                             metadata[key[5:]] = value
@@ -1321,7 +1386,11 @@ def create_app(config_class=Config):
                 custom_program_name = request.form.get('custom_program_name')
                 if custom_program_name:
                     metadata['custom_program_name'] = custom_program_name
-                    
+
+            membership_number = request.form.get('membership_number', '').strip()
+            if membership_number:
+                metadata['membership_number'] = membership_number
+
             for key, value in request.form.items():
                 if key.startswith('meta_') and value:
                     metadata[key[5:]] = value

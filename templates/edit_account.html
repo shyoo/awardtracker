@@ -41,6 +41,15 @@
         </div>
       </div>
 
+      <!-- Membership / Account # -->
+      <div>
+        <label for="membership_number" class="block text-sm font-semibold text-slate-700">Membership / Account # <span class="text-slate-400 font-normal">(Optional)</span></label>
+        <p class="mt-1 text-xs text-slate-400">The loyalty membership number to display and copy.</p>
+        <div class="mt-2">
+          <input type="text" name="membership_number" id="membership_number" value="{{ account.extra_metadata.get('membership_number', '') }}" placeholder="e.g., 123456789" class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+        </div>
+      </div>
+
       {% if account.is_manual %}
         {% if account.provider.plugin_name == 'manual' %}
         <!-- Custom Program Name -->

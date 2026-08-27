@@ -138,6 +138,12 @@ def sync_all_accounts(is_scheduled=True):
                     
                 account.expiration_date = computed_expiration
                 account.expiration_meta = data.get('expiration_meta', {})
+
+                member_number = data.get('member_number') or data.get('account_number')
+                if member_number:
+                    meta = account.extra_metadata
+                    meta['membership_number'] = str(member_number)
+                    account.extra_metadata = meta
                 
                 # Spam-filtered warning notifications
                 from models import Settings

@@ -74,6 +74,15 @@ class Account(db.Model):
         return self.provider.name
 
     @property
+    def membership_number(self):
+        custom = self.extra_metadata.get('membership_number')
+        if custom:
+            return custom
+        if self.is_manual:
+            return self.extra_metadata.get('account_number') or ""
+        return self.username
+
+    @property
     def interactive_login_required(self):
         if self.provider:
             from plugins.manager import plugin_manager

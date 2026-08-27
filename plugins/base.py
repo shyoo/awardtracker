@@ -808,6 +808,11 @@ class ProviderPlugin(ABC):
         pass
 
     @property
+    def homepage_url(self) -> str:
+        """Official homepage or login URL for the loyalty / rewards program."""
+        return ""
+
+    @property
     def interactive_login_required(self) -> bool:
         """
         Whether this plugin always requires interactive login on first/new sign-ins.
