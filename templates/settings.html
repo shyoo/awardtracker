@@ -24,6 +24,12 @@
               <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping"></span>
               Update Available: v{{ update_info_raw.version }}!
             </span>
+            <button type="button" onclick="startAutoUpdate('{{ update_info_raw.version }}', '{{ update_info_raw.url }}')" class="rounded bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-sm hover:from-amber-600 hover:to-orange-600 transition-all select-none flex items-center gap-1">
+              <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              <span>Update to v{{ update_info_raw.version }}</span>
+            </button>
             <a href="{{ update_info_raw.url }}" target="_blank" class="text-[10px] text-primary hover:underline font-bold">View Release Notes</a>
           {% else %}
             <span class="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-full text-[10px]">

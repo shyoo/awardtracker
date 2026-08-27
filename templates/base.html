@@ -152,6 +152,237 @@
             </div>
         </main>
     </div>
+
+    <!-- Auto-Update Progress Modal -->
+    <div id="autoUpdateModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden">
+      <div class="relative w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-100 transform transition-all mx-4">
+        <!-- Close / Cancel Button -->
+        <button id="updateModalCloseBtn" onclick="closeAutoUpdateModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 rounded-lg p-1.5 transition-colors">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <div class="flex items-center gap-3.5 mb-4">
+          <div class="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 p-2.5 text-white shadow-md">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900" id="updateModalTitle">Updating Award Tracker</h3>
+            <p class="text-xs text-slate-500" id="updateModalSubtitle">Target version: <span id="updateModalVersion" class="font-semibold text-slate-700">v...</span></p>
+          </div>
+        </div>
+
+        <!-- Download & Install Progress State -->
+        <div id="updateProgressSection" class="space-y-3">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-600">
+            <span id="updateStatusText">Preparing download...</span>
+            <span id="updatePercentText" class="font-mono text-primary font-bold">0%</span>
+          </div>
+
+          <!-- Progress Bar Container -->
+          <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner p-0.5 border border-slate-200/60">
+            <div id="updateProgressBar" class="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span id="updateBytesText">Connecting to GitHub...</span>
+            <span id="updateSpeedText"></span>
+          </div>
+        </div>
+
+        <!-- Error State Section -->
+        <div id="updateErrorSection" class="hidden mt-3 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
+          <p class="font-semibold mb-1 flex items-center gap-1.5">
+            <svg class="h-4 w-4 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Update Failed
+          </p>
+          <p id="updateErrorMessage" class="text-[11px] text-rose-600 mb-3"></p>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button onclick="retryAutoUpdate()" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition-colors">
+              Try Again
+            </button>
+            <a id="updateManualDownloadLink" href="https://github.com/shyoo/awardtracker/releases" target="_blank" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-semibold transition-colors">
+              Download Manually
+            </a>
+          </div>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="mt-6 flex items-center justify-end gap-3" id="updateModalActions">
+          <button type="button" id="updateCancelBtn" onclick="cancelAutoUpdate()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-colors">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    let updatePollTimer = null;
+    let targetUpdateVersion = '';
+    let targetReleaseUrl = 'https://github.com/shyoo/awardtracker/releases';
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0.0 MB';
+      const mb = bytes / (1024 * 1024);
+      return mb.toFixed(1) + ' MB';
+    }
+
+    function startAutoUpdate(version, releaseUrl) {
+      targetUpdateVersion = version || '';
+      if (releaseUrl) targetReleaseUrl = releaseUrl;
+
+      const modal = document.getElementById('autoUpdateModal');
+      const versionSpan = document.getElementById('updateModalVersion');
+      const manualLink = document.getElementById('updateManualDownloadLink');
+      const errorSection = document.getElementById('updateErrorSection');
+      const progressSection = document.getElementById('updateProgressSection');
+      const progressBar = document.getElementById('updateProgressBar');
+      const percentText = document.getElementById('updatePercentText');
+      const statusText = document.getElementById('updateStatusText');
+      const bytesText = document.getElementById('updateBytesText');
+      const cancelBtn = document.getElementById('updateCancelBtn');
+
+      if (versionSpan) versionSpan.textContent = version ? 'v' + version.replace(/^v/, '') : '';
+      if (manualLink && releaseUrl) manualLink.href = releaseUrl;
+      if (errorSection) errorSection.classList.add('hidden');
+      if (progressSection) progressSection.classList.remove('hidden');
+      if (progressBar) progressBar.style.width = '0%';
+      if (percentText) percentText.textContent = '0%';
+      if (statusText) statusText.textContent = 'Starting download...';
+      if (bytesText) bytesText.textContent = 'Connecting to GitHub...';
+      if (cancelBtn) cancelBtn.classList.remove('hidden');
+
+      if (modal) modal.classList.remove('hidden');
+
+      fetch('/api/updater/start', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          pollUpdaterStatus();
+        })
+        .catch(err => {
+          showUpdaterError(err.message || 'Failed to start update download.');
+        });
+    }
+
+    function pollUpdaterStatus() {
+      if (updatePollTimer) clearTimeout(updatePollTimer);
+
+      fetch('/api/updater/status')
+        .then(r => r.json())
+        .then(data => {
+          const progressBar = document.getElementById('updateProgressBar');
+          const percentText = document.getElementById('updatePercentText');
+          const statusText = document.getElementById('updateStatusText');
+          const bytesText = document.getElementById('updateBytesText');
+          const cancelBtn = document.getElementById('updateCancelBtn');
+
+          if (data.status === 'downloading') {
+            const pct = data.progress || 0;
+            if (progressBar) progressBar.style.width = pct + '%';
+            if (percentText) percentText.textContent = pct + '%';
+            if (statusText) statusText.textContent = 'Downloading update package...';
+            if (bytesText) {
+              bytesText.textContent = `${formatBytes(data.downloaded_bytes)} / ${formatBytes(data.total_bytes)}`;
+            }
+            updatePollTimer = setTimeout(pollUpdaterStatus, 500);
+          } else if (data.status === 'downloaded') {
+            if (progressBar) progressBar.style.width = '100%';
+            if (percentText) percentText.textContent = '100%';
+            if (statusText) statusText.textContent = 'Download complete. Installing update...';
+            if (bytesText) bytesText.textContent = 'Restarting application...';
+            if (cancelBtn) cancelBtn.classList.add('hidden');
+
+            applyUpdate();
+          } else if (data.status === 'installing') {
+            if (progressBar) progressBar.style.width = '100%';
+            if (percentText) percentText.textContent = '100%';
+            if (statusText) statusText.textContent = 'Restarting Award Tracker...';
+            if (bytesText) bytesText.textContent = 'The application will reopen automatically.';
+            if (cancelBtn) cancelBtn.classList.add('hidden');
+            
+            setTimeout(waitForAppRestart, 3000);
+          } else if (data.status === 'error') {
+            showUpdaterError(data.error || 'An unexpected error occurred during update.');
+          } else {
+            updatePollTimer = setTimeout(pollUpdaterStatus, 800);
+          }
+        })
+        .catch(err => {
+          const statusText = document.getElementById('updateStatusText');
+          if (statusText && (statusText.textContent.includes('Installing') || statusText.textContent.includes('Restarting'))) {
+            waitForAppRestart();
+          } else {
+            updatePollTimer = setTimeout(pollUpdaterStatus, 1500);
+          }
+        });
+    }
+
+    function applyUpdate() {
+      fetch('/api/updater/apply', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          const statusText = document.getElementById('updateStatusText');
+          const bytesText = document.getElementById('updateBytesText');
+          if (statusText) statusText.textContent = 'Restarting Award Tracker...';
+          if (bytesText) bytesText.textContent = 'The application will reopen automatically in a few seconds.';
+          setTimeout(waitForAppRestart, 2500);
+        })
+        .catch(err => {
+          setTimeout(waitForAppRestart, 2500);
+        });
+    }
+
+    function waitForAppRestart() {
+      const statusText = document.getElementById('updateStatusText');
+      const bytesText = document.getElementById('updateBytesText');
+      if (statusText) statusText.textContent = 'Reconnecting to Award Tracker...';
+      if (bytesText) bytesText.textContent = 'Please wait while the new version starts up.';
+
+      const checkInterval = setInterval(() => {
+        fetch('/', { method: 'HEAD', cache: 'no-store' })
+          .then(res => {
+            if (res.ok) {
+              clearInterval(checkInterval);
+              window.location.reload();
+            }
+          })
+          .catch(() => {});
+      }, 1500);
+    }
+
+    function showUpdaterError(msg) {
+      const progressSection = document.getElementById('updateProgressSection');
+      const errorSection = document.getElementById('updateErrorSection');
+      const errorMessage = document.getElementById('updateErrorMessage');
+      const cancelBtn = document.getElementById('updateCancelBtn');
+
+      if (progressSection) progressSection.classList.add('hidden');
+      if (errorSection) errorSection.classList.remove('hidden');
+      if (errorMessage) errorMessage.textContent = msg;
+      if (cancelBtn) cancelBtn.classList.remove('hidden');
+    }
+
+    function retryAutoUpdate() {
+      startAutoUpdate(targetUpdateVersion, targetReleaseUrl);
+    }
+
+    function cancelAutoUpdate() {
+      if (updatePollTimer) clearTimeout(updatePollTimer);
+      fetch('/api/updater/cancel', { method: 'POST' });
+      closeAutoUpdateModal();
+    }
+
+    function closeAutoUpdateModal() {
+      if (updatePollTimer) clearTimeout(updatePollTimer);
+      const modal = document.getElementById('autoUpdateModal');
+      if (modal) modal.classList.add('hidden');
+    }
+    </script>
     {% endblock %}
 </body>
 </html>

@@ -26,6 +26,10 @@ def get_active_db_path():
     If a custom database location is configured in settings.json and valid,
     that path is returned; otherwise, defaults to write_dir/awardtracker.db.
     """
+    # Safety guard: during test execution, never point to user database files
+    if os.environ.get('TESTING') == 'true' or 'pytest' in sys.modules:
+        return ':memory:'
+
     settings_path = os.path.join(write_dir, 'settings.json')
     if os.path.exists(settings_path):
         try:
@@ -54,8 +58,10 @@ except Exception:
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-key-change-in-production'
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'sqlite:///' + get_active_db_path().replace('\\', '/')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or (
+        'sqlite:///:memory:' if (os.environ.get('TESTING') == 'true' or 'pytest' in sys.modules)
+        else 'sqlite:///' + get_active_db_path().replace('\\', '/')
+    )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     ROOT_DIR = write_dir
     APP_VERSION = APP_VERSION

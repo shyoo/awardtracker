@@ -1398,6 +1398,33 @@ def create_app(config_class=Config):
         # Return 200 (not 204) so HTMX hx-swap="delete" triggers reliably
         return '', 200
 
+    @app.route('/api/updater/status', methods=['GET'])
+    def api_updater_status():
+        from flask import jsonify
+        from updater import auto_updater
+        return jsonify(auto_updater.get_status())
+
+    @app.route('/api/updater/start', methods=['POST'])
+    def api_updater_start():
+        from flask import jsonify
+        from updater import auto_updater
+        status = auto_updater.start_download(app)
+        return jsonify(status)
+
+    @app.route('/api/updater/cancel', methods=['POST'])
+    def api_updater_cancel():
+        from flask import jsonify
+        from updater import auto_updater
+        auto_updater.cancel_download()
+        return jsonify(auto_updater.get_status())
+
+    @app.route('/api/updater/apply', methods=['POST'])
+    def api_updater_apply():
+        from flask import jsonify
+        from updater import auto_updater
+        status = auto_updater.apply_update_and_restart(app)
+        return jsonify(status)
+
     @app.route('/settings', methods=['GET', 'POST'])
     def settings():
         STANDARD_VALUATION_KEYS = set(plugin_manager.plugins.keys())
