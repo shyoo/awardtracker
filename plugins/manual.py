@@ -49,6 +49,10 @@ class ChaseUltimateRewardsPlugin(_ManualBase):
     def default_cpp(self) -> float:
         return 2.05
 
+    @property
+    def homepage_url(self) -> str:
+        return "https://www.chase.com"
+
 
 class AmexMembershipRewardsPlugin(_ManualBase):
     @property
@@ -62,6 +66,10 @@ class AmexMembershipRewardsPlugin(_ManualBase):
     @property
     def default_cpp(self) -> float:
         return 2.0
+
+    @property
+    def homepage_url(self) -> str:
+        return "https://www.americanexpress.com"
 
 
 class CitiThankYouPlugin(_ManualBase):
@@ -77,6 +85,10 @@ class CitiThankYouPlugin(_ManualBase):
     def default_cpp(self) -> float:
         return 1.9
 
+    @property
+    def homepage_url(self) -> str:
+        return "https://www.thankyou.com"
+
 
 class CapitalOneMilesPlugin(_ManualBase):
     @property
@@ -90,6 +102,10 @@ class CapitalOneMilesPlugin(_ManualBase):
     @property
     def default_cpp(self) -> float:
         return 1.85
+
+    @property
+    def homepage_url(self) -> str:
+        return "https://www.capitalone.com"
 
 
 class WellsFargoRewardsPlugin(_ManualBase):
@@ -105,6 +121,10 @@ class WellsFargoRewardsPlugin(_ManualBase):
     def default_cpp(self) -> float:
         return 0.9
 
+    @property
+    def homepage_url(self) -> str:
+        return "https://www.wellsfargo.com"
+
 
 class BiltRewardsPlugin(_ManualBase):
     @property
@@ -118,6 +138,10 @@ class BiltRewardsPlugin(_ManualBase):
     @property
     def default_cpp(self) -> float:
         return 1.25
+
+    @property
+    def homepage_url(self) -> str:
+        return "https://www.biltrewards.com"
 
 
 # ---------------------------------------------------------------------------

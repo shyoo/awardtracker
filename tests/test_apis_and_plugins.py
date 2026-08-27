@@ -3386,5 +3386,118 @@ class TestAPIsAndPlugins(unittest.TestCase):
         plugin = plugin_manager.get_plugin('delta')
         self.assertEqual(plugin.interactive_login_hint, '')
 
+    # ==========================================
+    # Tests for Issues #124, #126, #127
+    # ==========================================
+    def test_issue_124_add_account_requires_valid_provider(self):
+        """Issue #124: Adding an account without selecting a valid provider fails validation."""
+        # 1. Test empty provider_id
+        res = self.client.post('/accounts/add', data={
+            'provider_id': '',
+            'username': 'test_user',
+            'password': 'test_password'
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b'Please select a valid provider.', res.data)
+
+        # 2. Test nonexistent provider_id
+        res = self.client.post('/accounts/add', data={
+            'provider_id': '999999',
+            'username': 'test_user',
+            'password': 'test_password'
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b'Please select a valid provider.', res.data)
+
+    def test_issue_126_membership_number_property_and_persistence(self):
+        """Issue #126: Membership number property extraction, fallback, and editing."""
+        with self.app.app_context():
+            provider = Provider.query.filter_by(plugin_name='delta').first()
+            if not provider:
+                provider = Provider(name='Delta Air Lines', plugin_name='delta')
+                db.session.add(provider)
+                db.session.commit()
+
+            # 1. Automated account defaults to username
+            acc = Account(
+                provider_id=provider.id,
+                username='skymiles_user_123',
+                password_encrypted=security_manager.encrypt('pass'),
+                is_manual=False
+            )
+            db.session.add(acc)
+            db.session.commit()
+            self.assertEqual(acc.membership_number, 'skymiles_user_123')
+
+            # 2. Custom membership number in extra_metadata takes precedence
+            meta = acc.extra_metadata
+            meta['membership_number'] = '9876543210'
+            acc.extra_metadata = meta
+            db.session.commit()
+            self.assertEqual(acc.membership_number, '9876543210')
+
+            # 3. Manual account with account_number in extra_metadata
+            manual_prov = Provider.query.filter_by(plugin_name='chase').first()
+            acc_manual = Account(
+                provider_id=manual_prov.id if manual_prov else provider.id,
+                username='manual',
+                password_encrypted=security_manager.encrypt('MANUAL'),
+                is_manual=True
+            )
+            acc_manual.extra_metadata = {'account_number': '5544332211'}
+            db.session.add(acc_manual)
+            db.session.commit()
+            self.assertEqual(acc_manual.membership_number, '5544332211')
+
+    def test_issue_127_get_provider_homepage_url_helper(self):
+        """Issue #127: Official homepage URL lookup helper."""
+        with self.app.app_context():
+            processors = self.app.template_context_processors[None]
+            merged = {}
+            for proc in processors:
+                merged.update(proc())
+            get_url_fn = merged.get('get_provider_homepage_url')
+            self.assertIsNotNone(get_url_fn)
+
+            # Test manual providers
+            self.assertEqual(get_url_fn('chase'), 'https://www.chase.com')
+            self.assertEqual(get_url_fn('amex'), 'https://www.americanexpress.com')
+            self.assertEqual(get_url_fn('citi'), 'https://www.thankyou.com')
+            self.assertEqual(get_url_fn('bilt'), 'https://www.biltrewards.com')
+
+            # Test scraper providers
+            self.assertEqual(get_url_fn('hyatt'), 'https://world.hyatt.com')
+            self.assertEqual(get_url_fn('hilton'), 'https://www.hilton.com/en/hilton-honors/')
+            self.assertEqual(get_url_fn('delta'), 'https://www.delta.com/skymiles')
+
+            # Test custom override
+            self.assertEqual(get_url_fn('chase', custom_url='https://custom.chase.com'), 'https://custom.chase.com')
+
+    def test_dashboard_renders_logo_links_and_copy_buttons(self):
+        """Issue #126 & #127: Dashboard HTML renders official logo links and copy buttons."""
+        with self.app.app_context():
+            chase_prov = Provider.query.filter_by(plugin_name='chase').first()
+            if not chase_prov:
+                chase_prov = Provider(name='Chase Ultimate Rewards', plugin_name='chase')
+                db.session.add(chase_prov)
+                db.session.commit()
+            acc = Account(
+                provider_id=chase_prov.id,
+                username='manual',
+                password_encrypted=security_manager.encrypt('MANUAL'),
+                is_manual=True,
+                balance=50000
+            )
+            acc.extra_metadata = {'membership_number': '123456789'}
+            db.session.add(acc)
+            db.session.commit()
+
+        res = self.client.get('/')
+        self.assertEqual(res.status_code, 200)
+        # Verify Chase homepage logo link is in dashboard
+        self.assertIn(b'href="https://www.chase.com"', res.data)
+        # Verify membership copy button is in dashboard
+        self.assertIn(b'copyToClipboard(\'123456789\', this)', res.data)
+
 if __name__ == '__main__':
     unittest.main()
