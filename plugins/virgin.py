@@ -5,6 +5,8 @@ from selenium.common.exceptions import WebDriverException
 from bs4 import BeautifulSoup
 import time
 import re
+import os
+import json
 from urllib.parse import urlparse
 
 class VirginAtlanticPlugin(ProviderPlugin):
@@ -29,6 +31,79 @@ class VirginAtlanticPlugin(ProviderPlugin):
 
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Miles in this program never expire."
+
+    def _cookies_path(self, profile_dir: str) -> str:
+        return os.path.join(profile_dir, "virgin_cookies.json")
+
+    def save_cookies_to_json(self, sb, profile_dir: str) -> None:
+        """
+        Explicitly serializes cookies to a JSON file. Relying on `user_data_dir`
+        alone to carry a session between two separate SB(uc=True, ...) launches is
+        unreliable (undetected-chromedriver doesn't consistently reuse a profile
+        across process relaunches), so the session is persisted explicitly instead.
+        """
+        if not profile_dir:
+            return
+        try:
+            cookies = sb.get_cookies()
+            os.makedirs(profile_dir, exist_ok=True)
+            with open(self._cookies_path(profile_dir), "w", encoding="utf-8") as f:
+                json.dump(cookies, f, indent=4)
+            print(f"Virgin Atlantic cookies saved to JSON: {len(cookies)} cookies.")
+        except Exception as e:
+            print(f"Failed to save Virgin Atlantic cookies: {e}")
+
+    def load_cookies_from_json(self, sb, profile_dir: str) -> None:
+        """Restores cookies saved by save_cookies_to_json, visiting each cookie's
+        domain first since Selenium requires an active page on that domain
+        before a cookie can be added to it."""
+        if not profile_dir:
+            return
+        cookies_file = self._cookies_path(profile_dir)
+        if not os.path.exists(cookies_file):
+            print("No saved Virgin Atlantic cookies JSON file found.")
+            return
+        try:
+            with open(cookies_file, "r", encoding="utf-8") as f:
+                cookies = json.load(f)
+
+            cookies_by_domain = {}
+            for cookie in cookies:
+                domain = cookie.get('domain', '')
+                if not domain:
+                    continue
+                norm_domain = domain.lstrip('.')
+                cookies_by_domain.setdefault(norm_domain, []).append(cookie)
+
+            for norm_domain, domain_cookies in cookies_by_domain.items():
+                current_url = sb.get_current_url().lower()
+                if norm_domain not in current_url:
+                    safe_url = f"https://{norm_domain}/"
+                    try:
+                        sb.open(safe_url)
+                        sb.sleep(2)
+                    except Exception:
+                        continue
+                for cookie in domain_cookies:
+                    try:
+                        clean_cookie = {
+                            'name': cookie['name'],
+                            'value': cookie['value'],
+                            'path': cookie.get('path', '/'),
+                            'secure': cookie.get('secure', False),
+                            'httpOnly': cookie.get('httpOnly', False),
+                            'sameSite': cookie.get('sameSite', 'Lax')
+                        }
+                        if cookie.get('domain'):
+                            clean_cookie['domain'] = cookie['domain']
+                        if 'expiry' in cookie:
+                            clean_cookie['expiry'] = int(cookie['expiry'])
+                        sb.add_cookie(clean_cookie)
+                    except Exception:
+                        pass
+            print("Virgin Atlantic cookies restore process completed.")
+        except Exception as e:
+            print(f"Failed to restore Virgin Atlantic cookies: {e}")
 
     def _extract_data(self, html: str) -> Tuple[Optional[int], Optional[str]]:
         """
@@ -272,6 +347,15 @@ class VirginAtlanticPlugin(ProviderPlugin):
         
         try:
             with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
+                # Restore the session explicitly from JSON before checking it. A fresh
+                # SB(uc=True, ...) process does not reliably inherit the previous
+                # launch's session via user_data_dir alone.
+                if profile_dir:
+                    try:
+                        self.load_cookies_from_json(sb, profile_dir)
+                    except Exception:
+                        pass
+
                 # Open dashboard directly to check for existing active session
                 print("Navigating to Flying Club summary overview...")
                 sb.open("https://www.virginatlantic.com/flying-club/account/overview")
@@ -365,6 +449,13 @@ class VirginAtlanticPlugin(ProviderPlugin):
                 result["balance"] = balance
                 if status:
                     result["status"] = status
+
+                if profile_dir:
+                    try:
+                        self.save_cookies_to_json(sb, profile_dir)
+                    except Exception:
+                        pass
+
                 return result
                 
         except InteractionRequiredError:
@@ -372,11 +463,23 @@ class VirginAtlanticPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Virgin Atlantic scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Launches browser in headed mode to let the user perform interactive login.
         Automatically closes when successful dashboard loaded is detected.
+
+        Since the session is already open and authenticated at that point, the
+        balance/status are scraped from it directly and returned here, instead of
+        closing the browser and requiring a second, separate fetch_data() launch
+        (which for a program like Virgin that gates every login behind MFA offers
+        no guarantee of still being logged in).
         """
+        result = {
+            "balance": 0,
+            "status": "Member",
+            "expiration_date": None,  # Virgin Points never expire
+            "certificates": []
+        }
         with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             # Step 1: Open homepage first to establish solid WAF session state and cookies
             print("Opening Virgin Atlantic home page to initialize session...")
@@ -450,9 +553,17 @@ class VirginAtlanticPlugin(ProviderPlugin):
                     if "flying-club/account" in parsed.path:
                         sb.sleep(4)
                         html = sb.get_page_source()
-                        balance, _ = self._extract_data(html)
+                        balance, status = self._extract_data(html)
                         if balance is not None:
                             success = True
+                            result["balance"] = balance
+                            if status:
+                                result["status"] = status
+                            if profile_dir:
+                                try:
+                                    self.save_cookies_to_json(sb, profile_dir)
+                                except Exception:
+                                    pass
                             print("Interactive login successful. Closing browser...")
                             sb.sleep(5)
                             break
@@ -469,3 +580,5 @@ class VirginAtlanticPlugin(ProviderPlugin):
                 
             if not success:
                 raise PluginError("Interactive login timed out or failed to reach dashboard.")
+
+            return result

@@ -306,7 +306,7 @@ class NationalPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to National.
         """
@@ -340,20 +340,27 @@ class NationalPlugin(ProviderPlugin):
                 start_time = time.time()
                 success = False
                 while time.time() - start_time < 300:
-                    balance, _, _ = self._extract_data(sb)
+                    balance, status, last_activity = self._extract_data(sb)
                     if balance is not None:
                         success = True
                         break
                     time.sleep(2)
-                    
+
                 if not success:
                     raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
-                
+
                 if profile_dir:
                     try:
                         self.save_cookies_to_json(sb, profile_dir)
                     except Exception:
                         pass
                 sb.sleep(5)
+                return {
+                    "balance": balance,
+                    "status": status or "Unknown",
+                    "expiration_date": None,
+                    "certificates": [],
+                    "last_activity_date": last_activity
+                }
             except Exception as e:
                 raise PluginError(f"Interactive login timed out or failed: {e}")

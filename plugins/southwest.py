@@ -280,7 +280,7 @@ class SouthwestPlugin(ProviderPlugin):
             except Exception as e:
                 raise PluginError(f"Southwest scraping failed: {e}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
             sb.open("https://www.southwest.com/loyalty/myaccount/")
             sb.sleep(6)
@@ -316,16 +316,21 @@ class SouthwestPlugin(ProviderPlugin):
                     if "my-account" in current_url.lower() or "loyalty/myaccount" in current_url.lower():
                         # Settle and verify points can be extracted
                         sb.sleep(5)
-                        balance, _ = self._extract_data_from_page(sb)
+                        balance, status = self._extract_data_from_page(sb)
                         if balance is not None:
                             success = True
                             print(f"Interactive login successful! Found balance: {balance}.")
                             break
                     time.sleep(3)
-                    
+
                 if not success:
                     raise PluginError("Interactive login timed out or failed to reach dashboard.")
-                    
+
                 sb.sleep(3) # Let session write completely
+                return {
+                    "balance": balance,
+                    "status": status,
+                    "expiration_date": None  # Southwest points do not expire
+                }
             except Exception as e:
                 raise PluginError(f"Interactive login timed out or failed: {e}")

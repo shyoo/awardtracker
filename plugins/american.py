@@ -334,7 +334,7 @@ class AmericanAirlinesPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         """
         Interactive login to allow the user to resolve captchas and log in to American Airlines.
         """
@@ -369,15 +369,21 @@ class AmericanAirlinesPlugin(ProviderPlugin):
                         sb.sleep(5)
                         if self._check_for_mfa(sb) or sb.is_element_present("adc-text-input#username"):
                             continue
-                        balance, _, _, _ = self._extract_data(sb)
+                        balance, status, exp_date, last_act = self._extract_data(sb)
                         if balance is not None:
                             success = True
                             break
                     time.sleep(2)
-                
+
                 if not success:
                     raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
-                
+
                 sb.sleep(3) # Let session write completely
+                return {
+                    "balance": balance,
+                    "status": status or "Member",
+                    "expiration_date": exp_date,
+                    "last_activity_date": last_act
+                }
             except Exception:
                 raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")

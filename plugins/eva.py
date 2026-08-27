@@ -470,7 +470,8 @@ class EVAPlugin(ProviderPlugin):
                     return cached
             raise PluginError(f"EVA Air scraping failed: {e}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
+        result = None
         try:
             with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir, headed=True)) as sb:
                 print("Opening EVA Air login page with redirect target...")
@@ -525,6 +526,7 @@ class EVAPlugin(ProviderPlugin):
                 
                 if not logged_in:
                     raise PluginError("Interactive login timed out or failed.")
+                return result
         except Exception as e:
             self._raise_if_window_closed(e)
             raise PluginError(f"Interactive login error: {e}")

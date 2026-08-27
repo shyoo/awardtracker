@@ -346,20 +346,20 @@ class MarriottPlugin(ProviderPlugin):
         except Exception as e:
             raise PluginError(f"Scraping failed: {str(e)}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         """
         Interactive login to allow the user to resolve MFA / captchas and log in to Marriott Bonvoy.
         """
         with SB(uc=True, headless=False, user_data_dir=profile_dir) as sb:
             sb.uc_open_with_reconnect("https://www.marriott.com/sign-in.mi", 4)
             sb.sleep(4)
-            
+
             # Prefill credentials if form is visible
             try:
                 self._fill_login_form(sb, username, password, auto_submit=False)
             except Exception:
                 pass
-            
+
             # Monitor URL and close window automatically when logged in
             try:
                 start_time = time.time()
@@ -376,10 +376,56 @@ class MarriottPlugin(ProviderPlugin):
                             success = True
                             break
                     time.sleep(2)
-                
+
                 if not success:
                     raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
-                
+
                 sb.sleep(3) # Let session write completely
+
+                # Extract balance/status/expiration now that the session is live, mirroring
+                # fetch_data()'s post-login extraction so no second browser launch is needed.
+                import urllib.parse
+                current_url = sb.get_current_url()
+                lang_prefix = ""
+                try:
+                    parsed_url = urllib.parse.urlparse(current_url)
+                    path_parts = parsed_url.path.strip("/").split("/")
+                    if path_parts and len(path_parts[0]) == 2:
+                        lang_prefix = f"/{path_parts[0]}"
+                except Exception:
+                    pass
+
+                activity_url = f"https://www.marriott.com{lang_prefix}/loyalty/myAccount/activity.mi"
+                sb.open(activity_url)
+                sb.sleep(6)
+
+                balance, status = self._extract_from_datalayer(sb.get_page_source())
+                if balance is None:
+                    points_selector = ".m-account-points, [data-testid='member-points'], [data-testid*='points-balance'], .points-value, .t-subtitle-xl"
+                    try:
+                        sb.wait_for_element_visible(points_selector, timeout=10)
+                        clean_points = "".join(filter(str.isdigit, sb.get_text(points_selector)))
+                        if clean_points:
+                            balance = int(clean_points)
+                    except Exception:
+                        pass
+                    try:
+                        status_text = sb.get_text(".m-account-status, [data-testid='member-status'], .t-label-s")
+                        status = status_text.strip()
+                    except Exception:
+                        pass
+
+                if balance is None:
+                    with open("marriott_activity_dump.html", "w", encoding="utf-8") as f:
+                        f.write(sb.get_page_source())
+                    raise PluginError("Logged in successfully, but could not find points on activity page. Page source saved to marriott_activity_dump.html.")
+
+                result = {"balance": balance, "status": "Unknown", "expiration_date": None, "certificates": []}
+                expiration_date = self._extract_expiration_date(sb.get_page_source())
+                if expiration_date is not None:
+                    result["expiration_date"] = expiration_date
+                if status:
+                    result["status"] = status
+                return result
             except Exception as e:
                 raise PluginError(f"Interactive login timed out or failed: {e}")

@@ -768,9 +768,10 @@ class KoreanAirPlugin(ProviderPlugin):
                     return cached
             raise PluginError(f"Korean Air scraping failed: {e}")
 
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> None:
+    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
         if username:
             username = username.replace(' ', '')
+        result = None
         with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir, headed=True)) as sb:
             sb.open("https://www.koreanair.com/login")
             sb.sleep(3)
@@ -844,3 +845,4 @@ class KoreanAirPlugin(ProviderPlugin):
                     sb.sleep(5)
             except Exception as e:
                 print(f"Interactive login wait interrupted: {e}")
+        return result
