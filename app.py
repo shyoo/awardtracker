@@ -1208,6 +1208,7 @@ def create_app(config_class=Config):
         password = security_manager.decrypt(account.password_encrypted)
         profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
 
+        from plugins.base import is_cancelled
         try:
             app_log.info(f"Starting interactive login for account {account.display_name}...")
             login_result = safe_call_plugin_method(
@@ -1223,7 +1224,24 @@ def create_app(config_class=Config):
             app_log.info(f"Interactive login completed for {account.display_name}.")
         except Exception as e:
             app_log.error(f"Interactive login failed for {account.display_name}: {str(e)}", exc_info=True)
-            flash(f'Interactive login failed for {account.display_name}: {str(e)}')
+            if is_cancelled(account.id):
+                flash(f'Interactive login for {account.display_name} was cancelled.')
+            else:
+                flash(f'Interactive login failed for {account.display_name}: {str(e)}')
+            referrer = request.referrer
+            if referrer and ('/accounts/' in referrer) and ('/edit' not in referrer):
+                return redirect(referrer)
+            return redirect(url_for('index'))
+
+        # If the user cancelled mid-login, some plugins' own broad except blocks
+        # swallow the resulting cancellation error and return None rather than
+        # re-raising it -- which would otherwise be indistinguishable from "this
+        # plugin can't scrape mid-login, please fall back to fetch_data()" below.
+        # Check the cancellation flag explicitly so a cancelled run doesn't
+        # silently launch an entirely new, unprotected browser session anyway.
+        if is_cancelled(account.id):
+            app_log.info(f"Interactive login cancelled by user for {account.display_name}.")
+            flash(f'Interactive login for {account.display_name} was cancelled.')
             referrer = request.referrer
             if referrer and ('/accounts/' in referrer) and ('/edit' not in referrer):
                 return redirect(referrer)

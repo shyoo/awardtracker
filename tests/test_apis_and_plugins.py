@@ -1450,6 +1450,39 @@ class TestAPIsAndPlugins(unittest.TestCase):
             with self.assertRaises(InteractionRequiredError):
                 plugin.fetch_data("user", "pass")
 
+    def test_alaska_extract_balance_status_atmos_tier_names(self):
+        """
+        Alaska rebranded Mileage Plan's MVP tiers to Atmos Rewards (Atmos Silver/
+        Gold/Platinum/Titanium). _extract_balance_status() must report the actual
+        tier name rather than bucketing everyone into a generic "Atmos Member",
+        while still recognizing legacy "MVP Gold 75K/100K" wording for
+        grandfathered members.
+        """
+        plugin = plugin_manager.get_plugin('alaska')
+        self.assertIsNotNone(plugin)
+
+        cases = [
+            ("<div class='points-value'>5000</div><span>Atmos Silver</span>", "Atmos Silver"),
+            ("<div class='points-value'>5000</div><span>Atmos Gold</span>", "Atmos Gold"),
+            ("<div class='points-value'>5000</div><span>Atmos Platinum</span>", "Atmos Platinum"),
+            ("<div class='points-value'>5000</div><span>Atmos Titanium</span>", "Atmos Titanium"),
+            ("<div class='points-value'>5000</div><span>MVP Gold</span>", "MVP Gold"),
+            ("<div class='points-value'>5000</div><span>MVP Gold 75K</span>", "MVP Gold 75K"),
+            ("<div class='points-value'>5000</div><span>MVP Gold 100K</span>", "MVP Gold 100K"),
+            ("<div class='points-value'>5000</div><span>MVP</span>", "MVP"),
+            ("<div class='points-value'>5000</div><span>Atmos™ Member</span>", "Atmos Member"),
+        ]
+        for html, expected_status in cases:
+            balance, status = plugin._extract_balance_status(html)
+            self.assertEqual(balance, 5000)
+            self.assertEqual(status, expected_status, f"Failed for html: {html}")
+
+        # The strongest tier mentioned anywhere on the page should win, even if a
+        # weaker mention (e.g. from marketing copy) appears elsewhere.
+        html_mixed = "<div class='points-value'>5000</div><span>MVP</span><span>Atmos Titanium</span>"
+        balance, status = plugin._extract_balance_status(html_mixed)
+        self.assertEqual(status, "Atmos Titanium")
+
     def test_jal_expiration_date_extraction(self):
         plugin = plugin_manager.get_plugin('jal')
         self.assertIsNotNone(plugin)
@@ -2353,6 +2386,67 @@ class TestAPIsAndPlugins(unittest.TestCase):
         mock_context.__exit__.return_value = False
         return mock_sb, mock_context
 
+    def test_alaska_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('alaska')
+        mock_sb, mock_context = self._mock_sb(
+            current_url="https://www.alaskaair.com/atmosrewards/account/overview/"
+        )
+
+        with patch('plugins.alaska.SB', return_value=mock_context), \
+             patch.object(plugin, 'get_consistent_user_agent', return_value='test-agent'), \
+             patch.object(plugin, '_extract_balance_status', return_value=(12000, 'Atmos Gold')):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 12000)
+        self.assertEqual(result['status'], 'Atmos Gold')
+
+    def test_delta_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('delta')
+        mock_sb, mock_context = self._mock_sb(current_url="https://www.delta.com/myskymiles/overview")
+
+        with patch('plugins.delta.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_balance_status', return_value=(20000, 'Diamond Medallion')):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 20000)
+        self.assertEqual(result['status'], 'Diamond Medallion')
+
+    def test_hyatt_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('hyatt')
+        mock_sb, mock_context = self._mock_sb(current_url="https://www.hyatt.com/profile/account-overview")
+        # Hyatt's login-form-detection loop gates on this selector being visible
+        # before it will even attempt to proceed past the sign-in page.
+        mock_sb.is_element_visible.return_value = True
+
+        with patch('plugins.hyatt.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_data', return_value=(9000, 'Globalist')), \
+             patch.object(plugin, '_fetch_last_activity_date', return_value=None):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 9000)
+        self.assertEqual(result['status'], 'Globalist')
+
+    def test_jal_interactive_login_returns_data(self):
+        from unittest.mock import patch
+        plugin = plugin_manager.get_plugin('jal')
+        mock_sb, mock_context = self._mock_sb(current_url="https://www.jal.co.jp/jp/en/")
+        # JAL's region-detection loop gates on the mileage-balance element being
+        # visible to treat login as already complete.
+        mock_sb.is_element_visible.return_value = True
+
+        with patch('plugins.jal.SB', return_value=mock_context), \
+             patch.object(plugin, '_extract_balance_status_expiration', return_value=(30000, 'JGC Premier', None)):
+            result = plugin.interactive_login('user', 'pass', profile_dir=None)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result['balance'], 30000)
+        self.assertEqual(result['status'], 'JGC Premier')
     def test_hilton_interactive_login_returns_data(self):
         from unittest.mock import patch
         plugin = plugin_manager.get_plugin('hilton')
