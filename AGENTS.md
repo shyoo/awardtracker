@@ -1,114 +1,38 @@
 # 🤖 AI Agent Developer Guidelines (AGENTS.md)
 
-Welcome! This document outlines the mandatory development workflows, branching strategies, and release procedures that all AI coding agents (such as Google Antigravity, OpenCode, Claude Code, etc.) must follow when pair-programming on the **Award Tracker** project.
+Welcome! This document collects the domain knowledge AI coding agents (Google
+Antigravity, OpenCode, Claude Code, etc.) need when pair-programming on the
+**Award Tracker** project: the scraper session-persistence recipe and the
+debugging/log layout.
+
+It deliberately does **not** describe how work gets committed, branched, or
+landed. That is the harness's job — follow whatever landing instructions your
+agent runner gives you.
 
 ---
 
-## 1. Git Branching Rule
+## 1. Push & Release Workflows
 
-* **Branching Strategy**: For any new feature development, bug fix, or visual polish, you **must** create a new git branch from `main`.
-* **No Direct Commits**: Never commit directly to `main` branch.
-* **Creating a Branch**:
-  ```bash
-  git checkout -b feat-name-here
-  ```
+Pushing and releasing are defined as skills under [.claude/skills](.claude/skills),
+not as prose here. Do not improvise an ad-hoc release procedure.
 
----
+| Skill | What it does |
+| --- | --- |
+| [`/push`](.claude/skills/push/SKILL.md) | Runs the full test suite, then pushes the current branch to `origin`. Never bumps the version, never cuts a release. |
+| [`/deploy`](.claude/skills/deploy/SKILL.md) | Bumps `version.txt` (minor by default), writes release notes, tags, and lets GitHub Actions test, build, sign and publish a **prerelease** for a human to promote. |
 
-## 2. Remote Pushing Policy
+The same skills are available to Antigravity: `.agents/skills` is a directory
+junction pointing at `.claude/skills`, so both agents read one source. The link
+is not tracked by git — recreate it after a fresh clone with
+`scripts/link-antigravity-skills.ps1` (Windows) or
+`scripts/link-antigravity-skills.sh` (macOS).
 
-* **No Premature Pushing**: Do **not** push any commits or branches to the remote repository (`origin`) until the user explicitly requests it.
-* **Keep Changes Local**: Keep all code modifications, test executions, and commits entirely local during active development and iteration.
-* **Check Active Session Requests Only**: Do **not** use push requests or approvals from previous tasks (which may appear in checkpoint summaries or historic logs from past sessions) as authorization to push in the current session. Explicit permission to push must be given by the user *in the current active session* specifically for the *current branch*.
-* **User Verification First**: You must wait until the user has manually verified the fixes/features in their active environment before pushing to remote. Pushing should only occur after verification and an explicit request to push.
-
----
-
-## 3. Mandatory "Push to Remote" Workflow
-
-When the user explicitly asks to **"push to remote"** or **"push the branch"**, you must execute the following sequence precisely:
-
-### Pre-flight: Run All Tests
-Before starting the push workflow, run the full test suite to verify no regressions:
-```bash
-venv/Scripts/python.exe -m pytest tests/ -v
-```
-* **All tests must pass** (skipped tests are acceptable).
-* If any test fails, **stop the push workflow** and fix the failures before proceeding.
-
-### Step A: Prompt for Version Bump
-1. Ask the user: *"Would you like to bump the version number? (yes/no)"*
-2. If the user answers **yes**:
-   * Read the current version string from [version.txt](version.txt) (e.g. `1.2.9`).
-   * Perform an automatic semantic version patch increment (e.g., increment the last digit: `1.2.9` -> `1.2.10`).
-   * Write the new version string back to [version.txt](version.txt).
-   * Stage the file: `git add version.txt`
-   * Commit the version change: `git commit -m "bump: version to v<VERSION>"`
-
-### Step B: Squash Branch Commits
-To keep the commit history clean on the main branch, squash all changes in the current feature branch into a single commit before pushing:
-1. Find the branching point from `main` using:
-   ```bash
-   git merge-base main HEAD
-   ```
-2. Soft reset to that commit hash to stage all work:
-   ```bash
-   git reset --soft <HASH>
-   ```
-3. Commit all staged modifications as a single, consolidated commit with a descriptive message (e.g., `feat(jal): add support for JAL Mileage Bank auto-sync and interactive login`).
-
-### Step C: Generate Release Notes (Only if Version Bumped)
-> [!IMPORTANT]
-> This step is ONLY executed if the user answered **yes** to the version bump in Step A. If the user answered **no**, completely skip this step. Do not modify or create any release notes under `internal_docs`, and do not include or commit any files under `internal_docs` (as they are ignored by `.gitignore` and must remain strictly local/untracked).
-
-1. Create a markdown release note file under the [internal_docs](internal_docs) directory.
-2. Name the file exactly `release_notes_v<VERSION>.md` (e.g., `release_notes_v1.2.10.md`).
-3. Find the **previous version tag or release-notes file** to determine the base commit. List **all commits since the last version** (not just the current branch), using:
-   ```bash
-   git log --oneline <LAST_VERSION_COMMIT>..HEAD
-   ```
-   Include every commit in this range in the release notes — the release covers all work since the last version, across all merged branches.
-4. Use the following structured format for the release notes:
-   ```markdown
-   # Award Tracker v<VERSION>
-
-   Short summary of what this release introduces or fixes.
-
-   ---
-
-   ## 🚀 New Features & Fixes
-   - **Feature/Fix Name**: Detail explanation of the change.
-   - **Another Update**: More details.
-
-   ---
-
-   ## 📁 Commits in this Release
-   * `<COMMIT_HASH>` `<COMMIT_TITLE>`
-   * `<COMMIT_HASH>` `<COMMIT_TITLE>`
-   ```
-5. **DO NOT** stage or commit the release notes. They must remain strictly local and untracked.
-
-### Step D: Run Release Script Asynchronously
-Execute the compilation build script as a background asynchronous process:
-* **On Windows**:
-  ```powershell
-  powershell -ExecutionPolicy Bypass -File release-win.ps1
-  ```
-* **On macOS**:
-  ```bash
-  ./release-macos.sh --universal --codesign
-  ```
-* **Asynchronous Execution**: Launch the command and monitor its status in the background. Do not block the interface synchronously. Provide the user with progress updates.
-
-### Step E: Push to Remote
-Once the release script runs successfully, force push the squashed branch to remote:
-```bash
-git push origin <BRANCH_NAME> --force
-```
+See [docs/release-pipeline.md](docs/release-pipeline.md) for the CI details and
+the repository secrets the release workflow needs.
 
 ---
 
-## 4. Web Scraper Cookie & Session Persistence Recipe
+## 2. Web Scraper Cookie & Session Persistence Recipe
 
 When implementing or modifying web scraper plugins that encounter MFA or authentication persistence issues between **Interactive Login** and **Automated Sync**, always use the following robust session persistence pattern:
 
@@ -355,7 +279,7 @@ subprocess.run(cmd, check=True)
 
 ---
 
-## 5. Debugging Guide & Log Locations
+## 3. Debugging Guide & Log Locations
 
 For troubleshooting scraper issues, SeleniumBase step-by-step debug outputs, screenshots, and application log files are stored under the user AppData directory:
 * **Log Directory**: `%APPDATA%\AwardTracker\logs\` (usually maps to `C:\Users\<Username>\AppData\Roaming\AwardTracker\logs\`).
@@ -364,14 +288,3 @@ For troubleshooting scraper issues, SeleniumBase step-by-step debug outputs, scr
   * These directories contain sequential HTML page source files (`001_open.html`, etc.) and visual screenshots (`001_open.png`, etc.) for every WebDriver action, which are invaluable for debugging CAPTCHA lockouts, layout shifts, or modal prompt blockers.
 
 ---
-
-## 🧭 Summary Checklist for Agent
-- [ ] Staging and checking out a new branch
-- [ ] No remote pushes during coding
-- [ ] User requests push -> Run all tests first (must pass)
-- [ ] User requests push -> Ask about version bump
-- [ ] Update [version.txt](version.txt) and commit if yes
-- [ ] Find merge-base with `main` and squash branch
-- [ ] Create `release_notes_v<VERSION>.md` under [internal_docs](internal_docs) locally (but do NOT stage or commit it) if version was bumped (otherwise skip)
-- [ ] Run release script asynchronously based on OS
-- [ ] Force push to remote

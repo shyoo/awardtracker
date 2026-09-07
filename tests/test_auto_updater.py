@@ -86,6 +86,46 @@ class TestAutoUpdater:
         assert chosen is not None
         assert chosen["name"] == "awardtracker-macos-setup-v1.4.0.dmg"
 
+    def test_select_best_asset_macos_prefers_native_arch(self):
+        """CI publishes one build per architecture; each Mac must get its own."""
+        assets = [
+            {"name": "awardtracker-macos-x86_64-setup-v1.4.0.dmg", "browser_download_url": "https://example.com/intel.dmg", "size": 50000000},
+            {"name": "awardtracker-macos-x86_64-portable-v1.4.0.zip", "browser_download_url": "https://example.com/intel.zip", "size": 48000000},
+            {"name": "awardtracker-macos-arm64-setup-v1.4.0.dmg", "browser_download_url": "https://example.com/arm.dmg", "size": 50000000},
+            {"name": "awardtracker-macos-arm64-portable-v1.4.0.zip", "browser_download_url": "https://example.com/arm.zip", "size": 48000000},
+        ]
+        arm = select_best_asset_for_platform(assets, target_system="Darwin", target_machine="arm64")
+        assert arm["name"] == "awardtracker-macos-arm64-setup-v1.4.0.dmg"
+
+        intel = select_best_asset_for_platform(assets, target_system="Darwin", target_machine="x86_64")
+        assert intel["name"] == "awardtracker-macos-x86_64-setup-v1.4.0.dmg"
+
+    def test_select_best_asset_macos_untagged_release_still_works(self):
+        """Releases cut before the arch split are universal2 and carry no tag."""
+        assets = [
+            {"name": "awardtracker-macos-setup-v1.3.10.dmg", "browser_download_url": "https://example.com/mac.dmg", "size": 50000000},
+            {"name": "awardtracker-macos-portable-v1.3.10.zip", "browser_download_url": "https://example.com/mac.zip", "size": 48000000},
+        ]
+        for machine in ("arm64", "x86_64"):
+            chosen = select_best_asset_for_platform(assets, target_system="Darwin", target_machine=machine)
+            assert chosen["name"] == "awardtracker-macos-setup-v1.3.10.dmg"
+
+    def test_select_best_asset_macos_never_offers_arm64_to_intel(self):
+        """An Intel Mac cannot run arm64, so no asset beats an unrunnable one."""
+        assets = [
+            {"name": "awardtracker-macos-arm64-setup-v1.4.0.dmg", "browser_download_url": "https://example.com/arm.dmg", "size": 50000000},
+            {"name": "awardtracker-win64-setup-v1.4.0.exe", "browser_download_url": "https://example.com/setup.exe", "size": 45000000},
+        ]
+        assert select_best_asset_for_platform(assets, target_system="Darwin", target_machine="x86_64") is None
+
+    def test_select_best_asset_macos_falls_back_to_rosetta(self):
+        """Apple Silicon can run x86_64 under Rosetta 2 if that is all there is."""
+        assets = [
+            {"name": "awardtracker-macos-x86_64-setup-v1.4.0.dmg", "browser_download_url": "https://example.com/intel.dmg", "size": 50000000},
+        ]
+        chosen = select_best_asset_for_platform(assets, target_system="Darwin", target_machine="arm64")
+        assert chosen["name"] == "awardtracker-macos-x86_64-setup-v1.4.0.dmg"
+
     def test_auto_updater_state_and_reset(self):
         mgr = AutoUpdateManager()
         mgr.reset_state()

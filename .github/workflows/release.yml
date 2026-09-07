@@ -1,0 +1,191 @@
+name: Release
+
+# Triggered by the tag that the /deploy skill pushes. Tests on both platforms,
+# builds Windows and macOS artifacts, then publishes a PRERELEASE. A human
+# verifies it and promotes it to latest — updater.py reads /releases/latest,
+# which excludes prereleases, so users are not offered the build until then.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Run tests
+        run: pytest -q
+
+  build-windows:
+    name: Build Windows
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build portable ZIP and setup installer
+        shell: pwsh
+        run: ./release-win.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/awardtracker-win64-portable-*.zip
+            dist/awardtracker-win64-setup-*.exe
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS (${{ matrix.arch }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13   # Intel
+            arch: x86_64
+          - os: macos-14   # Apple Silicon
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Signing identities cannot live in the default keychain on a shared
+      # runner, so build a throwaway one for the life of this job.
+      - name: Import Developer ID certificate
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$MACOS_CERT_P12" ]; then
+            echo "::error::MACOS_CERT_P12 is not set. See docs/release-pipeline.md for the required secrets."
+            exit 1
+          fi
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
+
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security find-identity -p codesigning -v "$KEYCHAIN"
+
+      - name: Build, sign and notarize
+        env:
+          AT_ASSET_ARCH: ${{ matrix.arch }}
+          AT_ASSUME_YES: '1'
+          AT_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          AT_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          AT_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          AT_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          chmod +x release-macos.sh build-macos.sh
+          # Each runner is a single architecture, so no --universal here; the
+          # two legs of this matrix are what cover Intel and Apple Silicon.
+          ./release-macos.sh --codesign
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            dist/awardtracker-macos-${{ matrix.arch }}-portable-*.zip
+            dist/awardtracker-macos-${{ matrix.arch }}-setup-*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Publish prerelease
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+
+          FILE_VERSION="$(tr -d ' \r\n' < version.txt)"
+          if [ "$FILE_VERSION" != "$VERSION" ]; then
+            echo "::error::Tag $TAG does not match version.txt ($FILE_VERSION)."
+            exit 1
+          fi
+
+          NOTES="docs/release_notes/release_notes_v${VERSION}.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "::error::$NOTES is missing. The /deploy skill must commit it with the version bump."
+            exit 1
+          fi
+          if grep -q '^TODO' "$NOTES"; then
+            echo "::error::$NOTES still contains TODO placeholders."
+            exit 1
+          fi
+
+          # x86_64 assets are listed first on purpose: clients running a release
+          # older than the arch split pick the first matching macOS asset, and
+          # x86_64 is the one that runs everywhere thanks to Rosetta 2.
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file "$NOTES" \
+            --prerelease \
+            artifacts/windows/* \
+            artifacts/macos-x86_64/* \
+            artifacts/macos-arm64/*
+
+          echo "### Prerelease $TAG published" >> "$GITHUB_STEP_SUMMARY"
+          echo "Verify a build, then uncheck \"This is a pre-release\" to make it latest." >> "$GITHUB_STEP_SUMMARY"

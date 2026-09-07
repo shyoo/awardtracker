@@ -13,6 +13,23 @@ from models import Provider, Person, Account, Settings
 from plugins.manager import plugin_manager
 from security import security_manager
 
+
+def _months_from_today(months: int):
+    """Return a ("Mon, YYYY", "YYYY-MM-DDT00:00:00Z") pair N months ahead of today.
+
+    ANA's expiration parsing drops dates already in the past, so tests that feed
+    it a "Mon, YYYY" validity string must anchor to the current date instead of a
+    fixed month that eventually expires.
+    """
+    import calendar
+    today = datetime.now()
+    total = today.month - 1 + months
+    year = today.year + total // 12
+    month = total % 12 + 1
+    last_day = calendar.monthrange(year, month)[1]
+    label = f"{calendar.month_abbr[month]}, {year}"
+    return label, f"{year:04d}-{month:02d}-{last_day:02d}T00:00:00Z"
+
 class TestConfig:
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
@@ -1789,13 +1806,17 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertEqual(result_detailed["expiration_date"], "2029-01-31T00:00:00Z")
         self.assertIn("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/referenceDetail_e.jsp", mock_sb_detailed.opened_urls)
 
-        # 6. Test fallback to summary page and column mileage filtering
-        html_summary = """
+        # 6. Test fallback to summary page and column mileage filtering.
+        # The plugin discards already-expired dates, so build the two validity
+        # columns relative to today rather than hard-coding calendar months.
+        empty_col = _months_from_today(12)
+        funded_col = _months_from_today(13)
+        html_summary = f"""
         <table class="ffp_2021_table_mileage-expiration-date">
           <tr>
             <th class="ffp_2021_table_title">Validity</th>
-            <th class="ffp_2021_table_content"><span>Valid until Jul, 2026</span></th>
-            <th class="ffp_2021_table_content"><span>Valid until Aug, 2026</span></th>
+            <th class="ffp_2021_table_content"><span>Valid until {empty_col[0]}</span></th>
+            <th class="ffp_2021_table_content"><span>Valid until {funded_col[0]}</span></th>
           </tr>
           <tr>
             <th>Combined Mileage</th>
@@ -1811,7 +1832,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         mock_sb_fallback = MockSB("", urls_to_html_fallback)
         result_fallback = {"balance": 1200, "status": "Member", "expiration_date": None}
         plugin._fetch_expiration(mock_sb_fallback, result_fallback)
-        self.assertEqual(result_fallback["expiration_date"], "2026-08-31T00:00:00Z")
+        self.assertEqual(result_fallback["expiration_date"], funded_col[1])
         self.assertIn("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/referenceDetail_e.jsp", mock_sb_fallback.opened_urls)
         self.assertIn("https://stmt.cam.ana.co.jp/psz/amcj/jsp/renew/mile/reference_e.jsp", mock_sb_fallback.opened_urls)
 

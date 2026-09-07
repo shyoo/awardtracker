@@ -28,3 +28,14 @@ awardtracker.iconset/
 settings.json
 valuations.json
 logs/
+
+# Test byproduct: a Chrome profile fixture written into the repo root by tests
+mock_profile_path/
+
+# Antigravity workspace-skills junction -> .claude/skills (recreated by mklink)
+.agents/
+
+# Multi Agent Controller local state: project.json holds machine-specific
+# absolute paths, and HANDOFF.md is regenerated as work lands.
+.multi_agent_controller/
+HANDOFF.md

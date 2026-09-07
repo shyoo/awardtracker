@@ -69,7 +69,52 @@ def get_macos_app_bundle_path() -> Optional[str]:
     return None
 
 
-def select_best_asset_for_platform(assets: list, is_win_installer: Optional[bool] = None, target_system: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def _rank_macos_assets(assets: list, machine: str) -> list:
+    """Order macOS assets by how well they suit this Mac's architecture.
+
+    Releases cut by CI carry an architecture tag ("awardtracker-macos-arm64-setup-
+    v1.4.0.dmg") because Intel and Apple Silicon are built on separate runners.
+    Releases cut before that are universal2 and carry no tag at all, so an
+    untagged asset stays a valid choice for either machine.
+
+    Apple Silicon can run an x86_64 build under Rosetta 2, so that is an
+    acceptable last resort there. The reverse is not true: an Intel Mac cannot
+    run arm64 code, so arm64 assets are dropped entirely rather than ranked.
+    """
+    is_arm = "arm" in (machine or "").lower() or (machine or "").lower() == "aarch64"
+
+    ranked = []
+    for asset in assets:
+        name = asset.get("name", "").lower()
+        if not ("macos" in name or "darwin" in name or "mac" in name):
+            continue
+        if not (name.endswith(".dmg") or name.endswith(".zip")):
+            continue
+
+        has_arm = "arm64" in name
+        has_intel = "x86_64" in name or "intel" in name
+
+        if is_arm:
+            if has_arm:
+                rank = 0
+            elif not has_intel:
+                rank = 1  # untagged universal2 build
+            else:
+                rank = 2  # x86_64 via Rosetta 2
+        else:
+            if has_arm:
+                continue  # unrunnable on Intel
+            rank = 0 if has_intel else 1
+
+        ranked.append((rank, asset))
+
+    # Stable sort keeps GitHub's asset order as the tie-break within a rank.
+    ranked.sort(key=lambda pair: pair[0])
+    return ranked
+
+
+def select_best_asset_for_platform(assets: list, is_win_installer: Optional[bool] = None, target_system: Optional[str] = None,
+                                   target_machine: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Selects the optimal release asset dictionary from GitHub's assets list based on the operating system.
     """
@@ -104,21 +149,20 @@ def select_best_asset_for_platform(assets: list, is_win_installer: Optional[bool
                 return a
 
     elif system == "Darwin":
-        # Prefer macOS Setup DMG
-        for a in assets:
-            name = a.get("name", "").lower()
-            if ("macos" in name or "darwin" in name or "mac" in name) and name.endswith(".dmg"):
-                return a
-        for a in assets:
-            name = a.get("name", "").lower()
-            if name.endswith(".dmg"):
-                return a
+        ranked = _rank_macos_assets(assets, target_machine or platform.machine())
 
-        # Fallback to macOS Portable ZIP
-        for a in assets:
-            name = a.get("name", "").lower()
-            if ("macos" in name or "darwin" in name or "mac" in name) and name.endswith(".zip"):
-                return a
+        # Prefer the setup DMG, then the portable ZIP, at the best rank available.
+        for suffix in (".dmg", ".zip"):
+            for _rank, asset in ranked:
+                if asset.get("name", "").lower().endswith(suffix):
+                    return asset
+
+        # Nothing ranked means the release has no asset this Mac can run (for
+        # example an Intel Mac facing an arm64-only release). Report that rather
+        # than falling through to the generic match, which would happily hand
+        # back an unrunnable binary.
+        if any("mac" in a.get("name", "").lower() for a in assets):
+            return None
 
     # Generic fallback: search for anything matching OS name
     for a in assets:

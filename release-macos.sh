@@ -154,25 +154,53 @@ else
     fi
 fi
 
-# Load and validate codesign configuration if codesigning is requested
+# Load and validate codesign configuration if codesigning is requested.
+#
+# Two sources are supported:
+#   1. Environment variables, used by CI where no keychain profile exists:
+#        AT_SIGN_IDENTITY, AT_NOTARY_APPLE_ID, AT_NOTARY_TEAM_ID, AT_NOTARY_PASSWORD
+#   2. codesign_keys.json with "identity" + "keychain_profile" (local developer flow)
+# The environment wins when AT_SIGN_IDENTITY is set.
+NOTARY_ARGS=()
 if [ "$CODESIGN_BUILD" = true ]; then
-    if [ ! -f "codesign_keys.json" ]; then
-        echo -e "${RED}Error: Code signing requested (--codesign) but 'codesign_keys.json' not found.${NC}"
-        exit 1
+    if [ -n "$AT_SIGN_IDENTITY" ]; then
+        IDENTITY="$AT_SIGN_IDENTITY"
+
+        MISSING=""
+        [ -z "$AT_NOTARY_APPLE_ID" ] && MISSING="$MISSING AT_NOTARY_APPLE_ID"
+        [ -z "$AT_NOTARY_TEAM_ID" ] && MISSING="$MISSING AT_NOTARY_TEAM_ID"
+        [ -z "$AT_NOTARY_PASSWORD" ] && MISSING="$MISSING AT_NOTARY_PASSWORD"
+        if [ -n "$MISSING" ]; then
+            echo -e "${RED}Error: AT_SIGN_IDENTITY is set but these are missing:$MISSING${NC}"
+            exit 1
+        fi
+
+        NOTARY_ARGS=(--apple-id "$AT_NOTARY_APPLE_ID" --team-id "$AT_NOTARY_TEAM_ID" --password "$AT_NOTARY_PASSWORD")
+
+        echo -e "${GREEN}Code signing config loaded from environment:${NC}"
+        echo -e "  Identity: $IDENTITY"
+        echo -e "  Notary Apple ID: $AT_NOTARY_APPLE_ID (team $AT_NOTARY_TEAM_ID)"
+    else
+        if [ ! -f "codesign_keys.json" ]; then
+            echo -e "${RED}Error: Code signing requested (--codesign) but neither AT_SIGN_IDENTITY nor 'codesign_keys.json' is present.${NC}"
+            exit 1
+        fi
+
+        # Read values from codesign_keys.json using python (venv is active now)
+        IDENTITY=$(python -c "import json; print(json.load(open('codesign_keys.json')).get('identity', ''))" 2>/dev/null)
+        KEYCHAIN_PROFILE=$(python -c "import json; print(json.load(open('codesign_keys.json')).get('keychain_profile', ''))" 2>/dev/null)
+
+        if [ -z "$IDENTITY" ] || [ -z "$KEYCHAIN_PROFILE" ]; then
+            echo -e "${RED}Error: 'codesign_keys.json' is missing 'identity' or 'keychain_profile'.${NC}"
+            exit 1
+        fi
+
+        NOTARY_ARGS=(--keychain-profile "$KEYCHAIN_PROFILE")
+
+        echo -e "${GREEN}Code signing config loaded successfully:${NC}"
+        echo -e "  Identity: $IDENTITY"
+        echo -e "  Keychain Profile: $KEYCHAIN_PROFILE"
     fi
-
-    # Read values from codesign_keys.json using python (venv is active now)
-    IDENTITY=$(python -c "import json; print(json.load(open('codesign_keys.json')).get('identity', ''))" 2>/dev/null)
-    KEYCHAIN_PROFILE=$(python -c "import json; print(json.load(open('codesign_keys.json')).get('keychain_profile', ''))" 2>/dev/null)
-
-    if [ -z "$IDENTITY" ] || [ -z "$KEYCHAIN_PROFILE" ]; then
-        echo -e "${RED}Error: 'codesign_keys.json' is missing 'identity' or 'keychain_profile'.${NC}"
-        exit 1
-    fi
-
-    echo -e "${GREEN}Code signing config loaded successfully:${NC}"
-    echo -e "  Identity: $IDENTITY"
-    echo -e "  Keychain Profile: $KEYCHAIN_PROFILE"
 fi
 
 # 1.6. Validate Universal2 compatibility if requested
@@ -259,11 +287,17 @@ else:
             echo -e "    or ensure you are downloading universal2 wheels."
         fi
         
-        echo -e "\nWould you like to build anyway? (y/n)"
-        read -r ANSWER
-        if [ "$ANSWER" != "y" ] && [ "$ANSWER" != "Y" ]; then
-            echo -e "${RED}Build aborted by user.${NC}"
-            exit 1
+        # CI has no tty to answer this. AT_ASSUME_YES=1 takes the "build
+        # anyway" branch so an automated release does not hang on stdin.
+        if [ "$AT_ASSUME_YES" = "1" ]; then
+            echo -e "${YELLOW}AT_ASSUME_YES=1 set - continuing without prompting.${NC}"
+        else
+            echo -e "\nWould you like to build anyway? (y/n)"
+            read -r ANSWER
+            if [ "$ANSWER" != "y" ] && [ "$ANSWER" != "Y" ]; then
+                echo -e "${RED}Build aborted by user.${NC}"
+                exit 1
+            fi
         fi
     else
         echo -e "\n${GREEN}✓ Environment is fully compatible with Universal2 builds!${NC}"
@@ -377,7 +411,7 @@ EOF
     ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
     
     echo -e "${YELLOW}Submitting app bundle to Apple notarization service (notarytool)...${NC}"
-    NOTARY_OUTPUT=$(xcrun notarytool submit "$APP_ZIP" --keychain-profile "$KEYCHAIN_PROFILE" --wait 2>&1)
+    NOTARY_OUTPUT=$(xcrun notarytool submit "$APP_ZIP" "${NOTARY_ARGS[@]}" --wait 2>&1)
     NOTARY_RESULT=$?
     echo "$NOTARY_OUTPUT"
     
@@ -388,7 +422,7 @@ EOF
         echo -e "${RED}Error: App bundle notarization failed or was rejected by Apple.${NC}"
         if [ -n "$SUBMISSION_ID" ]; then
             echo -e "${YELLOW}Fetching notarization logs for submission ID: $SUBMISSION_ID...${NC}"
-            xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$KEYCHAIN_PROFILE"
+            xcrun notarytool log "$SUBMISSION_ID" "${NOTARY_ARGS[@]}"
         fi
         exit 1
     fi
@@ -404,6 +438,15 @@ if [ -f "version.txt" ]; then
     if [ -n "$APP_VERSION" ]; then
         VERSION_SUFFIX="-v$APP_VERSION"
     fi
+fi
+
+# Optional architecture tag for release assets. CI builds Intel and Apple
+# Silicon on separate runners, so their artifacts need distinct names
+# (awardtracker-macos-x86_64-setup-v1.4.0.dmg). Unset for local builds, which
+# keeps the historical awardtracker-macos-setup-v1.4.0.dmg naming.
+ARCH_SUFFIX=""
+if [ -n "$AT_ASSET_ARCH" ]; then
+    ARCH_SUFFIX="-$AT_ASSET_ARCH"
 fi
 
 # 3. Create Portable ZIP Distribution
@@ -423,7 +466,7 @@ if [ -f "settings.json" ]; then
     cp "settings.json" "$PORTABLE_DIR/settings.json"
 fi
 
-PORTABLE_ZIP_NAME="awardtracker-macos-portable${VERSION_SUFFIX}.zip"
+PORTABLE_ZIP_NAME="awardtracker-macos${ARCH_SUFFIX}-portable${VERSION_SUFFIX}.zip"
 PORTABLE_ZIP="dist/${PORTABLE_ZIP_NAME}"
 rm -f "$PORTABLE_ZIP"
 (cd dist && zip -r -q "${PORTABLE_ZIP_NAME}" "AwardTracker-Portable")
@@ -448,7 +491,7 @@ cp -R "$APP_PATH" "$DMG_TEMP/"
 # Create standard Applications symlink inside DMG staging area for drag-and-drop installation
 ln -s /Applications "$DMG_TEMP/Applications"
 
-DMG_OUT_NAME="awardtracker-macos-setup${VERSION_SUFFIX}.dmg"
+DMG_OUT_NAME="awardtracker-macos${ARCH_SUFFIX}-setup${VERSION_SUFFIX}.dmg"
 DMG_OUT="dist/${DMG_OUT_NAME}"
 rm -f "$DMG_OUT"
 
@@ -473,7 +516,7 @@ if [ $RESULT -eq 0 ] && [ -f "$DMG_OUT" ]; then
         fi
         
         echo -e "${YELLOW}Submitting setup DMG to Apple notarization service (notarytool)...${NC}"
-        NOTARY_DMG_OUTPUT=$(xcrun notarytool submit "$DMG_OUT" --keychain-profile "$KEYCHAIN_PROFILE" --wait 2>&1)
+        NOTARY_DMG_OUTPUT=$(xcrun notarytool submit "$DMG_OUT" "${NOTARY_ARGS[@]}" --wait 2>&1)
         NOTARY_DMG_RESULT=$?
         echo "$NOTARY_DMG_OUTPUT"
         
@@ -483,7 +526,7 @@ if [ $RESULT -eq 0 ] && [ -f "$DMG_OUT" ]; then
             echo -e "${RED}Error: DMG notarization failed or was rejected by Apple.${NC}"
             if [ -n "$SUBMISSION_DMG_ID" ]; then
                 echo -e "${YELLOW}Fetching notarization logs for submission ID: $SUBMISSION_DMG_ID...${NC}"
-                xcrun notarytool log "$SUBMISSION_DMG_ID" --keychain-profile "$KEYCHAIN_PROFILE"
+                xcrun notarytool log "$SUBMISSION_DMG_ID" "${NOTARY_ARGS[@]}"
             fi
             exit 1
         fi
