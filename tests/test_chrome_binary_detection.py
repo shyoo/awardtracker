@@ -25,6 +25,7 @@ class TestGetChromeBinary(unittest.TestCase):
         """Returns the standard /Applications path when Chrome is installed there."""
         standard = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
         with patch("platform.system", return_value="Darwin"), \
+             patch("subprocess.check_output", side_effect=AssertionError("subprocess should not be called")), \
              patch("os.path.isfile", return_value=True), \
              patch("os.access", return_value=True):
             result = get_chrome_binary()
@@ -44,6 +45,7 @@ class TestGetChromeBinary(unittest.TestCase):
             return path == user_path
 
         with patch("platform.system", return_value="Darwin"), \
+             patch("subprocess.check_output", side_effect=AssertionError("subprocess should not be called")), \
              patch("os.path.isfile", side_effect=fake_isfile), \
              patch("os.access", side_effect=fake_access):
             result = get_chrome_binary()
@@ -60,13 +62,14 @@ class TestGetChromeBinary(unittest.TestCase):
             return path == chromium_path
 
         with patch("platform.system", return_value="Darwin"), \
+             patch("subprocess.check_output", side_effect=AssertionError("subprocess should not be called")), \
              patch("os.path.isfile", side_effect=fake_isfile), \
              patch("os.access", side_effect=fake_access):
             result = get_chrome_binary()
             self.assertEqual(result, chromium_path)
 
     def test_macos_osascript_success(self):
-        """Returns path from osascript when Launch Services resolves it successfully."""
+        """Returns path from osascript when Launch Services resolves it successfully and earlier checks fail."""
         app_path = "/Custom/Applications/Google Chrome.app"
         binary_path = "/Custom/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
@@ -76,15 +79,23 @@ class TestGetChromeBinary(unittest.TestCase):
         def fake_access(path, mode):
             return path == binary_path
 
+        def fake_check_output(cmd, **kwargs):
+            if "mdfind" in cmd[0]:
+                raise subprocess.SubprocessError("Failed")
+            elif "osascript" in cmd[0]:
+                return app_path.encode("utf-8")
+            raise ValueError("Unexpected command")
+
+        import subprocess
         with patch("platform.system", return_value="Darwin"), \
-             patch("subprocess.check_output", return_value=app_path.encode("utf-8")), \
+             patch("subprocess.check_output", side_effect=fake_check_output), \
              patch("os.path.isfile", side_effect=fake_isfile), \
              patch("os.access", side_effect=fake_access):
             result = get_chrome_binary()
             self.assertEqual(result, binary_path)
 
     def test_macos_mdfind_success(self):
-        """Returns path from mdfind when osascript fails but Spotlight succeeds."""
+        """Returns path from mdfind when candidate paths fail and Spotlight succeeds."""
         app_path = "/Volumes/Backup/Applications/Google Chrome.app"
         binary_path = "/Volumes/Backup/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
@@ -95,10 +106,10 @@ class TestGetChromeBinary(unittest.TestCase):
             return path == binary_path
 
         def fake_check_output(cmd, **kwargs):
-            if "osascript" in cmd[0]:
-                raise subprocess.SubprocessError("Failed")
-            elif "mdfind" in cmd[0]:
+            if "mdfind" in cmd[0]:
                 return app_path.encode("utf-8")
+            elif "osascript" in cmd[0]:
+                raise subprocess.SubprocessError("Failed")
             raise ValueError("Unexpected command")
 
         import subprocess

@@ -52,34 +52,7 @@ def get_chrome_binary() -> str | None:
     if system == "Darwin":
         import subprocess
 
-        # 1. Proactively query Launch Services via osascript (most reliable)
-        try:
-            cmd = ["osascript", "-e", 'POSIX path of (path to application "Google Chrome")']
-            app_path = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").strip()
-            if app_path:
-                # Strip any trailing slash first
-                app_path = app_path.rstrip("/")
-                binary_path = f"{app_path}/Contents/MacOS/Google Chrome"
-                if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
-                    return binary_path
-        except Exception:
-            pass
-
-        # 2. Query Spotlight via mdfind as a second dynamic search option
-        try:
-            cmd = ["mdfind", "kMDItemCFBundleIdentifier == 'com.google.Chrome'"]
-            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").strip()
-            if output:
-                for line in output.splitlines():
-                    app_path = line.strip()
-                    if app_path:
-                        app_path = app_path.rstrip("/")
-                        binary_path = f"{app_path}/Contents/MacOS/Google Chrome"
-                        if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
-                            return binary_path
-        except Exception:
-            pass
-
+        # 1. Check well-known installation paths first (instant, non-invasive, no subprocess)
         candidates = [
             # Standard installation in /Applications (most common)
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -94,6 +67,34 @@ def get_chrome_binary() -> str | None:
         for path in candidates:
             if os.path.isfile(path) and os.access(path, os.X_OK):
                 return path
+
+        # 2. Query Spotlight via mdfind as dynamic search option (fast, never launches app)
+        try:
+            cmd = ["mdfind", "kMDItemCFBundleIdentifier == 'com.google.Chrome'"]
+            output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=3).decode("utf-8").strip()
+            if output:
+                for line in output.splitlines():
+                    app_path = line.strip()
+                    if app_path:
+                        app_path = app_path.rstrip("/")
+                        binary_path = f"{app_path}/Contents/MacOS/Google Chrome"
+                        if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
+                            return binary_path
+        except Exception:
+            pass
+
+        # 3. Query Launch Services via osascript as a fallback (with strict timeout)
+        try:
+            cmd = ["osascript", "-e", 'POSIX path of (path to application "Google Chrome")']
+            app_path = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=3).decode("utf-8").strip()
+            if app_path:
+                # Strip any trailing slash first
+                app_path = app_path.rstrip("/")
+                binary_path = f"{app_path}/Contents/MacOS/Google Chrome"
+                if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
+                    return binary_path
+        except Exception:
+            pass
 
     elif system == "Windows":
         import os
