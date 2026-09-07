@@ -16,6 +16,7 @@ jobs:
   test:
     name: pytest (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -38,4 +39,4 @@ jobs:
           pip install pytest "setuptools<81"
 
       - name: Run tests
-        run: pytest -q
+        run: pytest -v --durations=10
