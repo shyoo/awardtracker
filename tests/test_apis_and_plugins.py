@@ -586,6 +586,91 @@ class TestAPIsAndPlugins(unittest.TestCase):
         self.assertEqual(last_act.month, 5)
         self.assertEqual(last_act.day, 15)
 
+    def test_issue_135_hilton_diamond_not_reported_as_gold(self):
+        """
+        Tests Issue #135: A Diamond member was shown as Gold because the raw page source
+        embeds marketing copy / analytics JSON mentioning other tiers ("give the gift of
+        Gold status", "Silver"===u14 ...) that the old regex matched before the real tier.
+        Tier must come from the visible DOM only.
+        """
+        plugin = plugin_manager.get_plugin('hilton')
+
+        class MockSB:
+            def __init__(self, html):
+                self.html = html
+            def get_page_source(self):
+                return self.html
+
+        # Modelled on the user's overview page screenshot plus the marketing/analytics blobs
+        # observed in a real Hilton page dump.
+        html_overview = """
+        <html>
+            <head>
+                <script id="__NEXT_DATA__" type="application/json">
+                {"props":{"marketing":["Give the Gift of Elite Status Sooner. Members will be able to give the gift of Gold status to a family member or friend starting at 40 nights.","Enjoy Silver Status perks"]}}
+                </script>
+                <script>
+                var u14 = getTier(); "Silver"===u14 ? a() : "Gold"===u14 ? b() : "Diamond"===u14 && c();
+                </script>
+            </head>
+            <body>
+                <div class="banner">Faster path to Elite Status and a new exclusive tier, Diamond Reserve. <a href="#">Learn more</a></div>
+                <section class="hero">
+                    <h1>Diamond</h1>
+                    <p>Welcome back, Jane</p>
+                    <p>Hilton Honors # 812345673</p>
+                    <div class="points-card"><p>Total Points</p><p>123,809</p></div>
+                </section>
+                <footer>Earn Gold Status faster with the Hilton Honors card.</footer>
+            </body>
+        </html>
+        """
+        balance, status, _ = plugin._extract_data(MockSB(html_overview))
+        self.assertEqual(balance, 123809)
+        self.assertEqual(status, "Diamond")
+
+        # Nav drawer layout from a real activity-page dump: <p><span>Tier</span> Status</p>
+        # (non-leaf) alongside the same marketing JSON.
+        html_nav_drawer = """
+        <html>
+            <head><script type="application/json">{"copy":"give the gift of Gold status to a family member"}</script></head>
+            <body>
+                <div class="osc-nav-drawer">
+                    <p class="mb-1 text-sm font-bold">Hi, Jane</p>
+                    <p class="mb-1 capitalize"><span class="text-sm font-bold underline">Diamond</span> Status</p>
+                    <p class="mb-1 text-sm">123,809 Points total</p>
+                </div>
+                <div data-testid="userInfo">
+                    <div class="heading--base heading--lg">Hi, Jane</div>
+                    <div class="heading--base heading--sm">Diamond member</div>
+                </div>
+            </body>
+        </html>
+        """
+        _, status, _ = plugin._extract_data(MockSB(html_nav_drawer))
+        self.assertEqual(status, "Diamond")
+
+        # The new Diamond Reserve tier must not collapse to plain Diamond.
+        html_reserve = """
+        <html><body>
+            <div class="banner">A new exclusive tier, Diamond Reserve.</div>
+            <h1>Diamond Reserve</h1>
+            <p>123,809 Points total</p>
+        </body></html>
+        """
+        _, status, _ = plugin._extract_data(MockSB(html_reserve))
+        self.assertEqual(status, "Diamond Reserve")
+
+        # Regression: marketing text alone (no real tier on the page) must not invent a tier.
+        html_no_tier = """
+        <html>
+            <head><script>{"copy":"give the gift of Gold status to a family member"}</script></head>
+            <body><p>123,809 Points total</p><p>Loading your account...</p></body>
+        </html>
+        """
+        _, status, _ = plugin._extract_data(MockSB(html_no_tier))
+        self.assertIsNone(status)
+
     def test_hilton_free_night_award_parsing(self):
         plugin = plugin_manager.get_plugin('hilton')
         self.assertIsNotNone(plugin)

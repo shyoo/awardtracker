@@ -175,13 +175,18 @@ class HiltonHonorsPlugin(ProviderPlugin):
                 r'([\d,]+)\s*hilton\s*honors\s*points',
                 r'([\d,]+)\s*total\s*honors\s*points',
             ]
-            for pat in patterns_points:
-                m = re.search(pat, html, re.IGNORECASE)
-                if m:
-                    clean = m.group(1).replace(",", "").strip()
-                    if clean.isdigit():
-                        balance = int(clean)
-                        break
+            # Try the raw source first, then the visible text with tags collapsed to spaces so a
+            # label and value split across elements (<p>Total Points</p><p>123,809</p>) still match.
+            for haystack in (html, soup.get_text(" ", strip=True)):
+                for pat in patterns_points:
+                    m = re.search(pat, haystack, re.IGNORECASE)
+                    if m:
+                        clean = m.group(1).replace(",", "").strip()
+                        if clean.isdigit():
+                            balance = int(clean)
+                            break
+                if balance is not None:
+                    break
 
             # Fallback to leaf DOM elements if regex didn't match
             if balance is None:
@@ -197,26 +202,7 @@ class HiltonHonorsPlugin(ProviderPlugin):
                                     break
                         
             # 2. Extract Status
-            patterns_status = [
-                r'\b(Diamond|Gold|Silver|Member)\s+Status\b',
-                r'\b(Diamond|Gold|Silver|Member)\s+Tier\b',
-            ]
-            for pat in patterns_status:
-                m = re.search(pat, html, re.IGNORECASE)
-                if m:
-                    status = m.group(1).capitalize()
-                    break
-
-            if not status:
-                for tier in ["Diamond", "Gold", "Silver", "Member"]:
-                    for el in soup.find_all(["p", "span", "h1", "h2", "h3"]):
-                        if not el.find_all(True):
-                            t = el.get_text(strip=True)
-                            if t.lower() == tier.lower() or t.lower() == f"{tier.lower()} member" or t.lower() == f"{tier.lower()} status":
-                                status = tier
-                                break
-                    if status:
-                        break
+            status = self._extract_status(soup)
 
             # 3. Extract Last Activity Date
             last_activity_date = self._extract_last_activity_date(html)
@@ -225,6 +211,47 @@ class HiltonHonorsPlugin(ProviderPlugin):
             pass
             
         return balance, status, last_activity_date
+
+    # Ordered highest-to-lowest so multi-word tiers are matched before their prefix ("Diamond Reserve" before "Diamond").
+    STATUS_TIERS = ["Diamond Reserve", "Diamond", "Gold", "Silver", "Member"]
+
+    def _extract_status(self, soup) -> Optional[str]:
+        """Extracts the member's elite tier from the rendered Hilton DOM.
+
+        Only visible text is considered: the raw page source embeds marketing copy and analytics
+        JSON (e.g. "give the gift of Gold status to a family member") that previously caused a
+        Diamond member to be reported as Gold (Issue #135). Known layouts:
+          * overview hero:      <h1>Diamond</h1>
+          * nav drawer:         <p class="capitalize"><span>Silver</span> Status</p>
+          * activity header:    <div class="heading--sm">Silver member</div>
+        """
+        import re
+
+        visible = BeautifulSoup(str(soup), "html.parser")
+        for tag in visible.find_all(["script", "style", "noscript", "template"]):
+            tag.decompose()
+
+        def _match_exact(text: str) -> Optional[str]:
+            t = re.sub(r'\s+', ' ', text).strip().lower()
+            for tier in self.STATUS_TIERS:
+                tl = tier.lower()
+                if t in (tl, f"{tl} status", f"{tl} member", f"{tl} tier"):
+                    return tier
+            return None
+
+        # Pass A: an element whose entire text is the tier label (hero heading, nav drawer, activity header).
+        for el in visible.find_all(["h1", "h2", "h3", "h4", "p", "span", "div"]):
+            found = _match_exact(el.get_text(" ", strip=True))
+            if found:
+                return found
+
+        # Pass B: "<Tier> Status" / "<Tier> Tier" phrase anywhere in the visible text.
+        text = visible.get_text(" ", strip=True)
+        tiers_alt = "|".join(re.escape(t) for t in self.STATUS_TIERS)
+        m = re.search(r'\b(' + tiers_alt + r')\s+(?:Status|Tier)\b', text, re.IGNORECASE)
+        if m:
+            return m.group(1).title()
+        return None
 
     def _extract_member_number(self, html: str) -> Optional[str]:
         """Extracts Hilton Honors membership number from the account page HTML."""
