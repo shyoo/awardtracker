@@ -239,3 +239,41 @@ If you experience synchronization issues or sync tasks fail repeatedly due to st
   - **Include general debug logs**: Packages `awardtracker_debug.log` and all run-specific `run.log` files.
   - **Include HTML source code & page screenshots**: Packages all page screenshots and markup dumps (only available if Debug Mode was enabled, unchecked by default to save bandwidth).
   - Click **Download Diagnostic Zip** to download a compressed report that you can upload directly to GitHub issues for easier developer debugging.
+
+---
+
+## 🩺 Troubleshooting
+
+### Google Chrome cannot be found or a browser window will not open
+
+Award Tracker uses Google Chrome for account synchronization and interactive
+login. Install the current version of [Google Chrome](https://www.google.com/chrome/)
+and restart Award Tracker. If Chrome is already installed, close all Chrome
+windows and start Award Tracker again. Be sure to run Award Tracker from the
+same Windows or macOS user account where Chrome is installed.
+
+### A sync fails because the provider requires MFA, a captcha, or another login step
+
+Use **Interactive Login** (the 🔒 button) for the affected account. Let Award
+Tracker fill in the credentials, then submit the login form and complete any MFA
+or captcha yourself. After the site finishes signing you in, Award Tracker
+captures the session for later automated syncs. If the session expires or the
+provider asks you to sign in again, repeat Interactive Login.
+
+### A provider keeps failing to sync
+
+Loyalty-program websites can change without notice. Enable **Diagnostic Debug
+Mode** under **Settings → Diagnostics & Debugging**, reproduce the problem, and
+then use **Export Diagnostic Bug Report** to download a zip file for a GitHub
+issue. Leave **Mask Sensitive Information** enabled unless a maintainer asks
+otherwise.
+
+For manual inspection, the application log is located at:
+
+* **Windows**: `%APPDATA%\AwardTracker\logs\awardtracker_debug.log`
+* **macOS**: `~/Library/Application Support/AwardTracker/logs/awardtracker_debug.log`
+
+When Diagnostic Debug Mode is enabled, the same log directory also contains a
+dated folder for each browser run with step-by-step logs, screenshots, and HTML
+snapshots. Include the relevant diagnostic zip or log details when reporting an
+issue.
