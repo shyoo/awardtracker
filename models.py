@@ -13,6 +13,18 @@ class Provider(db.Model):
     plugin_name = db.Column(db.String(128), unique=True, nullable=False)
     enabled = db.Column(db.Boolean, default=True)
 
+    @property
+    def category(self):
+        from plugins.base import PROVIDER_CATEGORIES
+        try:
+            from plugins.manager import plugin_manager
+            plugin = plugin_manager.get_plugin(self.plugin_name)
+            if plugin and hasattr(plugin, 'category') and plugin.category:
+                return plugin.category
+        except Exception:
+            pass
+        return PROVIDER_CATEGORIES.get(self.plugin_name, "Other")
+
 class Person(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
@@ -72,6 +84,19 @@ class Account(db.Model):
         if self.is_manual and custom:
             return custom
         return self.provider.name
+
+    @property
+    def category(self):
+        custom_cat = self.extra_metadata.get('category')
+        if custom_cat:
+            return custom_cat
+        if self.provider:
+            return self.provider.category
+        return "Other"
+
+    @property
+    def category_key(self):
+        return self.category.lower().replace(' ', '_')
 
     @property
     def membership_number(self):

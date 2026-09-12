@@ -42,6 +42,10 @@
                        border-color: {{ account.person.color if account.person else '#64748b' }}30;">
             {{ account.person.name if account.person else 'Unassigned' }}
           </span>
+          <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200" title="{{ account.category }}">
+            <span>{{ get_category_icon(account.category) }}</span>
+            <span>{{ account.category }}</span>
+          </span>
           {% if account.status %}
           <span class="inline-flex items-center rounded-md bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 ring-1 ring-inset ring-blue-700/10">{{ account.status }}</span>
           {% endif %}

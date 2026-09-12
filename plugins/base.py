@@ -789,6 +789,49 @@ def add_months(source_date, months):
     ][month - 1])
     return datetime(year, month, day, source_date.hour, source_date.minute, source_date.second)
 
+PROVIDER_CATEGORIES = {
+    # Airlines
+    'aircanada': 'Airlines',
+    'alaska': 'Airlines',
+    'american': 'Airlines',
+    'ana': 'Airlines',
+    'asiana': 'Airlines',
+    'avianca': 'Airlines',
+    'british': 'Airlines',
+    'delta': 'Airlines',
+    'eva': 'Airlines',
+    'jal': 'Airlines',
+    'jetblue': 'Airlines',
+    'korean': 'Airlines',
+    'southwest': 'Airlines',
+    'united': 'Airlines',
+    'virgin': 'Airlines',
+
+    # Hotels
+    'caesars': 'Hotels',
+    'hilton': 'Hotels',
+    'hyatt': 'Hotels',
+    'ihg': 'Hotels',
+    'marriott': 'Hotels',
+    'wyndham': 'Hotels',
+
+    # Car Rentals
+    'enterprise': 'Car Rentals',
+    'hertz': 'Car Rentals',
+    'national': 'Car Rentals',
+
+    # Credit Cards
+    'chase': 'Credit Cards',
+    'amex': 'Credit Cards',
+    'citi': 'Credit Cards',
+    'capitalone': 'Credit Cards',
+    'wellsfargo': 'Credit Cards',
+    'bilt': 'Credit Cards',
+
+    # Other
+    'manual': 'Other',
+}
+
 class ProviderPlugin(ABC):
     @property
     @abstractmethod
@@ -807,6 +850,11 @@ class ProviderPlugin(ABC):
     def default_cpp(self) -> float:
         """Default cents-per-point (CPP) valuation for this rewards program."""
         pass
+
+    @property
+    def category(self) -> str:
+        """Category of the loyalty program: 'Airlines', 'Hotels', 'Credit Cards', 'Car Rentals', or 'Other'."""
+        return PROVIDER_CATEGORIES.get(self.plugin_id, "Other")
 
     @property
     def homepage_url(self) -> str:

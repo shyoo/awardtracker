@@ -60,6 +60,21 @@
             <input type="text" name="custom_program_name" id="custom_program_name" value="{{ account.extra_metadata.get('custom_program_name', '') }}" required class="block w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
           </div>
         </div>
+
+        <!-- Custom Category -->
+        <div class="mt-4">
+          <label for="custom_category" class="block text-sm font-semibold text-slate-700">Category</label>
+          <p class="mt-1 text-xs text-slate-400">The rewards category for this program.</p>
+          <div class="mt-2">
+            <select name="custom_category" id="custom_category" class="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary sm:text-sm shadow-sm transition-shadow">
+              <option value="Other" {% if account.category == 'Other' %}selected{% endif %}>Other / Custom</option>
+              <option value="Airlines" {% if account.category == 'Airlines' %}selected{% endif %}>Airlines</option>
+              <option value="Hotels" {% if account.category == 'Hotels' %}selected{% endif %}>Hotels</option>
+              <option value="Credit Cards" {% if account.category == 'Credit Cards' %}selected{% endif %}>Credit Cards</option>
+              <option value="Car Rentals" {% if account.category == 'Car Rentals' %}selected{% endif %}>Car Rentals</option>
+            </select>
+          </div>
+        </div>
         {% endif %}
 
         <!-- Custom Expiration Date -->
