@@ -244,6 +244,33 @@ If you experience synchronization issues or sync tasks fail repeatedly due to st
 
 ## 🩺 Troubleshooting
 
+### Award Tracker will not start on an Apple Silicon Mac (M1/M2/M3/M4 or newer)
+
+Symptoms include the app quitting immediately, the tray icon never appearing, or
+macOS reporting that the application is damaged or cannot be opened. On recent
+Apple Silicon Macs this is almost always because **Rosetta 2 is not installed**.
+Macs shipped with the M4 generation (and newer) no longer include Rosetta 2 out
+of the box, and it is required whenever any Intel (x86_64) component is
+involved — including the Intel build of Award Tracker, which the auto-updater
+falls back to when no native arm64 asset is available for a release.
+
+Install Rosetta 2 from Terminal, then relaunch Award Tracker:
+
+```bash
+softwareupdate --install-rosetta
+```
+
+Add `--agree-to-license` to skip the interactive license prompt:
+
+```bash
+softwareupdate --install-rosetta --agree-to-license
+```
+
+The installation only has to be done once per Mac. If Award Tracker still does
+not start afterwards, confirm you downloaded the macOS build for your
+architecture (`arm64` for Apple Silicon, `x86_64` for Intel) and check the log
+file listed under *A provider keeps failing to sync* below.
+
 ### Google Chrome cannot be found or a browser window will not open
 
 Award Tracker uses Google Chrome for account synchronization and interactive
