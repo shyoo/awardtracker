@@ -202,6 +202,16 @@ def format_time_remaining(days):
             parts.append(f"{rem_days} day{'s' if rem_days != 1 else ''}")
         return ", ".join(parts) + " remaining"
 
+def get_category_icon(category_name):
+    icons = {
+        'Airlines': '✈️',
+        'Hotels': '🏨',
+        'Credit Cards': '💳',
+        'Car Rentals': '🚗',
+        'Other': '✨'
+    }
+    return icons.get(category_name, '✨')
+
 def _persist_fetch_result(account, provider, data):
     """
     Applies scraped plugin data (balance, status, expiration, certificates) to an
@@ -501,6 +511,7 @@ def create_app(config_class=Config):
             get_provider_homepage_url=get_provider_homepage_url,
             get_interactive_login_hint=get_interactive_login_hint,
             get_interactive_login_instructions=get_interactive_login_instructions,
+            get_category_icon=get_category_icon,
             time_ago=time_ago,
             app_version=app.config.get('APP_VERSION', '1.2.2'),
             update_info=get_update_info(),
@@ -643,13 +654,24 @@ def create_app(config_class=Config):
             flagged_tooltip = f"No items expiring soon (within {threshold_days} days)."
 
         group_mode = request.args.get('group') or request.cookies.get('group_mode', 'program')
+        if group_mode not in ('program', 'person', 'category'):
+            group_mode = 'program'
+
+        active_category = request.args.get('category') or request.cookies.get('category_filter', 'all')
         
         # Group and sort accounts dynamically, ensuring Custom Program Entry (manual) is at the absolute end
         from collections import defaultdict
         groups_dict = defaultdict(list)
         for acc in accounts:
-            key = acc.group_person_name if group_mode == 'person' else acc.group_provider_name
+            if group_mode == 'person':
+                key = acc.group_person_name
+            elif group_mode == 'category':
+                key = acc.category
+            else:
+                key = acc.group_provider_name
             groups_dict[key].append(acc)
+
+        CATEGORY_ORDER = ['Airlines', 'Hotels', 'Credit Cards', 'Car Rentals', 'Other']
 
         if group_mode == 'person':
             sorted_groups = []
@@ -660,6 +682,23 @@ def create_app(config_class=Config):
                     key=lambda a: (a.provider.plugin_name == 'manual', a.provider.name.lower())
                 )
                 sorted_groups.append((g_name, g_accounts))
+            grouped = sorted_groups
+        elif group_mode == 'category':
+            sorted_groups = []
+            for cat_name in CATEGORY_ORDER:
+                if cat_name in groups_dict:
+                    g_accounts = sorted(
+                        groups_dict[cat_name],
+                        key=lambda a: (a.provider.plugin_name == 'manual', a.program_name.lower())
+                    )
+                    sorted_groups.append((cat_name, g_accounts))
+            for cat_name in sorted(groups_dict.keys()):
+                if cat_name not in CATEGORY_ORDER:
+                    g_accounts = sorted(
+                        groups_dict[cat_name],
+                        key=lambda a: (a.provider.plugin_name == 'manual', a.program_name.lower())
+                    )
+                    sorted_groups.append((cat_name, g_accounts))
             grouped = sorted_groups
         else:
             sorted_groups = []
@@ -672,11 +711,47 @@ def create_app(config_class=Config):
             sorted_groups = sorted(sorted_groups, key=lambda x: (x[2], x[0].lower()))
             grouped = [(x[0], x[1]) for x in sorted_groups]
 
+        # Calculate group totals (useful for category mode and header summaries)
+        group_totals = {}
+        for g_name, g_accounts in grouped:
+            group_totals[g_name] = {
+                'points': sum(a.balance or 0 for a in g_accounts),
+                'value': sum(a.value_usd or 0.0 for a in g_accounts),
+                'count': len(g_accounts)
+            }
+
+        # Category tab items for category filtering
+        category_tab_items = []
+        for cat in CATEGORY_ORDER:
+            cat_count = sum(1 for a in accounts if a.category == cat)
+            if cat_count > 0:
+                category_tab_items.append({
+                    'name': cat,
+                    'key': cat.lower().replace(' ', '_'),
+                    'count': cat_count,
+                    'icon': get_category_icon(cat)
+                })
+        existing_cat_names = {c['name'] for c in category_tab_items}
+        for a in accounts:
+            if a.category not in existing_cat_names:
+                cat = a.category
+                cat_count = sum(1 for acc in accounts if acc.category == cat)
+                category_tab_items.append({
+                    'name': cat,
+                    'key': cat.lower().replace(' ', '_'),
+                    'count': cat_count,
+                    'icon': get_category_icon(cat)
+                })
+                existing_cat_names.add(cat)
+
         active_certificates = Certificate.query.order_by(Certificate.expiration_date.asc()).all()
 
         resp = make_response(render_template('dashboard.html',
                                accounts=accounts,
                                grouped=grouped,
+                               group_totals=group_totals,
+                               category_tab_items=category_tab_items,
+                               active_category=active_category,
                                total_accounts=total_accounts,
                                total_points=total_points,
                                expiring_soon=expiring_soon,
@@ -688,6 +763,8 @@ def create_app(config_class=Config):
         
         if request.args.get('group'):
             resp.set_cookie('group_mode', group_mode, max_age=60*60*24*30) # 30 days
+        if request.args.get('category'):
+            resp.set_cookie('category_filter', active_category, max_age=60*60*24*30) # 30 days
             
         return resp
 
@@ -881,6 +958,9 @@ def create_app(config_class=Config):
                     metadata = {}
                     if custom_program_name:
                         metadata['custom_program_name'] = custom_program_name
+                    custom_category = request.form.get('custom_category')
+                    if custom_category and custom_category != 'Other':
+                        metadata['category'] = custom_category
                     membership_number = request.form.get('membership_number', '').strip()
                     if membership_number:
                         metadata['membership_number'] = membership_number
@@ -966,10 +1046,24 @@ def create_app(config_class=Config):
             providers_raw,
             key=lambda p: (p.plugin_name == 'manual', p.name.lower())
         )
+        CATEGORY_ORDER = ['Airlines', 'Hotels', 'Credit Cards', 'Car Rentals', 'Other']
+        providers_by_category = {}
+        for cat in CATEGORY_ORDER:
+            providers_by_category[cat] = []
+        for p in providers:
+            cat = p.category
+            if cat not in providers_by_category:
+                providers_by_category[cat] = []
+            providers_by_category[cat].append(p)
+
         people_list = Person.query.all()
         # Mark which providers are manual so the template can set data-manual attributes
         manual_plugin_ids = list(MANUAL_PLUGIN_IDS)
-        return render_template('add_account.html', providers=providers, people=people_list, manual_plugin_ids=manual_plugin_ids)
+        return render_template('add_account.html',
+                               providers=providers,
+                               providers_by_category=providers_by_category,
+                               people=people_list,
+                               manual_plugin_ids=manual_plugin_ids)
 
     @app.route('/accounts/<int:account_id>/update-balance', methods=['POST'])
     def update_balance(account_id):
@@ -1386,6 +1480,9 @@ def create_app(config_class=Config):
                 custom_program_name = request.form.get('custom_program_name')
                 if custom_program_name:
                     metadata['custom_program_name'] = custom_program_name
+                custom_category = request.form.get('custom_category')
+                if custom_category and custom_category != 'Other':
+                    metadata['category'] = custom_category
 
             membership_number = request.form.get('membership_number', '').strip()
             if membership_number:
