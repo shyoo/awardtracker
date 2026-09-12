@@ -264,5 +264,134 @@ class TestCategorizedView(unittest.TestCase):
             for prov_name, cat in PROVIDER_CATEGORIES.items():
                 self.assertIn(cat, icons)
 
+    def test_navigation_between_modes_preserves_user_specified_category(self):
+        """Test that switching between group modes preserves whatever category the user specified.
+        Specifically ensures it does not get pinned to 'hotels' when switching modes."""
+        acc_aa = Account(
+            provider_id=self.prov_aa.id,
+            person_id=self.person.id,
+            username="aa_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            balance=10000
+        )
+        acc_marriott = Account(
+            provider_id=self.prov_marriott.id,
+            person_id=self.person.id,
+            username="marriott_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            balance=20000
+        )
+        db.session.add_all([acc_aa, acc_marriott])
+        db.session.commit()
+
+        # 1. User specifies category=all on By Person mode -> navigates to By Program with category=all
+        res = self.client.get('/?group=person&category=all')
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode()
+        self.assertIn('group-btn-program', html)
+        self.assertIn('category=all', html)
+        self.assertIn("category_filter=all", str(res.headers))
+
+        res_prog = self.client.get('/?group=program&category=all')
+        self.assertEqual(res_prog.status_code, 200)
+        html_prog = res_prog.data.decode()
+        self.assertIn('By Program', html_prog)
+        self.assertIn('category=all', html_prog)
+        self.assertIn("category_filter=all", str(res_prog.headers))
+
+        # 2. User specifies category=airlines on By Person mode -> navigates to By Program with category=airlines
+        res_air_person = self.client.get('/?group=person&category=airlines')
+        self.assertEqual(res_air_person.status_code, 200)
+        self.assertIn("category_filter=airlines", str(res_air_person.headers))
+        self.assertIn('category=airlines', res_air_person.data.decode())
+
+        res_air_prog = self.client.get('/?group=program&category=airlines')
+        self.assertEqual(res_air_prog.status_code, 200)
+        self.assertIn("category_filter=airlines", str(res_air_prog.headers))
+        self.assertIn('category=airlines', res_air_prog.data.decode())
+
+        # 3. User previously had category=hotels, then changes to category=all, and navigates modes
+        # Must stay 'all' and NOT revert/pin to 'hotels'
+        res_hotel = self.client.get('/?group=person&category=hotels')
+        self.assertIn("category_filter=hotels", str(res_hotel.headers))
+
+        res_all_switch = self.client.get('/?group=program&category=all')
+        self.assertEqual(res_all_switch.status_code, 200)
+        self.assertIn("category_filter=all", str(res_all_switch.headers))
+        html_switch = res_all_switch.data.decode()
+        # Ensure mode buttons now point to category=all, not hotels
+        self.assertIn('id="group-btn-person" href="?group=person&category=all"', html_switch)
+        self.assertIn('id="group-btn-program" href="?group=program&category=all"', html_switch)
+        self.assertIn('id="group-btn-category" href="?group=category&category=all"', html_switch)
+
+        # 4. User navigates with category=hotels -> must stay 'hotels'
+        res_hotel_prog = self.client.get('/?group=program&category=hotels')
+        self.assertEqual(res_hotel_prog.status_code, 200)
+        self.assertIn("category_filter=hotels", str(res_hotel_prog.headers))
+        html_hp = res_hotel_prog.data.decode()
+        self.assertIn('id="group-btn-person" href="?group=person&category=hotels"', html_hp)
+        self.assertIn('id="group-btn-category" href="?group=category&category=hotels"', html_hp)
+
+    def test_cookie_fallback_preserves_category_across_modes(self):
+        """Test that navigating without explicit category query param preserves the cookie's category."""
+        acc_aa = Account(
+            provider_id=self.prov_aa.id,
+            person_id=self.person.id,
+            username="aa_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            balance=10000
+        )
+        acc_marriott = Account(
+            provider_id=self.prov_marriott.id,
+            person_id=self.person.id,
+            username="marriott_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            balance=20000
+        )
+        db.session.add_all([acc_aa, acc_marriott])
+        db.session.commit()
+
+        # Set cookie to airlines
+        self.client.set_cookie('category_filter', 'airlines')
+        res = self.client.get('/?group=person')
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode()
+        self.assertIn('category=airlines', html)
+        self.assertIn("category_filter=airlines", str(res.headers))
+
+        # Switch to program mode without category in URL; should keep airlines from cookie
+        res_prog = self.client.get('/?group=program')
+        self.assertEqual(res_prog.status_code, 200)
+        html_prog = res_prog.data.decode()
+        self.assertIn('category=airlines', html_prog)
+        self.assertIn("category_filter=airlines", str(res_prog.headers))
+
+    def test_category_case_normalization_and_invalid_fallback(self):
+        """Test case normalization and fallback to 'all' for invalid categories."""
+        acc_aa = Account(
+            provider_id=self.prov_aa.id,
+            person_id=self.person.id,
+            username="aa_user",
+            password_encrypted=security_manager.encrypt("pass"),
+            balance=10000
+        )
+        db.session.add(acc_aa)
+        db.session.commit()
+
+        # Mixed/upper case should be normalized
+        res = self.client.get('/?category=Airlines')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("category_filter=airlines", str(res.headers))
+
+        res_upper = self.client.get('/?category=ALL')
+        self.assertEqual(res_upper.status_code, 200)
+        self.assertIn("category_filter=all", str(res_upper.headers))
+
+        # Unknown/invalid category should fall back to 'all'
+        res_inv = self.client.get('/?category=nonexistent_xyz')
+        self.assertEqual(res_inv.status_code, 200)
+        self.assertIn("category_filter=all", str(res_inv.headers))
+
+
 if __name__ == '__main__':
     unittest.main()

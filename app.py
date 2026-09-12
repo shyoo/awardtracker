@@ -657,7 +657,8 @@ def create_app(config_class=Config):
         if group_mode not in ('program', 'person', 'category'):
             group_mode = 'program'
 
-        active_category = request.args.get('category') or request.cookies.get('category_filter', 'all')
+        raw_cat = request.args.get('category') or request.cookies.get('category_filter', 'all')
+        active_category = raw_cat.strip().lower() if raw_cat else 'all'
         
         # Group and sort accounts dynamically, ensuring Custom Program Entry (manual) is at the absolute end
         from collections import defaultdict
@@ -744,6 +745,10 @@ def create_app(config_class=Config):
                 })
                 existing_cat_names.add(cat)
 
+        valid_category_keys = {c['key'] for c in category_tab_items}
+        if active_category != 'all' and active_category not in valid_category_keys:
+            active_category = 'all'
+
         active_certificates = Certificate.query.order_by(Certificate.expiration_date.asc()).all()
 
         resp = make_response(render_template('dashboard.html',
@@ -763,8 +768,7 @@ def create_app(config_class=Config):
         
         if request.args.get('group'):
             resp.set_cookie('group_mode', group_mode, max_age=60*60*24*30) # 30 days
-        if request.args.get('category'):
-            resp.set_cookie('category_filter', active_category, max_age=60*60*24*30) # 30 days
+        resp.set_cookie('category_filter', active_category, max_age=60*60*24*30) # 30 days
             
         return resp
 

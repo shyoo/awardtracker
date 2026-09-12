@@ -10,10 +10,10 @@
     
     <!-- Sync All and Grouping -->
     <div class="mt-4 sm:ml-16 sm:mt-0 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-      <div class="flex rounded-md shadow-sm ring-1 ring-inset ring-slate-300 bg-white overflow-hidden">
-        <a href="?group=program{% if active_category and active_category != 'all' %}&category={{ active_category }}{% endif %}" class="{% if group_mode == 'program' %}bg-primary text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %} px-3 py-1.5 text-sm font-semibold transition-colors">By Program</a>
-        <a href="?group=person{% if active_category and active_category != 'all' %}&category={{ active_category }}{% endif %}" class="{% if group_mode == 'person' %}bg-primary text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %} px-3 py-1.5 text-sm font-semibold transition-colors border-l border-slate-300">By Person</a>
-        <a href="?group=category{% if active_category and active_category != 'all' %}&category={{ active_category }}{% endif %}" class="{% if group_mode == 'category' %}bg-primary text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %} px-3 py-1.5 text-sm font-semibold transition-colors border-l border-slate-300">By Category</a>
+      <div class="flex rounded-md shadow-sm ring-1 ring-inset ring-slate-300 bg-white overflow-hidden" id="groupModeSwitcher">
+        <a id="group-btn-program" href="?group=program&category={{ active_category }}" onclick="navigateGroupMode(event, 'program')" class="{% if group_mode == 'program' %}bg-primary text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %} px-3 py-1.5 text-sm font-semibold transition-colors">By Program</a>
+        <a id="group-btn-person" href="?group=person&category={{ active_category }}" onclick="navigateGroupMode(event, 'person')" class="{% if group_mode == 'person' %}bg-primary text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %} px-3 py-1.5 text-sm font-semibold transition-colors border-l border-slate-300">By Person</a>
+        <a id="group-btn-category" href="?group=category&category={{ active_category }}" onclick="navigateGroupMode(event, 'category')" class="{% if group_mode == 'category' %}bg-primary text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %} px-3 py-1.5 text-sm font-semibold transition-colors border-l border-slate-300">By Category</a>
       </div>
       
       <button id="syncAllBtn" class="flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 transition-colors">
@@ -962,8 +962,25 @@
   // Category Filtering and Section Toggling
   let currentCategoryFilter = '{{ active_category }}';
 
+  function updateGroupModeLinks(catKey) {
+    const cat = catKey || 'all';
+    ['program', 'person', 'category'].forEach(mode => {
+      const btn = document.getElementById('group-btn-' + mode);
+      if (btn) {
+        btn.href = '?group=' + encodeURIComponent(mode) + '&category=' + encodeURIComponent(cat);
+      }
+    });
+  }
+
+  function navigateGroupMode(event, mode) {
+    if (event) event.preventDefault();
+    const cat = currentCategoryFilter || 'all';
+    window.location.href = '?group=' + encodeURIComponent(mode) + '&category=' + encodeURIComponent(cat);
+  }
+
   function setCategoryFilter(catKey) {
     currentCategoryFilter = catKey;
+    updateGroupModeLinks(catKey);
     
     // Update active tab buttons
     document.querySelectorAll('.category-tab-btn').forEach(btn => {
@@ -984,7 +1001,6 @@
     });
 
     const isCategoryGroupMode = {{ 'true' if group_mode == 'category' else 'false' }};
-    const isPersonGroupMode = {{ 'true' if group_mode == 'person' else 'false' }};
 
     let totalVisibleAccounts = 0;
 
@@ -998,7 +1014,8 @@
           card.classList.add('hidden');
         }
       });
-    } else if (isPersonGroupMode) {
+    } else {
+      // By Person and By Program group modes: filter individual account rows
       document.querySelectorAll('.group-card').forEach(card => {
         let visibleInCard = 0;
         card.querySelectorAll('.account-row').forEach(row => {
@@ -1015,17 +1032,6 @@
         if (countSpan) countSpan.textContent = visibleInCard;
         if (visibleInCard > 0) {
           card.classList.remove('hidden');
-        } else {
-          card.classList.add('hidden');
-        }
-      });
-    } else {
-      // By Program group mode
-      document.querySelectorAll('.group-card').forEach(card => {
-        const cardCat = card.getAttribute('data-group-category');
-        if (catKey === 'all' || cardCat === catKey) {
-          card.classList.remove('hidden');
-          totalVisibleAccounts += card.querySelectorAll('.account-row').length;
         } else {
           card.classList.add('hidden');
         }
@@ -1084,6 +1090,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    updateGroupModeLinks(currentCategoryFilter);
     if (currentCategoryFilter && currentCategoryFilter !== 'all') {
       setCategoryFilter(currentCategoryFilter);
     }
