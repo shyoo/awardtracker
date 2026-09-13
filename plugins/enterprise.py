@@ -16,6 +16,14 @@ class EnterprisePlugin(ProviderPlugin):
         return "enterprise"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.enterprise.com/en/loyalty-program.html"
+
+    @property
+    def logo_domain(self) -> str:
+        return "enterprise.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.0
 

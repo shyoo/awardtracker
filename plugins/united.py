@@ -1,10 +1,23 @@
 from typing import Dict, Any, Tuple, Optional
-from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
-from seleniumbase import SB
 from bs4 import BeautifulSoup
-import time
 
-class UnitedAirlinesPlugin(ProviderPlugin):
+from .base import PluginError, InteractionRequiredError
+from .browser_plugin import BrowserPlugin, log
+
+
+class UnitedAirlinesPlugin(BrowserPlugin):
+    # MyUnited shows the balance when signed in and redirects to the login form otherwise.
+    login_url = "https://www.united.com/en/us/myunited"
+    club_pass_url = "https://www.united.com/en/us/mileageplus/unitedclubpass"
+    username_selector = "input#MPIDEmailField, input[name='MileagePlusLogin.MPIDEmailField'], input#username, input[name='username']"
+    password_selector = "input#password, input[name='password']"
+    page_settle_seconds = 12
+    post_login_settle_seconds = 12
+    post_interactive_settle_seconds = 3
+
+    MFA_MESSAGE = ("United Airlines requested a 6-digit passcode verification (MFA). Please run Interactive "
+                   "Login and check \"Don't require verification code again.\" to resolve this.")
+
     @property
     def name(self) -> str:
         return "United Airlines"
@@ -12,6 +25,14 @@ class UnitedAirlinesPlugin(ProviderPlugin):
     @property
     def plugin_id(self) -> str:
         return "united"
+
+    @property
+    def homepage_url(self) -> str:
+        return "https://www.united.com/ual/en/us/fly/mileageplus.html"
+
+    @property
+    def logo_domain(self) -> str:
+        return "united.com"
 
     @property
     def default_cpp(self) -> float:
@@ -132,7 +153,7 @@ class UnitedAirlinesPlugin(ProviderPlugin):
             
         return mfa_visible or mfa_text_detected
 
-    def _fill_login_form(self, sb, username: str, password: str, auto_submit: bool = True) -> None:
+    def fill_login_form(self, sb, username: str, password: str, auto_submit: bool = True) -> None:
         """Fills the United Airlines login form and submits, supporting both new 2-step and older 1-step pages."""
         user_selector = "input#MPIDEmailField, input[name='MileagePlusLogin.MPIDEmailField'], input#username, input[name='username']"
         pass_selector = "input#password, input[name='password']"
@@ -142,11 +163,11 @@ class UnitedAirlinesPlugin(ProviderPlugin):
         # 0. Check for "Switch accounts" screen (Remembered / Masked Username state)
         if sb.is_element_visible(switch_selector):
             try:
-                print("Remembered account detected. Clicking Switch accounts to enter fresh credentials...")
+                log("Remembered account detected. Clicking Switch accounts to enter fresh credentials...")
                 sb.click(switch_selector)
                 sb.sleep(3)
             except Exception as e:
-                print(f"Error clicking switch account button: {e}")
+                log(f"Error clicking switch account button: {e}")
                 
         # 1. Step 1: Username
         if sb.is_element_visible(user_selector):
@@ -183,7 +204,7 @@ class UnitedAirlinesPlugin(ProviderPlugin):
                         sb.type(user_selector, "\n")
                         sb.sleep(4)
             except Exception as e:
-                print(f"Error filling username step: {e}")
+                log(f"Error filling username step: {e}")
         
         # 2. Step 2: Password
         # Wait up to 15 seconds for the password field to be rendered/visible
@@ -224,7 +245,7 @@ class UnitedAirlinesPlugin(ProviderPlugin):
             if sb.is_element_visible(remember_selector):
                 remember_el = sb.find_element(remember_selector)
                 if remember_el.is_selected():
-                    print("Remember Me is checked. Unchecking to prevent future prefilled masked state...")
+                    log("Remember Me is checked. Unchecking to prevent future prefilled masked state...")
                     if sb.is_element_visible("label[for='rememberMe']"):
                         sb.click("label[for='rememberMe']")
                     else:
@@ -240,7 +261,7 @@ class UnitedAirlinesPlugin(ProviderPlugin):
                     }
                 """)
         except Exception as e:
-            print(f"Error unchecking Remember Me: {e}")
+            log(f"Error unchecking Remember Me: {e}")
  
         if auto_submit:
             # Click the actual form submit button or press Enter in the password field
@@ -258,183 +279,66 @@ class UnitedAirlinesPlugin(ProviderPlugin):
                 sb.type(pass_selector, "\n")
             sb.sleep(2)
 
-    def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
+    def open_login(self, sb) -> None:
+        self.open_url(sb, self.login_url)
+        # A stale session shows a "session expired" modal instead of either the
+        # dashboard or the login form; clear it and start over.
+        try:
+            html = sb.get_page_source().lower()
+            if "session timed out" in html or "session expired" in html or "sign in again" in html:
+                log("United Airlines session expired modal detected. Clearing cookies and local storage to start a fresh login flow...")
+                sb.delete_all_cookies()
+                sb.execute_script("window.localStorage.clear(); window.sessionStorage.clear();")
+                self.open_url(sb, self.login_url, settle=8)
+        except Exception as e:
+            log(f"Error handling United session expired scenario: {e}", level="WARNING")
+
+    def login_form_visible(self, sb) -> bool:
+        return sb.is_element_visible("input#password") or sb.is_element_visible("input#MPIDEmailField")
+
+    def is_logged_in(self, sb) -> bool:
+        if "myunited" not in sb.get_current_url() or self.login_form_visible(sb):
+            return False
+        balance, _ = self._extract_data(sb)
+        if balance is None and not self.is_mfa(sb):
+            # Dashboard can render slowly; one refresh before giving up.
+            sb.refresh()
+            sb.sleep(8)
+            balance, _ = self._extract_data(sb)
+        return balance is not None
+
+    def is_mfa(self, sb) -> bool:
+        return self._check_for_mfa(sb)
+
+    def mfa_message(self) -> str:
+        return self.MFA_MESSAGE
+
+    def login_failed_message(self) -> str:
+        return "Could not find MileagePlus balance on United dashboard after login."
+
+    def scrape(self, sb) -> Dict[str, Any]:
         result = {
             "balance": 0,
             "status": "Member",
-            "expiration_date": None, # United MileagePlus miles never expire
+            "expiration_date": None,  # United MileagePlus miles never expire
             "certificates": []
         }
-        
+        balance, status = self._extract_data(sb)
+        if balance is None:
+            raise PluginError("Could not find MileagePlus balance on United dashboard after login.")
+        result["balance"] = balance
+        if status:
+            result["status"] = status
+
         try:
-            with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
-                # 1. Open United MyUnited page directly to check if already logged in
-                sb.open("https://www.united.com/en/us/myunited")
-                sb.sleep(12)
-                
-                # Check for United session timeout/expiration modal and clear cookies if found
-                try:
-                    html = sb.get_page_source().lower()
-                    if "session timed out" in html or "session expired" in html or "sign in again" in html:
-                        print("United Airlines session expired modal/text detected. Clearing cookies and local storage to start a fresh login flow...")
-                        sb.delete_all_cookies()
-                        sb.execute_script("window.localStorage.clear(); window.sessionStorage.clear();")
-                        sb.open("https://www.united.com/en/us/myunited")
-                        sb.sleep(8)
-                except Exception as e:
-                    print(f"Error handling session expired scenario in fetch_data: {e}")
-                
-                # Check if we are redirected to a login page
-                curr_url = sb.get_current_url()
-                if "myunited" in curr_url and not sb.is_element_visible("input#password") and not sb.is_element_visible("input#MPIDEmailField"):
-                    balance, status = self._extract_data(sb)
-                    if balance is not None:
-                        result["balance"] = balance
-                        if status:
-                            result["status"] = status
-                        
-                        # Fetch certificates
-                        try:
-                            print("Navigating to United Club passes page (session reuse)...")
-                            sb.open("https://www.united.com/en/us/mileageplus/unitedclubpass")
-                            sb.sleep(6)
-                            html_passes = sb.get_page_source()
-                            certs = self._parse_club_passes(html_passes)
-                            if certs:
-                                result["certificates"] = certs
-                        except Exception as e:
-                            print(f"Failed to fetch or parse United Club passes (session reuse): {e}")
-                            
-                        return result
-                
-                # 2. Not logged in -> We must be on the sign-in page
-                # If neither the username nor the password field is visible, navigate to sign-in directly
-                if not sb.is_element_visible("input#password") and not sb.is_element_visible("input#MPIDEmailField"):
-                    sb.open("https://www.united.com/en/us/myunited")
-                    sb.sleep(8)
-                
-                # Prefill and submit the login form
-                self._fill_login_form(sb, username, password, auto_submit=True)
-                
-                # 3. Wait for redirect and dynamic render to settle
-                sb.sleep(12)
-                
-                # Check for MFA passcode verification screen
-                if self._check_for_mfa(sb):
-                    raise InteractionRequiredError("United Airlines requested a 6-digit passcode verification (MFA). Please run Interactive Login and check \"Don't require verification code again.\" to resolve this.")
-                
-                # Extract data
-                balance, status = self._extract_data(sb)
-                if balance is None:
-                    # Check MFA again before doing refresh
-                    if self._check_for_mfa(sb):
-                        raise InteractionRequiredError("United Airlines requested a 6-digit passcode verification (MFA). Please run Interactive Login and check \"Don't require verification code again.\" to resolve this.")
-                    
-                    # Retry refreshing in case of a slow dashboard render
-                    sb.refresh()
-                    sb.sleep(8)
-                    balance, status = self._extract_data(sb)
-                    
-                if balance is None:
-                    # Check MFA once more after refresh
-                    if self._check_for_mfa(sb):
-                        raise InteractionRequiredError("United Airlines requested a 6-digit passcode verification (MFA). Please run Interactive Login and check \"Don't require verification code again.\" to resolve this.")
-                        
-                    # Take an error dump for debug purposes
-                    with open("united_error_dump.html", "w", encoding="utf-8") as f:
-                        f.write(sb.get_page_source())
-                    raise PluginError("Could not find MileagePlus balance on United dashboard after login.")
-                
-                result["balance"] = balance
-                if status:
-                    result["status"] = status
-                
-                # Fetch certificates
-                try:
-                    print("Navigating to United Club passes page...")
-                    sb.open("https://www.united.com/en/us/mileageplus/unitedclubpass")
-                    sb.sleep(6)
-                    html_passes = sb.get_page_source()
-                    certs = self._parse_club_passes(html_passes)
-                    if certs:
-                        result["certificates"] = certs
-                except Exception as e:
-                    print(f"Failed to fetch or parse United Club passes: {e}")
-                    
-                return result
-                
-        except InteractionRequiredError:
-            raise
+            log("Navigating to United Club passes page...")
+            self.open_url(sb, self.club_pass_url, settle=6)
+            certs = self._parse_club_passes(sb.get_page_source())
+            if certs:
+                result["certificates"] = certs
         except Exception as e:
-            raise PluginError(f"Scraping failed: {str(e)}")
-
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
-        """
-        Interactive login to allow the user to resolve captchas and log in to United.
-        """
-        with SB(**get_sb_kwargs(uc=True, headless=False, user_data_dir=profile_dir)) as sb:
-            sb.open("https://www.united.com/en/us/myunited")
-            sb.sleep(4)
-            
-            # Check for United session timeout/expiration modal and clear cookies if found
-            try:
-                html = sb.get_page_source().lower()
-                if "session timed out" in html or "session expired" in html or "sign in again" in html:
-                    print("United Airlines session expired modal/text detected. Clearing cookies and local storage to start a fresh login flow...")
-                    sb.delete_all_cookies()
-                    sb.execute_script("window.localStorage.clear(); window.sessionStorage.clear();")
-                    sb.open("https://www.united.com/en/us/myunited")
-                    sb.sleep(4)
-            except Exception as e:
-                print(f"Error handling session expired scenario in interactive_login: {e}")
-            
-            # Prefill credentials if form is visible
-            try:
-                self._fill_login_form(sb, username, password, auto_submit=False)
-            except Exception:
-                pass
-            
-            # Monitor URL and close window automatically when logged in
-            try:
-                start_time = time.time()
-                success = False
-                while time.time() - start_time < 300:
-
-
-                    curr_url = sb.get_current_url()
-                    if "myunited" in curr_url and not sb.is_element_visible("input#password"):
-                        # Settle and verify points can be extracted
-                        sb.sleep(5)
-                        balance, status = self._extract_data(sb)
-                        if balance is not None:
-                            success = True
-                            break
-                    time.sleep(2)
-
-                if not success:
-                    raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
-
-                sb.sleep(3) # Let session write completely
-
-                result = {
-                    "balance": balance,
-                    "status": status or "Member",
-                    "expiration_date": None,  # United MileagePlus miles never expire
-                    "certificates": []
-                }
-                try:
-                    print("Navigating to United Club passes page...")
-                    sb.open("https://www.united.com/en/us/mileageplus/unitedclubpass")
-                    sb.sleep(6)
-                    html_passes = sb.get_page_source()
-                    certs = self._parse_club_passes(html_passes)
-                    if certs:
-                        result["certificates"] = certs
-                except Exception as e:
-                    print(f"Failed to fetch or parse United Club passes: {e}")
-                return result
-            except Exception:
-                raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
+            log(f"Failed to fetch or parse United Club passes: {e}", level="WARNING")
+        return result
 
     def _parse_club_passes(self, html: str) -> list:
         from bs4 import BeautifulSoup

@@ -17,6 +17,14 @@ class AviancaLifemilesPlugin(ProviderPlugin):
         return "avianca"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.lifemiles.com"
+
+    @property
+    def logo_domain(self) -> str:
+        return "avianca.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.2
 

@@ -23,6 +23,14 @@ class JAPANAirlinesPlugin(ProviderPlugin):
         return "jal"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.jal.co.jp/ar/en/jmb/"
+
+    @property
+    def logo_domain(self) -> str:
+        return "jal.co.jp"
+
+    @property
     def default_cpp(self) -> float:
         return 1.4
 

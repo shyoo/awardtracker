@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional
 from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
+from .session import ResultCache, raise_if_window_closed
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -26,6 +27,14 @@ class ANAPlugin(ProviderPlugin):
         return "ana"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.ana.co.jp/en/us/amc/"
+
+    @property
+    def logo_domain(self) -> str:
+        return "ana.co.jp"
+
+    @property
     def default_cpp(self) -> float:
         return 1.5
 
@@ -36,43 +45,13 @@ class ANAPlugin(ProviderPlugin):
         return "ANA Mileage Club miles are valid for 36 months from the month they were earned. Activity does not extend them."
 
     def _cache_path(self, profile_dir: str) -> str:
-        """Path to the cached mileage data JSON file for this profile."""
         return os.path.join(profile_dir, "ana_cache.json")
 
     def _save_cache(self, profile_dir: str, data: Dict[str, Any]) -> None:
-        """Save parsed mileage data to a JSON cache file."""
-        import copy
-        data_copy = copy.deepcopy(data)
-        cache = {
-            "fetched_at": datetime.utcnow().isoformat(),
-            "data": data_copy,
-        }
-        os.makedirs(profile_dir, exist_ok=True)
-        with open(self._cache_path(profile_dir), "w") as f:
-            json.dump(cache, f)
+        ResultCache(profile_dir, "ana_cache.json").save(data)
 
     def _load_cache(self, profile_dir: str, max_age_seconds: Optional[int] = None) -> Optional[Dict[str, Any]]:
-        """Load cached mileage data. Returns the data dict or None."""
-        path = self._cache_path(profile_dir)
-        if not os.path.exists(path):
-            return None
-        try:
-            with open(path, "r") as f:
-                cache = json.load(f)
-            
-            if max_age_seconds is not None:
-                fetched_at_str = cache.get("fetched_at")
-                if not fetched_at_str:
-                    return None
-                fetched_at = datetime.fromisoformat(fetched_at_str)
-                age = (datetime.utcnow() - fetched_at).total_seconds()
-                if age > max_age_seconds:
-                    return None
-
-            data = cache.get("data")
-            return data
-        except Exception:
-            return None
+        return ResultCache(profile_dir, "ana_cache.json").load(max_age_seconds)
 
     def is_auth_url(self, url: str) -> bool:
         url_lower = url.lower()
@@ -80,9 +59,7 @@ class ANAPlugin(ProviderPlugin):
         return any(kw in url_lower for kw in auth_keywords)
 
     def _raise_if_window_closed(self, e: Exception) -> None:
-        err_msg = str(e).lower()
-        if any(w in err_msg for w in ["no such window", "window already closed", "chrome not reachable"]):
-            raise PluginError("Browser window closed by user.")
+        raise_if_window_closed(e)
 
     def _check_page_not_found(self, sb) -> None:
         try:

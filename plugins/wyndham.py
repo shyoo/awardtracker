@@ -5,6 +5,7 @@ import re
 from bs4 import BeautifulSoup
 from seleniumbase import SB
 from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs, get_chrome_binary
+from .session import get_consistent_user_agent, load_cookies_from_json, save_cookies_to_json
 
 class WyndhamPlugin(ProviderPlugin):
     @property
@@ -14,6 +15,14 @@ class WyndhamPlugin(ProviderPlugin):
     @property
     def plugin_id(self) -> str:
         return "wyndham"
+
+    @property
+    def homepage_url(self) -> str:
+        return "https://www.wyndhamhotels.com/wyndham-rewards"
+
+    @property
+    def logo_domain(self) -> str:
+        return "wyndhamhotels.com"
 
     @property
     def default_cpp(self) -> float:
@@ -46,97 +55,13 @@ class WyndhamPlugin(ProviderPlugin):
         return "Points expire 4 years after they are earned. In addition, after 18 consecutive months without any account activity, all of your points will be forfeited."
 
     def get_consistent_user_agent(self) -> str:
-        import platform
-        import subprocess
-        import re
-        try:
-            if platform.system() == "Windows":
-                cmd = r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version'
-                output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
-                version = re.search(r'version\s+REG_SZ\s+(\S+)', output)
-                if version:
-                    return f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version.group(1)} Safari/537.36"
-                cmd2 = r'reg query "HKEY_LOCAL_MACHINE\Software\Google\Chrome\BLBeacon" /v version'
-                output2 = subprocess.check_output(cmd2, shell=True, stderr=subprocess.DEVNULL).decode()
-                version2 = re.search(r'version\s+REG_SZ\s+(\S+)', output2)
-                if version2:
-                    return f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version2.group(1)} Safari/537.36"
-            elif platform.system() == "Darwin":
-                cmd = r'defaults read "/Applications/Google Chrome.app/Contents/Info" CFBundleShortVersionString'
-                output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
-                return f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{output.strip()} Safari/537.36"
-        except Exception:
-            pass
-        
-        # Standard Fallback
-        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+        return get_consistent_user_agent()
 
     def save_cookies_to_json(self, sb, profile_dir: str) -> None:
-        if not profile_dir:
-            return
-        import json
-        import os
-        try:
-            cookies = sb.get_cookies()
-            cookies_file = os.path.join(profile_dir, "wyndham_cookies.json")
-            with open(cookies_file, "w", encoding="utf-8") as f:
-                json.dump(cookies, f, indent=4)
-        except Exception as e:
-            print(f"Failed to save cookies: {e}")
+        save_cookies_to_json(sb, profile_dir, "wyndham_cookies.json")
 
     def load_cookies_from_json(self, sb, profile_dir: str) -> None:
-        if not profile_dir:
-            return
-        import json
-        import os
-        cookies_file = os.path.join(profile_dir, "wyndham_cookies.json")
-        if not os.path.exists(cookies_file):
-            return
-        try:
-            with open(cookies_file, "r", encoding="utf-8") as f:
-                cookies = json.load(f)
-                
-            # Group cookies by domain to satisfy WebDriver constraints
-            cookies_by_domain = {}
-            for cookie in cookies:
-                domain = cookie.get('domain', '')
-                if not domain:
-                    continue
-                norm_domain = domain.lstrip('.')
-                if norm_domain not in cookies_by_domain:
-                    cookies_by_domain[norm_domain] = []
-                cookies_by_domain[norm_domain].append(cookie)
-                
-            # Navigate to a safe public page (like robots.txt) on each domain and inject
-            for norm_domain, domain_cookies in cookies_by_domain.items():
-                current_url = sb.get_current_url().lower()
-                if norm_domain not in current_url:
-                    safe_url = f"https://{norm_domain}/robots.txt" if "auth0" in norm_domain else f"https://www.{norm_domain}/"
-                    try:
-                        sb.open(safe_url)
-                        sb.sleep(2)
-                    except Exception:
-                        continue
-                for cookie in domain_cookies:
-                    try:
-                        clean_cookie = {
-                            'name': cookie['name'],
-                            'value': cookie['value'],
-                            'path': cookie.get('path', '/'),
-                            'secure': cookie.get('secure', False),
-                            'httpOnly': cookie.get('httpOnly', False),
-                            'sameSite': cookie.get('sameSite', 'Lax')
-                        }
-                        if cookie.get('domain'):
-                            clean_cookie['domain'] = cookie['domain']
-                        if 'expiry' in cookie:
-                            clean_cookie['expiry'] = int(cookie['expiry'])
-                        sb.add_cookie(clean_cookie)
-                    except Exception:
-                        pass
-        except Exception as e:
-            print(f"Failed to restore cookies: {e}")
-
+        load_cookies_from_json(sb, profile_dir, "wyndham_cookies.json", robots_domains=('auth0',))
 
     def _get_chrome_path(self) -> Optional[str]:
         return get_chrome_binary()

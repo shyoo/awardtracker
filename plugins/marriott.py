@@ -15,6 +15,14 @@ class MarriottPlugin(ProviderPlugin):
         return "marriott"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.marriott.com/loyalty.mi"
+
+    @property
+    def logo_domain(self) -> str:
+        return "marriott.com"
+
+    @property
     def default_cpp(self) -> float:
         return 0.8
 

@@ -432,7 +432,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
                 self.assertTrue(os.path.exists(path))
                 
             # Call clear function
-            plugin._clear_ba_cookies(temp_dir)
+            plugin.before_native_login(temp_dir)
             
             # Assert all files and directories have been deleted
             for path in files_to_create:
@@ -2404,7 +2404,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
                 f"returned data in the same run (got call to {func.__name__})"
             )
 
-        with patch('app.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
+        with patch('plugins.base.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
             response = self.client.post(f'/accounts/{account.id}/interactive', follow_redirects=False)
             self.assertEqual(response.status_code, 302)
 
@@ -2449,7 +2449,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
                 f"(got call to {func.__name__})"
             )
 
-        with patch('app.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
+        with patch('plugins.base.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
             response = self.client.post(f'/accounts/{account.id}/interactive', follow_redirects=False)
             self.assertEqual(response.status_code, 302)
 
@@ -2558,7 +2558,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         plugin = plugin_manager.get_plugin('hilton')
         mock_sb, mock_context = self._mock_sb()
 
-        with patch('plugins.hilton.SB', return_value=mock_context), \
+        with patch('plugins.browser_plugin.SB', return_value=mock_context), \
              patch.object(plugin, '_extract_data', return_value=(5000, 'Gold', datetime(2026, 1, 1))):
             result = plugin.interactive_login('user', 'pass', profile_dir=None)
 
@@ -2571,7 +2571,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         plugin = plugin_manager.get_plugin('united')
         mock_sb, mock_context = self._mock_sb(current_url="https://www.united.com/en/us/myunited")
 
-        with patch('plugins.united.SB', return_value=mock_context), \
+        with patch('plugins.browser_plugin.SB', return_value=mock_context), \
              patch.object(plugin, '_extract_data', return_value=(12345, 'Premier Gold')):
             result = plugin.interactive_login('user', 'pass', profile_dir=None)
 
@@ -2791,7 +2791,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         )
         canned_result = {'balance': 7777, 'status': 'Morning Calm Premium', 'expiration_date': None, 'certificates': []}
 
-        with patch('plugins.korean.SB', return_value=mock_context), \
+        with patch('plugins.browser_plugin.SB', return_value=mock_context), \
              patch.object(plugin, '_parse_mileage_html', return_value=canned_result), \
              patch.object(plugin, '_fetch_korean_expiration_data', return_value=(None, None)), \
              patch.object(plugin, '_fetch_korean_coupon_data', return_value=[]), \
@@ -3533,14 +3533,26 @@ class TestAPIsAndPlugins(unittest.TestCase):
             )
             db.session.add(acc)
             db.session.commit()
-            self.assertEqual(acc.membership_number, 'skymiles_user_123')
+            # The login ID is not a membership number (it is often an email); nothing to show yet.
+            self.assertEqual(acc.membership_number, '')
+            self.assertIsNone(acc.membership_number_source)
 
-            # 2. Custom membership number in extra_metadata takes precedence
+            # 2. A membership ID scraped by the plugin is shown...
+            meta = acc.extra_metadata
+            meta['scraped_membership_id'] = '378137745'
+            acc.extra_metadata = meta
+            db.session.commit()
+            self.assertEqual(acc.membership_number, '378137745')
+            self.assertEqual(acc.membership_number_source, 'scraped')
+
+            # ...but a number the user typed in always wins over it.
             meta = acc.extra_metadata
             meta['membership_number'] = '9876543210'
             acc.extra_metadata = meta
             db.session.commit()
             self.assertEqual(acc.membership_number, '9876543210')
+            self.assertEqual(acc.membership_number_source, 'user')
+            self.assertEqual(acc.scraped_membership_id, '378137745')
 
             # 3. Manual account with account_number in extra_metadata
             manual_prov = Provider.query.filter_by(plugin_name='chase').first()

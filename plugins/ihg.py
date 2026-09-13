@@ -15,6 +15,14 @@ class IHGRewardsPlugin(ProviderPlugin):
         return "ihg"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.ihg.com/onerewards/"
+
+    @property
+    def logo_domain(self) -> str:
+        return "ihg.com"
+
+    @property
     def default_cpp(self) -> float:
         return 0.8
 

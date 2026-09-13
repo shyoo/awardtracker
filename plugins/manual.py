@@ -20,6 +20,10 @@ class _ManualBase(ProviderPlugin):
     def plugin_id(self) -> str:
         pass
 
+    @property
+    def is_manual(self) -> bool:
+        return True
+
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs):
         raise PluginError(
             f"{self.name} is a manually-tracked account. "
@@ -46,6 +50,10 @@ class ChaseUltimateRewardsPlugin(_ManualBase):
         return "chase"
 
     @property
+    def logo_domain(self) -> str:
+        return "chase.com"
+
+    @property
     def default_cpp(self) -> float:
         return 2.05
 
@@ -62,6 +70,10 @@ class AmexMembershipRewardsPlugin(_ManualBase):
     @property
     def plugin_id(self) -> str:
         return "amex"
+
+    @property
+    def logo_domain(self) -> str:
+        return "americanexpress.com"
 
     @property
     def default_cpp(self) -> float:
@@ -82,6 +94,10 @@ class CitiThankYouPlugin(_ManualBase):
         return "citi"
 
     @property
+    def logo_domain(self) -> str:
+        return "citi.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.9
 
@@ -98,6 +114,10 @@ class CapitalOneMilesPlugin(_ManualBase):
     @property
     def plugin_id(self) -> str:
         return "capitalone"
+
+    @property
+    def logo_domain(self) -> str:
+        return "capitalone.com"
 
     @property
     def default_cpp(self) -> float:
@@ -118,6 +138,10 @@ class WellsFargoRewardsPlugin(_ManualBase):
         return "wellsfargo"
 
     @property
+    def logo_domain(self) -> str:
+        return "wellsfargo.com"
+
+    @property
     def default_cpp(self) -> float:
         return 0.9
 
@@ -134,6 +158,10 @@ class BiltRewardsPlugin(_ManualBase):
     @property
     def plugin_id(self) -> str:
         return "bilt"
+
+    @property
+    def logo_domain(self) -> str:
+        return "biltrewards.com"
 
     @property
     def default_cpp(self) -> float:

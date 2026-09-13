@@ -328,7 +328,7 @@
                   <button type="button" 
                           onclick="copyToClipboard('{{ account.membership_number }}', this)" 
                           class="inline-flex items-center gap-1 font-mono text-[11px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 px-1.5 py-0.5 rounded transition-colors group/copy" 
-                          title="Click to copy membership #">
+                          title="Click to copy membership #{% if account.membership_number_source == 'scraped' %} (read from {{ account.provider.name }} on the last sync){% endif %}">
                     <span># {{ account.membership_number }}</span>
                     <svg class="h-3 w-3 text-slate-400 group-hover/copy:text-slate-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
