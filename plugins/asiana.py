@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional
 from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
+from .session import ResultCache
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -37,10 +38,6 @@ class AsianaAirlinesPlugin(ProviderPlugin):
 
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Asiana Club miles earned are valid strictly for 10 years (Silver/Gold) or 12 years (Diamond and above) from the date of accrual. Activity does not extend them."
-
-    def _cache_path(self, profile_dir: str) -> str:
-        """Path to the cached mileage data JSON file for this profile."""
-        return os.path.join(profile_dir, "asiana_cache.json")
 
     def _parse_mileage_html(self, html: str) -> Optional[Dict[str, Any]]:
         """Parse mileage data from Asiana Airlines dashboard HTML.
@@ -108,46 +105,14 @@ class AsianaAirlinesPlugin(ProviderPlugin):
             "expiration_date": None,
         }
 
+    def _cache_path(self, profile_dir: str) -> str:
+        return os.path.join(profile_dir, "asiana_cache.json")
+
     def _save_cache(self, profile_dir: str, data: Dict[str, Any]) -> None:
-        """Save parsed mileage data to a JSON cache file."""
-        import copy
-        data_copy = copy.deepcopy(data)
-        if "expiration_date" in data_copy and isinstance(data_copy["expiration_date"], datetime):
-            data_copy["expiration_date"] = data_copy["expiration_date"].strftime("%Y-%m-%d")
-            
-        cache = {
-            "fetched_at": datetime.utcnow().isoformat(),
-            "data": data_copy,
-        }
-        os.makedirs(profile_dir, exist_ok=True)
-        with open(self._cache_path(profile_dir), "w") as f:
-            json.dump(cache, f)
+        ResultCache(profile_dir, "asiana_cache.json").save(data)
 
     def _load_cache(self, profile_dir: str, max_age_seconds: Optional[int] = None) -> Optional[Dict[str, Any]]:
-        """Load cached mileage data. Returns the data dict or None."""
-        path = self._cache_path(profile_dir)
-        if not os.path.exists(path):
-            return None
-        try:
-            with open(path, "r") as f:
-                cache = json.load(f)
-            
-            if max_age_seconds is not None:
-                fetched_at_str = cache.get("fetched_at")
-                if not fetched_at_str:
-                    return None
-                fetched_at = datetime.fromisoformat(fetched_at_str)
-                age = (datetime.utcnow() - fetched_at).total_seconds()
-                if age > max_age_seconds:
-                    return None
-
-            data = cache.get("data")
-            if data and "expiration_date" in data and data["expiration_date"]:
-                if isinstance(data["expiration_date"], str):
-                    data["expiration_date"] = datetime.strptime(data["expiration_date"], "%Y-%m-%d")
-            return data
-        except Exception:
-            return None
+        return ResultCache(profile_dir, "asiana_cache.json").load(max_age_seconds)
 
     def _get_localized_prefix(self, sb, segment: str = "C") -> str:
         """

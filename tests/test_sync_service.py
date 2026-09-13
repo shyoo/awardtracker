@@ -200,14 +200,13 @@ class TestSyncService(unittest.TestCase):
 
         plugin = BritishAirwaysPlugin()
         with tempfile.TemporaryDirectory() as profile_dir:
-            plugin._save_cache(profile_dir, {'balance': 999, 'status': 'Blue'})
+            plugin.cache(profile_dir).save({'balance': 999, 'status': 'Blue'})
 
             def boom(**kwargs):
                 raise PluginError("site down")
 
-            with patch.object(plugin, 'get_consistent_user_agent', return_value='ua'), \
-                 patch.object(plugin, 'wait_for_chrome_exit'), \
-                 patch('plugins.british.SB', side_effect=boom):
+            with patch('plugins.browser_plugin.get_consistent_user_agent', return_value='ua'), \
+                 patch('plugins.browser_plugin.SB', side_effect=boom):
                 try:
                     set_run_context(RunContext(1, 'BA', plugin, RunMode.FETCH, RunTrigger.SCHEDULED))
                     self.assertEqual(plugin.fetch_data("u", "p", profile_dir=profile_dir)['balance'], 999)

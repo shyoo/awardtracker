@@ -1,13 +1,32 @@
 from typing import Dict, Any, Optional, Tuple
-from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
-from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
-import json
-import os
 from datetime import datetime
 
-class KoreanAirPlugin(ProviderPlugin):
+from .base import PluginError, InteractionRequiredError
+from .browser_plugin import BrowserPlugin, log
+
+class KoreanAirPlugin(BrowserPlugin):
+    login_url = "https://www.koreanair.com/login"
+    page_settle_seconds = 5
+    post_login_settle_seconds = 0      # _try_auto_login waits for the redirect itself
+    post_interactive_settle_seconds = 0
+    interactive_poll_seconds = 5
+    # Korean Air's session frequently needs a fresh interactive login; serving the
+    # last good result (even on Sync Now) keeps the dashboard populated meanwhile.
+    cache_max_age_seconds = 900
+    cache_fallback_on_manual = True
+    cache_name = "korean_cache.json"
+
+    PASSWORD_RESET_MESSAGE = (
+        "Your Korean Air account requires a password reset. "
+        "Please run Interactive Login to complete the password reset flow directly."
+    )
+    SESSION_EXPIRED_MESSAGE = (
+        "Korean Air session expired and auto-login failed. "
+        "Please run Interactive Login - your mileage will be captured during the login session."
+    )
+
     @property
     def name(self) -> str:
         return "Korean Air"
@@ -41,10 +60,6 @@ class KoreanAirPlugin(ProviderPlugin):
 
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Miles earned on or after July 1, 2008 expire strictly on December 31 of the 10th year following the earn date. Activity does not extend them."
-
-    def _cache_path(self, profile_dir: str) -> str:
-        """Path to the cached mileage data JSON file for this profile."""
-        return os.path.join(profile_dir, "korean_cache.json")
 
     def _parse_mileage_html(self, html: str) -> Optional[Dict[str, Any]]:
         """Parse mileage data from Korean Air dashboard HTML.
@@ -148,7 +163,7 @@ class KoreanAirPlugin(ProviderPlugin):
                         navigated = True
                         break
         except Exception as click_err:
-            print(f"Error clicking validity link on overview page: {click_err}")
+            log(f"Error clicking validity link on overview page: {click_err}")
             
         # 2. Fall back to direct URL navigation if clicking the dashboard link failed or did not resolve
         if not navigated:
@@ -303,127 +318,92 @@ class KoreanAirPlugin(ProviderPlugin):
                         "batches": [{"date": b["date"].strftime("%Y-%m-%d"), "amount": b["amount"]} for b in sorted_batches]
                     }
         except Exception as e:
-            print(f"Error parsing Korean Air validity page: {e}")
+            log(f"Error parsing Korean Air validity page: {e}")
             
         return earliest_exp_date, None
 
-    def _save_cache(self, profile_dir: str, data: Dict[str, Any]) -> None:
-        """Save parsed mileage data to a JSON cache file."""
-        import copy
-        data_copy = copy.deepcopy(data)
-        if "expiration_date" in data_copy and isinstance(data_copy["expiration_date"], datetime):
-            data_copy["expiration_date"] = data_copy["expiration_date"].strftime("%Y-%m-%d")
-            
-        cache = {
-            "fetched_at": datetime.utcnow().isoformat(),
-            "data": data_copy,
-        }
-        os.makedirs(profile_dir, exist_ok=True)
-        with open(self._cache_path(profile_dir), "w") as f:
-            json.dump(cache, f)
+    def _prefill_login_fields(self, sb, username: str, password: str) -> bool:
+        """Pick the SKYPASS-number or User-ID tab and type the credentials.
+        Returns False if the form could not be found."""
+        # Wait for login form to render
+        sb.sleep(4)
 
-    def _load_cache(self, profile_dir: str, max_age_seconds: Optional[int] = None) -> Optional[Dict[str, Any]]:
-        """Load cached mileage data. Returns the data dict or None."""
-        path = self._cache_path(profile_dir)
-        if not os.path.exists(path):
-            return None
-        try:
-            with open(path, "r") as f:
-                cache = json.load(f)
-            
-            # Check max age if specified
-            if max_age_seconds is not None:
-                fetched_at_str = cache.get("fetched_at")
-                if not fetched_at_str:
-                    return None
-                fetched_at = datetime.fromisoformat(fetched_at_str)
-                age = (datetime.utcnow() - fetched_at).total_seconds()
-                if age > max_age_seconds:
-                    return None
+        # Check username format: 12-digit is SKYPASS number, otherwise it is User ID
+        is_skypass = bool(re.match(r'^\d{12}$', username.strip()))
 
-            data = cache.get("data")
-            if data and "expiration_date" in data and data["expiration_date"]:
-                if isinstance(data["expiration_date"], str):
-                    data["expiration_date"] = datetime.strptime(data["expiration_date"], "%Y-%m-%d")
-            return data
-        except Exception:
-            return None
+        if is_skypass:
+            # tab_1 is Skypass number
+            tab_selectors = [
+                "button[id*='tab_1']",
+                "[id*='tab_1']",
+                "#tab_1",
+                "button:contains('SKYPASS')",
+                "button:contains('스카이패스')",
+                "a:contains('SKYPASS')",
+                "li:contains('SKYPASS')"
+            ]
+        else:
+            # tab_0 is User ID
+            tab_selectors = [
+                "button[id*='tab_0']",
+                "[id*='tab_0']",
+                "#tab_0",
+                "button:contains('User ID')",
+                "button:contains('아이디')",
+                "a:contains('User ID')",
+                "li:contains('User ID')"
+            ]
+
+        for tab_sel in tab_selectors:
+            try:
+                if sb.is_element_visible(tab_sel):
+                    sb.click(tab_sel)
+                    sb.sleep(1.5)
+                    break
+            except Exception:
+                pass
+
+        # Type username/SKYPASS number
+        username_selectors = [
+            "input[id*='id']",
+            "input[id*='username']",
+            "input[placeholder*='SKYPASS']",
+            "input[placeholder*='skypass']",
+            "input[type='text']",
+        ]
+        username_filled = False
+        for sel in username_selectors:
+            if sb.is_element_visible(sel):
+                sb.type(sel, username)
+                username_filled = True
+                sb.sleep(1)
+                break
+        
+        if not username_filled:
+            return False
+
+        # Type password
+        password_selectors = [
+            "input[type='password']",
+            "input[id*='password']",
+        ]
+        password_filled = False
+        for sel in password_selectors:
+            if sb.is_element_visible(sel):
+                sb.type(sel, password)
+                password_filled = True
+                sb.sleep(1)
+                break
+
+        if not password_filled:
+            return False
+        return True
 
     def _try_auto_login(self, sb, username: str, password: str) -> bool:
-        """Attempt to fill in credentials and log in on the Korean Air login page.
-        Returns True if login appears successful (navigated away from login page)."""
+        """Fill the form, submit, and wait for the redirect away from the login page.
+        Returns True if login appears successful."""
         try:
-            # Wait for login form to render
-            sb.sleep(4)
-
-            # Check username format: 12-digit is SKYPASS number, otherwise it is User ID
-            is_skypass = bool(re.match(r'^\d{12}$', username.strip()))
-            
-            if is_skypass:
-                # tab_1 is Skypass number
-                tab_selectors = [
-                    "button[id*='tab_1']",
-                    "[id*='tab_1']",
-                    "#tab_1",
-                    "button:contains('SKYPASS')",
-                    "button:contains('스카이패스')",
-                    "a:contains('SKYPASS')",
-                    "li:contains('SKYPASS')"
-                ]
-            else:
-                # tab_0 is User ID
-                tab_selectors = [
-                    "button[id*='tab_0']",
-                    "[id*='tab_0']",
-                    "#tab_0",
-                    "button:contains('User ID')",
-                    "button:contains('아이디')",
-                    "a:contains('User ID')",
-                    "li:contains('User ID')"
-                ]
-
-            for tab_sel in tab_selectors:
-                try:
-                    if sb.is_element_visible(tab_sel):
-                        sb.click(tab_sel)
-                        sb.sleep(1.5)
-                        break
-                except Exception:
-                    pass
-
-            # Type username/SKYPASS number
-            username_selectors = [
-                "input[id*='id']",
-                "input[id*='username']",
-                "input[placeholder*='SKYPASS']",
-                "input[placeholder*='skypass']",
-                "input[type='text']",
-            ]
-            username_filled = False
-            for sel in username_selectors:
-                if sb.is_element_visible(sel):
-                    sb.type(sel, username)
-                    username_filled = True
-                    sb.sleep(1)
-                    break
-            
-            if not username_filled:
-                return False
-
-            # Type password
-            password_selectors = [
-                "input[type='password']",
-                "input[id*='password']",
-            ]
-            password_filled = False
-            for sel in password_selectors:
-                if sb.is_element_visible(sel):
-                    sb.type(sel, password)
-                    password_filled = True
-                    sb.sleep(1)
-                    break
-
-            if not password_filled:
+            if not self._prefill_login_fields(sb, username, password):
                 return False
 
             # Click login button
@@ -459,7 +439,7 @@ class KoreanAirPlugin(ProviderPlugin):
                 for bp_sel in bypass_selectors:
                     try:
                         if sb.is_element_visible(bp_sel):
-                            print(f"Detected password change reminder. Clicking to bypass: {bp_sel}")
+                            log(f"Detected password change reminder. Clicking to bypass: {bp_sel}")
                             sb.click(bp_sel)
                             sb.sleep(4)
                             current_url = sb.get_current_url().lower()
@@ -468,7 +448,7 @@ class KoreanAirPlugin(ProviderPlugin):
                         pass
 
                 if "set-password" in current_url or "password/verify" in current_url:
-                    print("Detected password reset redirection.")
+                    log("Detected password reset redirection.")
                     raise InteractionRequiredError(
                         "Your Korean Air account requires a password reset. "
                         "Please run Interactive Login to complete the password reset flow directly."
@@ -511,7 +491,7 @@ class KoreanAirPlugin(ProviderPlugin):
                         navigated = True
                         break
         except Exception as click_err:
-            print(f"Error clicking coupon link: {click_err}")
+            log(f"Error clicking coupon link: {click_err}")
             
         # 2. Direct URL navigation fallback
         if not navigated:
@@ -644,7 +624,7 @@ class KoreanAirPlugin(ProviderPlugin):
                     "details": details
                 })
         except Exception as e:
-            print(f"Error parsing Korean Air coupons page: {e}")
+            log(f"Error parsing Korean Air coupons page: {e}")
             
         return certificates
 
@@ -659,202 +639,81 @@ class KoreanAirPlugin(ProviderPlugin):
             return f"{match.group(1)}/{match.group(2)}/"
         return ""
 
-    def fetch_data(self, username: str, password: str, profile_dir: str = None) -> Dict[str, Any]:
-        if username:
-            username = username.replace(' ', '')
-        result = None
+    # ------------------------------------------------------------------ #
+    # BrowserPlugin hooks
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _is_login_url(url: str) -> bool:
+        return "login" in url or "signin" in url
+
+    @staticmethod
+    def _is_password_reset_url(url: str) -> bool:
+        return "set-password" in url or "password/verify" in url
+
+    def login_form_visible(self, sb) -> bool:
+        return self._is_login_url(sb.get_current_url().lower())
+
+    def is_mfa(self, sb) -> bool:
+        return self._is_password_reset_url(sb.get_current_url().lower())
+
+    def mfa_message(self) -> str:
+        return self.PASSWORD_RESET_MESSAGE
+
+    def login_failed_message(self) -> str:
+        return self.SESSION_EXPIRED_MESSAGE
+
+    def is_logged_in(self, sb) -> bool:
+        url = sb.get_current_url().lower()
+        return not self._is_login_url(url) and not self._is_password_reset_url(url)
+
+    def fill_login_form(self, sb, username: str, password: str, auto_submit: bool = True) -> None:
+        if auto_submit:
+            if not self._try_auto_login(sb, username, password):
+                raise InteractionRequiredError(self.SESSION_EXPIRED_MESSAGE)
+        else:
+            self._prefill_login_fields(sb, username, password)
+
+    def scrape(self, sb) -> Dict[str, Any]:
+        # A successful login lands on the (localised) homepage; the balance lives
+        # on the mileage overview of the same locale.
+        prefix = self._get_localized_prefix(sb)
+        self.open_url(sb, f"https://www.koreanair.com/{prefix}my-mileage/overview", settle=5)
+
+        url = sb.get_current_url().lower()
+        if self._is_password_reset_url(url):
+            raise InteractionRequiredError(self.PASSWORD_RESET_MESSAGE)
+        if self._is_login_url(url):
+            raise InteractionRequiredError(self.SESSION_EXPIRED_MESSAGE)
+        prefix = self._get_localized_prefix(sb)
+
+        # Wait for the Angular app to render the mileage figure (up to 60s)
+        for _ in range(30):
+            soup = BeautifulSoup(sb.get_page_source(), "html.parser")
+            pt_span = soup.find("span", class_="mileage-my__point") or soup.find(class_="mileage-my__point")
+            if pt_span and pt_span.text.strip():
+                break
+            sb.sleep(2)
+        else:
+            raise InteractionRequiredError(self.SESSION_EXPIRED_MESSAGE)
+        sb.sleep(2)
+
+        result = self._parse_mileage_html(sb.get_page_source())
+        if not result:
+            raise InteractionRequiredError(self.SESSION_EXPIRED_MESSAGE)
 
         try:
-            with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
-                # 1. First open login page to check session validity
-                sb.open("https://www.koreanair.com/login")
-                sb.sleep(5)
+            exp_date, exp_meta = self._fetch_korean_expiration_data(sb, prefix=prefix)
+            if exp_date:
+                result["expiration_date"] = exp_date
+            if exp_meta:
+                result["expiration_meta"] = exp_meta
+        except Exception as ex_err:
+            log(f"Failed to fetch Korean Air expiration data: {ex_err}", level="WARNING")
 
-                current_url = sb.get_current_url().lower()
-                if "set-password" in current_url or "password/verify" in current_url:
-                    raise InteractionRequiredError(
-                        "Your Korean Air account requires a password reset. "
-                        "Please run Interactive Login to complete the password reset flow directly."
-                    )
-                prefix = self._get_localized_prefix(sb)
+        try:
+            result["certificates"] = self._fetch_korean_coupon_data(sb, prefix=prefix)
+        except Exception as cert_err:
+            log(f"Failed to fetch Korean Air coupon data: {cert_err}", level="WARNING")
 
-                # If redirected or stuck on login page, attempt login
-                if "login" in current_url or "signin" in current_url:
-                    logged_in = self._try_auto_login(sb, username, password)
-                    if not logged_in:
-                        raise InteractionRequiredError("auto_login_failed")
-                    current_url = sb.get_current_url().lower()
-                    if "set-password" in current_url or "password/verify" in current_url:
-                        raise InteractionRequiredError(
-                            "Your Korean Air account requires a password reset. "
-                            "Please run Interactive Login to complete the password reset flow directly."
-                        )
-                    prefix = self._get_localized_prefix(sb)
-
-                # 2. Open localized overview page
-                target_url = f"https://www.koreanair.com/{prefix}my-mileage/overview"
-                sb.open(target_url)
-                sb.sleep(5)
-
-                current_url = sb.get_current_url().lower()
-                if "set-password" in current_url or "password/verify" in current_url:
-                    raise InteractionRequiredError(
-                        "Your Korean Air account requires a password reset. "
-                        "Please run Interactive Login to complete the password reset flow directly."
-                    )
-                # Post-navigation session-loss fallback check
-                if "login" in current_url or "signin" in current_url:
-                    logged_in = self._try_auto_login(sb, username, password)
-                    if logged_in:
-                        current_url = sb.get_current_url().lower()
-                        if "set-password" in current_url or "password/verify" in current_url:
-                            raise InteractionRequiredError(
-                                "Your Korean Air account requires a password reset. "
-                                "Please run Interactive Login to complete the password reset flow directly."
-                            )
-                        prefix = self._get_localized_prefix(sb)
-                        sb.open(f"https://www.koreanair.com/{prefix}my-mileage/overview")
-                        sb.sleep(5)
-                    else:
-                        raise InteractionRequiredError("auto_login_failed")
-
-                # Wait for Angular app to render mileage data (up to 60s)
-                for _ in range(30):
-                    src = sb.get_page_source()
-                    soup = BeautifulSoup(src, "html.parser")
-                    pt_span = soup.find("span", class_="mileage-my__point") or soup.find(class_="mileage-my__point")
-                    if pt_span and pt_span.text.strip():
-                        break
-                    sb.sleep(2)
-                else:
-                    raise InteractionRequiredError("page_not_loaded")
-
-                sb.sleep(2)
-                html = sb.get_page_source()
-
-                result = self._parse_mileage_html(html)
-                if result:
-                    # Fetch expiration batches
-                    try:
-                        exp_date, exp_meta = self._fetch_korean_expiration_data(sb, prefix=prefix)
-                        if exp_date:
-                            result["expiration_date"] = exp_date
-                        if exp_meta:
-                            result["expiration_meta"] = exp_meta
-                    except Exception as ex_err:
-                        print(f"Failed to fetch Korean Air expiration data: {ex_err}")
-
-                    # Fetch coupons
-                    try:
-                        certs = self._fetch_korean_coupon_data(sb, prefix=prefix)
-                        result["certificates"] = certs
-                    except Exception as cert_err:
-                        print(f"Failed to fetch Korean Air coupon data: {cert_err}")
-
-            if result:
-                if profile_dir:
-                    self._save_cache(profile_dir, result)
-                return result
-            else:
-                # Parse failed on live page — try cache if fresh
-                raise InteractionRequiredError("parse_failed")
-
-        except InteractionRequiredError:
-            # Live session failed — only fall back to cache if it is fresh (within 15 minutes)
-            if profile_dir:
-                cached = self._load_cache(profile_dir, max_age_seconds=900)
-                if cached:
-                    return cached
-
-            raise InteractionRequiredError(
-                "Korean Air session expired and auto-login failed. "
-                "Please run Interactive Login — your mileage will be captured during the login session."
-            )
-        except PluginError:
-            raise
-        except Exception as e:
-            # On any unexpected error, also try cache only if it is fresh (within 15 minutes)
-            if profile_dir:
-                cached = self._load_cache(profile_dir, max_age_seconds=900)
-                if cached:
-                    return cached
-            raise PluginError(f"Korean Air scraping failed: {e}")
-
-    def interactive_login(self, username: str, password: str, profile_dir: str = None) -> Optional[Dict[str, Any]]:
-        if username:
-            username = username.replace(' ', '')
-        result = None
-        with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir, headed=True)) as sb:
-            sb.open("https://www.koreanair.com/login")
-            sb.sleep(3)
-
-            print("Please log in manually on the Korean Air login page.")
-            print("After logging in, navigate to My Mileage > Overview.")
-            print("Your mileage will be captured automatically once the page loads.")
-            try:
-                for _ in range(60):  # Wait up to 5 minutes
-                    current_url = sb.get_current_url().lower()
-                    
-                    # If logged in successfully and landed on homepage/any non-login page, redirect to mileage overview
-                    if "login" not in current_url and "signin" not in current_url and "my-mileage" not in current_url and "skypass" not in current_url:
-                        match = re.search(r'koreanair\.com/([a-z]{2})/([a-z]{2})', current_url)
-                        prefix = f"{match.group(1)}/{match.group(2)}/" if match else ""
-                        target = f"https://www.koreanair.com/{prefix}my-mileage/overview"
-                        print(f"Logged in detected! Redirecting automatically to mileage overview: {target}")
-                        sb.open(target)
-                        sb.sleep(5)
-                        current_url = sb.get_current_url().lower()
-
-                    if "my-mileage" in current_url or "skypass" in current_url:
-                        print(f"Detected dashboard URL: {current_url}")
-
-                        match = re.search(r'koreanair\.com/([a-z]{2})/([a-z]{2})/', current_url.lower())
-                        prefix = f"{match.group(1)}/{match.group(2)}/" if match else ""
-
-                        print("Waiting for Angular SPA to finish loading...")
-                        for _ in range(30):
-                            src = sb.get_page_source()
-                            soup = BeautifulSoup(src, "html.parser")
-                            pt_span = soup.find("span", class_="mileage-my__point") or soup.find(class_="mileage-my__point")
-                            if pt_span and pt_span.text.strip():
-                                break
-                            sb.sleep(2)
-
-                        sb.sleep(3)  # allow page to fully render
-
-                        html = sb.get_page_source()
-
-                        # Parse and cache the mileage data while session is alive
-                        result = self._parse_mileage_html(html)
-                        if result:
-                            try:
-                                exp_date, exp_meta = self._fetch_korean_expiration_data(sb, prefix=prefix)
-                                if exp_date:
-                                    result["expiration_date"] = exp_date.strftime("%Y-%m-%d")
-                                if exp_meta:
-                                    result["expiration_meta"] = exp_meta
-                            except Exception as ex_err:
-                                print(f"Failed to fetch Korean Air expiration data in interactive mode: {ex_err}")
-
-                            # Fetch coupons
-                            try:
-                                certs = self._fetch_korean_coupon_data(sb, prefix=prefix)
-                                result["certificates"] = certs
-                            except Exception as cert_err:
-                                print(f"Failed to fetch Korean Air coupon data in interactive mode: {cert_err}")
-
-                            if profile_dir:
-                                self._save_cache(profile_dir, result)
-                                print(f"Captured mileage: {result['balance']} miles (cached for sync)")
-                        else:
-                            print("Warning: could not parse mileage from the page.")
-
-                        # Also save raw HTML for debugging
-                        with open("korean_dashboard_debug.html", "w", encoding="utf-8") as f:
-                            f.write(html)
-
-                        break
-                    sb.sleep(5)
-            except Exception as e:
-                print(f"Interactive login wait interrupted: {e}")
         return result

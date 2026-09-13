@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional
 from .context import current_run_context
 from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs, get_chrome_binary
+from .session import clear_profile_session, ResultCache, get_consistent_user_agent, load_cookies_from_json, raise_if_window_closed, save_cookies_to_json
 from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
@@ -75,49 +76,16 @@ class JetBluePlugin(ProviderPlugin):
         return "TrueBlue points never expire."
 
     def _cache_path(self, profile_dir: str) -> str:
-        """Path to the cached mileage data JSON file for this profile."""
         return os.path.join(profile_dir, "jetblue_cache.json")
 
     def _save_cache(self, profile_dir: str, data: Dict[str, Any]) -> None:
-        """Save parsed mileage data to a JSON cache file."""
-        data_copy = copy.deepcopy(data)
-        cache = {
-            "fetched_at": datetime.utcnow().isoformat(),
-            "data": data_copy,
-        }
-        os.makedirs(profile_dir, exist_ok=True)
-        try:
-            with open(self._cache_path(profile_dir), "w") as f:
-                json.dump(cache, f)
-        except Exception as e:
-            print(f"Failed to save cache: {e}")
+        ResultCache(profile_dir, "jetblue_cache.json").save(data)
 
     def _load_cache(self, profile_dir: str, max_age_seconds: Optional[int] = None) -> Optional[Dict[str, Any]]:
-        """Load cached mileage data. Returns the data dict or None."""
-        path = self._cache_path(profile_dir)
-        if not os.path.exists(path):
-            return None
-        try:
-            with open(path, "r") as f:
-                cache = json.load(f)
-            
-            if max_age_seconds is not None:
-                fetched_at_str = cache.get("fetched_at")
-                if not fetched_at_str:
-                    return None
-                fetched_at = datetime.fromisoformat(fetched_at_str)
-                age = (datetime.utcnow() - fetched_at).total_seconds()
-                if age > max_age_seconds:
-                    return None
-
-            return cache.get("data")
-        except Exception:
-            return None
+        return ResultCache(profile_dir, "jetblue_cache.json").load(max_age_seconds)
 
     def _raise_if_window_closed(self, e: Exception) -> None:
-        err_msg = str(e).lower()
-        if any(w in err_msg for w in ["no such window", "window already closed", "chrome not reachable", "invalid session id", "disconnected"]):
-            raise PluginError("Browser window closed by user.")
+        raise_if_window_closed(e)
 
     def _check_logged_in(self, sb) -> bool:
         try:
@@ -142,90 +110,13 @@ class JetBluePlugin(ProviderPlugin):
         return False
 
     def get_consistent_user_agent(self) -> str:
-        try:
-            if platform.system() == "Windows":
-                cmd = r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version'
-                output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
-                version = re.search(r'version\s+REG_SZ\s+(\S+)', output)
-                if version:
-                    return f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version.group(1)} Safari/537.36"
-                cmd2 = r'reg query "HKEY_LOCAL_MACHINE\Software\Google\Chrome\BLBeacon" /v version'
-                output2 = subprocess.check_output(cmd2, shell=True, stderr=subprocess.DEVNULL).decode()
-                version2 = re.search(r'version\s+REG_SZ\s+(\S+)', output2)
-                if version2:
-                    return f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version2.group(1)} Safari/537.36"
-            elif platform.system() == "Darwin":
-                cmd = r'defaults read "/Applications/Google Chrome.app/Contents/Info" CFBundleShortVersionString'
-                output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
-                return f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{output.strip()} Safari/537.36"
-        except Exception:
-            pass
-        # Standard Fallback
-        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+        return get_consistent_user_agent()
 
     def save_cookies_to_json(self, sb, profile_dir: str) -> None:
-        if not profile_dir:
-            return
-        try:
-            cookies = sb.get_cookies()
-            cookies_file = os.path.join(profile_dir, "jetblue_cookies.json")
-            with open(cookies_file, "w", encoding="utf-8") as f:
-                json.dump(cookies, f, indent=4)
-            print(f"JetBlue cookies saved to JSON: {len(cookies)} cookies.")
-        except Exception as e:
-            print(f"Failed to save cookies: {e}")
+        save_cookies_to_json(sb, profile_dir, "jetblue_cookies.json")
 
     def load_cookies_from_json(self, sb, profile_dir: str) -> None:
-        if not profile_dir:
-            return
-        cookies_file = os.path.join(profile_dir, "jetblue_cookies.json")
-        if not os.path.exists(cookies_file):
-            print("No saved cookies JSON file found.")
-            return
-        try:
-            with open(cookies_file, "r", encoding="utf-8") as f:
-                cookies = json.load(f)
-                
-            cookies_by_domain = {}
-            for cookie in cookies:
-                domain = cookie.get('domain', '')
-                if not domain:
-                    continue
-                norm_domain = domain.lstrip('.')
-                if norm_domain not in cookies_by_domain:
-                    cookies_by_domain[norm_domain] = []
-                cookies_by_domain[norm_domain].append(cookie)
-                
-            for norm_domain, domain_cookies in cookies_by_domain.items():
-                current_url = sb.get_current_url().lower()
-                if norm_domain not in current_url:
-                    safe_url = f"https://{norm_domain}/robots.txt" if "auth0" in norm_domain or "jetblue" in norm_domain else f"https://www.{norm_domain}/"
-                    try:
-                        sb.open(safe_url)
-                        sb.sleep(2)
-                    except Exception:
-                        continue
-                for cookie in domain_cookies:
-                    try:
-                        clean_cookie = {
-                            'name': cookie['name'],
-                            'value': cookie['value'],
-                            'path': cookie.get('path', '/'),
-                            'secure': cookie.get('secure', False),
-                            'httpOnly': cookie.get('httpOnly', False),
-                            'sameSite': cookie.get('sameSite', 'Lax')
-                        }
-                        if cookie.get('domain'):
-                            clean_cookie['domain'] = cookie['domain']
-                        if 'expiry' in cookie:
-                            clean_cookie['expiry'] = int(cookie['expiry'])
-                        sb.add_cookie(clean_cookie)
-                    except Exception:
-                        pass
-            print("JetBlue cookies restore process completed.")
-        except Exception as e:
-            print(f"Failed to restore cookies: {e}")
-
+        load_cookies_from_json(sb, profile_dir, "jetblue_cookies.json", robots_domains=('auth0', 'jetblue'))
 
     def wait_for_chrome_exit(self, profile_dir: str) -> None:
         from .base import wait_for_chrome_exit
@@ -353,62 +244,7 @@ class JetBluePlugin(ProviderPlugin):
             raise PluginError(f"JetBlue scraping failed: {e}")
 
     def _clear_jb_cookies(self, profile_dir: str) -> None:
-        """Delete the saved JetBlue cookies JSON, native Chrome cookies, and Chrome session restore files."""
-        if not profile_dir:
-            return
-        
-        # 1. Clear the JSON cookie jar
-        cookies_file = os.path.join(profile_dir, "jetblue_cookies.json")
-        if os.path.exists(cookies_file):
-            try:
-                os.remove(cookies_file)
-                print("Cleared stale jetblue_cookies.json before interactive login.")
-            except Exception as e:
-                print(f"Could not remove jetblue_cookies.json: {e}")
-
-        # 2. Clear native Chrome cookies to prevent session/cookie restore
-        cookie_paths = [
-            os.path.join(profile_dir, "Default", "Cookies"),
-            os.path.join(profile_dir, "Default", "Cookies-journal"),
-            os.path.join(profile_dir, "Default", "Network", "Cookies"),
-            os.path.join(profile_dir, "Default", "Network", "Cookies-journal"),
-        ]
-        for path in cookie_paths:
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                    print(f"Removed native Chrome cookie file: {path}")
-                except Exception as e:
-                    print(f"Could not remove native Chrome cookie file {path}: {e}")
-
-        # 3. Clear session and tab restore files so Chrome doesn't automatically reload old tabs
-        session_files = [
-            os.path.join(profile_dir, "Default", "Current Session"),
-            os.path.join(profile_dir, "Default", "Current Tabs"),
-            os.path.join(profile_dir, "Default", "Last Session"),
-            os.path.join(profile_dir, "Default", "Last Tabs"),
-        ]
-        for path in session_files:
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                    print(f"Removed Chrome session restore file: {path}")
-                except Exception as e:
-                    print(f"Could not remove Chrome session restore file {path}: {e}")
-
-        # 4. Clear Sessions, Session Storage, and Local Storage directories
-        session_dirs = [
-            os.path.join(profile_dir, "Default", "Sessions"),
-            os.path.join(profile_dir, "Default", "Session Storage"),
-            os.path.join(profile_dir, "Default", "Local Storage"),
-        ]
-        for d in session_dirs:
-            if os.path.exists(d):
-                try:
-                    shutil.rmtree(d)
-                    print(f"Removed Chrome storage/session directory: {d}")
-                except Exception as e:
-                    print(f"Could not remove Chrome storage/session directory {d}: {e}")
+        clear_profile_session(profile_dir, "jetblue_cookies.json")
 
     def _get_chrome_path(self) -> Optional[str]:
         return get_chrome_binary()

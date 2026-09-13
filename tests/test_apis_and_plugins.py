@@ -432,7 +432,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
                 self.assertTrue(os.path.exists(path))
                 
             # Call clear function
-            plugin._clear_ba_cookies(temp_dir)
+            plugin.before_native_login(temp_dir)
             
             # Assert all files and directories have been deleted
             for path in files_to_create:
@@ -2558,7 +2558,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         plugin = plugin_manager.get_plugin('hilton')
         mock_sb, mock_context = self._mock_sb()
 
-        with patch('plugins.hilton.SB', return_value=mock_context), \
+        with patch('plugins.browser_plugin.SB', return_value=mock_context), \
              patch.object(plugin, '_extract_data', return_value=(5000, 'Gold', datetime(2026, 1, 1))):
             result = plugin.interactive_login('user', 'pass', profile_dir=None)
 
@@ -2571,7 +2571,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         plugin = plugin_manager.get_plugin('united')
         mock_sb, mock_context = self._mock_sb(current_url="https://www.united.com/en/us/myunited")
 
-        with patch('plugins.united.SB', return_value=mock_context), \
+        with patch('plugins.browser_plugin.SB', return_value=mock_context), \
              patch.object(plugin, '_extract_data', return_value=(12345, 'Premier Gold')):
             result = plugin.interactive_login('user', 'pass', profile_dir=None)
 
@@ -2791,7 +2791,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         )
         canned_result = {'balance': 7777, 'status': 'Morning Calm Premium', 'expiration_date': None, 'certificates': []}
 
-        with patch('plugins.korean.SB', return_value=mock_context), \
+        with patch('plugins.browser_plugin.SB', return_value=mock_context), \
              patch.object(plugin, '_parse_mileage_html', return_value=canned_result), \
              patch.object(plugin, '_fetch_korean_expiration_data', return_value=(None, None)), \
              patch.object(plugin, '_fetch_korean_coupon_data', return_value=[]), \
