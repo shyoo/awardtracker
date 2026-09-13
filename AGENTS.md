@@ -32,254 +32,106 @@ the repository secrets the release workflow needs.
 
 ---
 
-## 2. Web Scraper Cookie & Session Persistence Recipe
+## 2. Code Layout
 
-When implementing or modifying web scraper plugins that encounter MFA or authentication persistence issues between **Interactive Login** and **Automated Sync**, always use the following robust session persistence pattern:
-
-### A. Dynamic User-Agent Locking
-Lock the User-Agent signature to the user's system Chrome browser version to prevent anti-bot (e.g. Auth0) session invalidations:
-```python
-def get_consistent_user_agent(self) -> str:
-    import platform
-    import subprocess
-    import re
-    try:
-        if platform.system() == "Windows":
-            cmd = r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version'
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
-            version = re.search(r'version\s+REG_SZ\s+(\S+)', output)
-            if version:
-                return f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version.group(1)} Safari/537.36"
-        elif platform.system() == "Darwin":
-            cmd = r'defaults read "/Applications/Google Chrome.app/Contents/Info" CFBundleShortVersionString'
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
-            return f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{output.strip()} Safari/537.36"
-    except Exception:
-        pass
-    # Standard Fallback
-    return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+```
+app.py                 Flask factory (create_app) + dev-server entry point
+main.py                Tray-icon launcher used by the packaged binaries
+bootstrap.py           Schema creation, self-healing migrations, provider registration
+web/                   HTTP layer: one module per area, each with register(app)
+  dashboard.py, accounts.py, sync.py, settings.py, db_admin.py,
+  diagnostics.py, certificates.py, auth.py, template_context.py, helpers.py
+services/
+  sync_service.py      THE sync path: run_plugin -> persist_result, used by the
+                       Sync Now form + JSON API, Interactive Login, scheduler, tray
+  settings_store.py    Typed access to the key/value Settings table
+scheduler.py           APScheduler jobs (sync-all, daily backup)
+expiration.py          Expiry calculation + expired/critical/warning/safe/at_risk classification
+plugins/
+  base.py              ProviderPlugin contract, safe_call_plugin_method runner, re-exports
+  browser_plugin.py    BrowserPlugin template: shared fetch_data / interactive_login flows
+  browser.py           Chrome binary lookup, driver registry + cancel, SeleniumBase patches,
+                       guide modal, wait_for_chrome_exit, configure_session_restore
+  session.py           Cookie jar, Chrome-locked User-Agent, ResultCache, native Chrome launch
+  parsing.py           extract_latest_date, parse_int
+  context.py           RunContext (account, plugin, mode, trigger) for the current run
+  errors.py            PluginError, InteractionRequiredError
+  <provider>.py        One plugin per program
 ```
 
-### B. JSON Cookie Jar (Save & Inject)
-Chrome automation profiles do *not* write session-only cookies to the SQLite database on exit. Serialize and restore them directly using JSON:
-```python
-def save_cookies_to_json(self, sb, profile_dir: str) -> None:
-    if not profile_dir:
-        return
-    import json
-    import os
-    try:
-        cookies = sb.get_cookies()
-        cookies_file = os.path.join(profile_dir, "cookies.json")
-        with open(cookies_file, "w", encoding="utf-8") as f:
-            json.dump(cookies, f, indent=4)
-    except Exception as e:
-        print(f"Failed to save cookies: {e}")
+Routes use plain `@app.route` inside `register(app)` functions rather than
+Blueprints on purpose: endpoint names (`url_for('index')`, ...) stay exactly
+as the templates use them.
 
-def load_cookies_from_json(self, sb, profile_dir: str) -> None:
-    if not profile_dir:
-        return
-    import json
-    import os
-    cookies_file = os.path.join(profile_dir, "cookies.json")
-    if not os.path.exists(cookies_file):
-        return
-    try:
-        with open(cookies_file, "r", encoding="utf-8") as f:
-            cookies = json.load(f)
-            
-        # Group cookies by domain to satisfy WebDriver constraints
-        cookies_by_domain = {}
-        for cookie in cookies:
-            domain = cookie.get('domain', '')
-            if not domain:
-                continue
-            norm_domain = domain.lstrip('.')
-            if norm_domain not in cookies_by_domain:
-                cookies_by_domain[norm_domain] = []
-            cookies_by_domain[norm_domain].append(cookie)
-            
-        # Navigate to a safe public page (like robots.txt) on each domain and inject
-        for norm_domain, domain_cookies in cookies_by_domain.items():
-            current_url = sb.get_current_url().lower()
-            if norm_domain not in current_url:
-                safe_url = f"https://{norm_domain}/robots.txt" if "auth0" in norm_domain else f"https://www.{norm_domain}/"
-                try:
-                    sb.open(safe_url)
-                    sb.sleep(2)
-                except Exception:
-                    continue
-            for cookie in domain_cookies:
-                try:
-                    clean_cookie = {
-                        'name': cookie['name'],
-                        'value': cookie['value'],
-                        'path': cookie.get('path', '/'),
-                        'secure': cookie.get('secure', False),
-                        'httpOnly': cookie.get('httpOnly', False),
-                        'sameSite': cookie.get('sameSite', 'Lax')
-                    }
-                    if cookie.get('domain'):
-                        clean_cookie['domain'] = cookie['domain']
-                    if 'expiry' in cookie:
-                        clean_cookie['expiry'] = int(cookie['expiry'])
-                    sb.add_cookie(clean_cookie)
-                except Exception:
-                    pass
-    except Exception as e:
-        print(f"Failed to restore cookies: {e}")
-```
-
-### C. Chrome Preferences and Exit-Type Cleansing
-Prevent Chrome crash-state lockouts by setting the startup options cleanly (keeping the files writable so Chrome exits normally):
-```python
-def configure_session_restore(self, profile_dir: str) -> None:
-    if not profile_dir:
-        return
-    import os
-    import json
-    import stat
-    pref_path = os.path.join(profile_dir, 'Default', 'Preferences')
-    os.makedirs(os.path.dirname(pref_path), exist_ok=True)
-    
-    data = {}
-    if os.path.exists(pref_path):
-        try:
-            os.chmod(pref_path, stat.S_IWRITE)
-            with open(pref_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception:
-            pass
-            
-    if 'session' not in data or not isinstance(data['session'], dict):
-        data['session'] = {}
-    data['session']['restore_on_startup'] = 1
-    
-    if 'profile' not in data or not isinstance(data['profile'], dict):
-        data['profile'] = {}
-    data['profile']['exit_type'] = "Normal"
-    data['profile']['exited_cleanly'] = True
-    
-    try:
-        with open(pref_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-    except Exception:
-        pass
-```
-
-### D. Process Shutdown Verification
-When using direct file/SQLite updates, always wait for Chrome processes using that profile to fully exit before initiating updates. Because `psutil` is not a guaranteed dependency in all run environments, always wrap it with native OS command fallbacks (`powershell`/`wmic` on Windows and `ps` on macOS/Linux):
-```python
-def wait_for_chrome_exit(self, profile_dir: str) -> None:
-    import os
-    import time
-    import platform
-    import subprocess
-    
-    abs_profile = os.path.abspath(profile_dir).lower()
-    for _ in range(30):
-        running = False
-        try:
-            import psutil
-            for proc in psutil.process_iter(['name', 'cmdline']):
-                try:
-                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
-                        cmdline = proc.info['cmdline']
-                        if cmdline:
-                            cmdline_str = ' '.join(cmdline).lower()
-                            if abs_profile in cmdline_str:
-                                running = True
-                                break
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-        except ImportError:
-            # Fallback to native OS commands if psutil is not installed
-            try:
-                if platform.system() == "Windows":
-                    # wmic is deprecated/removed in modern Windows 11; try PowerShell first.
-                    try:
-                        output = subprocess.check_output(
-                            ["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*chrome*' } | Select-Object -ExpandProperty CommandLine"],
-                            stderr=subprocess.DEVNULL
-                        ).decode(errors='ignore').lower()
-                    except Exception:
-                        output = subprocess.check_output(
-                            'wmic process where "name like \'%chrome%\'" get commandline',
-                            shell=True,
-                            stderr=subprocess.DEVNULL
-                        ).decode(errors='ignore').lower()
-                    
-                    if abs_profile in output:
-                        running = True
-                else:
-                    output = subprocess.check_output(
-                        "ps -ef | grep -i chrome | grep -v grep",
-                        shell=True,
-                        stderr=subprocess.DEVNULL
-                    ).decode(errors='ignore').lower()
-                    if abs_profile in output:
-                        running = True
-            except Exception:
-                pass
-        if not running:
-            return
-        time.sleep(0.5)
-```
-
-### E. Native Browser Subprocess Execution (Bypassing Strict Anti-Bot)
-When anti-bot systems (e.g., Akamai or Cloudflare) enforce strict browser checks that flag automation signatures or CDP debugging ports (causing infinite CAPTCHA/MFA loops), use a manual, native Chrome execution fallback:
-
-1. **Locate Chrome Executable**: Search registry paths (Windows) or standard application directories:
-```python
-def _get_chrome_path(self) -> Optional[str]:
-    import platform
-    import os
-    if platform.system() == "Windows":
-        import winreg
-        try:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe") as key:
-                path, _ = winreg.QueryValueEx(key, "")
-                if path and os.path.exists(path):
-                    return path
-        except Exception:
-            pass
-        for p in [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
-        ]:
-            if os.path.exists(p):
-                return p
-    elif platform.system() == "Darwin":
-        path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-        if os.path.exists(path):
-            return path
-    return None
-```
-
-2. **Launch Native Subprocess**: Launch Google Chrome directly as a normal subprocess using the account's profile directory. This carries no automation flags:
-```python
-chrome_path = self._get_chrome_path()
-if not chrome_path:
-    raise PluginError("Google Chrome could not be found.")
-
-import subprocess
-cmd = [
-    chrome_path,
-    f"--user-data-dir={os.path.abspath(profile_dir)}",
-    "https://www.example.com/login",
-    "--no-first-run",
-    "--no-default-browser-check"
-]
-subprocess.run(cmd, check=True)
-```
-
-3. **Background Capture**: Once the user manually authenticates and closes the browser window (detected via `wait_for_chrome_exit`), launch a headed/headless automated session to capture the points balance and persist session cookies.
-```
+Every sync -- whichever button or job started it -- goes through
+`services.sync_service`. Do not add a second copy of the "apply result to
+account" logic in a route or job; extend `persist_result` instead.
 
 ---
 
-## 3. Debugging Guide & Log Locations
+## 3. Writing a Provider Plugin
+
+Subclass `plugins.browser_plugin.BrowserPlugin` and describe the site; the
+base runs both flows and finishes them with the same `scrape()`:
+
+```python
+class ExamplePlugin(BrowserPlugin):
+    login_url = "https://www.example.com/account"      # form, or dashboard that redirects to it
+    username_selector = "input[name='username']"
+    page_settle_seconds = 8
+
+    name / plugin_id / default_cpp / homepage_url / logo_domain   # metadata properties
+
+    def is_logged_in(self, sb) -> bool: ...              # strong check: balance or greeting visible
+    def fill_login_form(self, sb, username, password, auto_submit=True): ...
+    def is_mfa(self, sb) -> bool: ...                     # optional; raises InteractionRequiredError
+    def scrape(self, sb) -> dict: ...                     # balance/status/last_activity_date/certificates
+    def extract_membership_id(self, sb) -> str | None: ...  # optional; shown + copyable in the UI
+```
+
+Attributes select the archetype instead of re-implementing flows:
+
+| Situation | Set |
+| --- | --- |
+| Anti-bot rejects WebDriver on login (Akamai, hCaptcha) | `interactive_mode = "native"` -- the user's own Chrome is launched on the profile, then a headless session reads the page |
+| Auth0-style checks tie the session to the UA | `lock_user_agent = True` |
+| Session cookies must survive between SB launches | `use_cookie_jar = True`, `cookie_jar_name = "<id>_cookies.json"` |
+| Site is flaky; scheduled syncs should not flap | `cache_max_age_seconds = 900` (`cache_fallback_on_manual = True` to also serve Sync Now) |
+
+Read `plugins.context.current_run_context()` when behaviour must depend on
+*how* the run started (`mode` fetch/interactive, `trigger` manual/scheduled);
+never inspect the call stack.
+
+Hilton, United, British Airways and Korean Air are the reference
+implementations (assisted, assisted with session-expiry handling, native, and
+cache-fallback respectively). Plugins not yet migrated still implement
+`fetch_data`/`interactive_login` directly but must use the helpers in
+`plugins.session` rather than local copies.
+
+### Session persistence rationale
+
+* **User-Agent lock** (`session.get_consistent_user_agent`): Auth0 and
+  similar invalidate a session when the UA differs between the interactive
+  login and the later automated sync, so it is pinned to the installed Chrome.
+* **JSON cookie jar** (`session.save_cookies_to_json` / `load_cookies_from_json`):
+  Chrome automation profiles do not flush session-only cookies to SQLite on
+  exit. WebDriver only accepts a cookie for the domain currently loaded, so
+  the loader visits each domain (via `/robots.txt` for the domains in
+  `cookie_jar_robots_domains`) before injecting.
+* **Preferences fix** (`browser.configure_session_restore`, applied to every
+  run by `safe_call_plugin_method`): clears Chrome's crashed-exit flags so the
+  "didn't shut down correctly" bar does not cover the login form.
+* **Process shutdown** (`browser.wait_for_chrome_exit`): waits up to 5 s for
+  Chrome on the profile to exit on its own, then kills it and removes the
+  `Singleton*` lock files.
+* **Native Chrome** (`session.launch_native_chrome`): a normal Chrome process
+  with no automation flags or debug port, for sites that flag WebDriver.
+  `before_native_login` wipes stale cookies/session-restore first because
+  corrupt cookies from a failed attempt are a common cause of captcha loops.
+
+---
+
+## 4. Debugging Guide & Log Locations
 
 For troubleshooting scraper issues, SeleniumBase step-by-step debug outputs, screenshots, and application log files are stored under the user AppData directory:
 * **Log Directory**: `%APPDATA%\AwardTracker\logs\` (usually maps to `C:\Users\<Username>\AppData\Roaming\AwardTracker\logs\`).

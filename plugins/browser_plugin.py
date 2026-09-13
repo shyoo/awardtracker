@@ -134,10 +134,6 @@ class BrowserPlugin(ProviderPlugin):
     def scrape(self, sb) -> Dict[str, Any]:
         """Read everything from the authenticated session and return the result dict."""
 
-    def extract_membership_id(self, sb) -> Optional[str]:
-        """The program's member/account number if the page shows it. Called after scrape()."""
-        return None
-
     def before_native_login(self, profile_dir: Optional[str]) -> None:
         """Runs before the user's Chrome is launched (e.g. clear stale cookies)."""
         clear_profile_session(profile_dir, self.cookie_jar_name if self.use_cookie_jar else None)

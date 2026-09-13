@@ -3,7 +3,7 @@
 Every caller used to hand-roll ``Settings.query.filter_by(key=...).first()``
 plus its own default and int/bool coercion; keep that in one place.
 """
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from extensions import db
 from models import Settings

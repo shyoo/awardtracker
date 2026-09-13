@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 
-from .base import PluginError, InteractionRequiredError
+from .base import InteractionRequiredError
 from .browser_plugin import BrowserPlugin, log
 
 class KoreanAirPlugin(BrowserPlugin):

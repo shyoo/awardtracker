@@ -175,7 +175,10 @@ def register(app):
                 account.person_id = request.form.get('person_id') or None
                 account.username = username
                 account.has_exemption = has_exemption
-                account.extra_metadata = _metadata_from_form(request.form, account.is_manual)
+                metadata = _metadata_from_form(request.form, account.is_manual)
+                if account.scraped_membership_id:
+                    metadata['scraped_membership_id'] = account.scraped_membership_id
+                account.extra_metadata = metadata
                 if account.is_manual:
                     account.expiration_date = parse_date_field(request.form.get('expiration_date')) \
                         if request.form.get('expiration_date') else None

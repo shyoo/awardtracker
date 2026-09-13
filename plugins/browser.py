@@ -446,7 +446,6 @@ def wait_for_chrome_exit(profile_dir: str) -> None:
     if not profile_dir:
         return
     import os
-    import time
     import platform
     import subprocess
     import signal

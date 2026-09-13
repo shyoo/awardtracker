@@ -308,6 +308,16 @@ class ProviderPlugin(ABC):
         """
         pass
 
+    def extract_membership_id(self, sb) -> Optional[str]:
+        """The program's member / account number as shown on the signed-in page, or None.
+
+        Called by the browser flows after a successful scrape (the page the
+        scrape finished on is still open). Return the raw identifier, usually
+        alphanumeric (e.g. Hilton "378137745"); the caller strips whitespace and
+        persists it separately from anything the user typed in.
+        """
+        return None
+
     def calculate_expiration(self, balance: int, status: str, last_activity_date: datetime, has_exemption: bool = False) -> datetime:
         """
         Calculates the exact expiration date based on program-specific rules.

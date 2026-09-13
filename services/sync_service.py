@@ -173,10 +173,13 @@ def persist_result(account: Account, data: Dict[str, Any]) -> Optional[datetime]
     account.expiration_date = computed_expiration
     account.expiration_meta = data.get('expiration_meta', {})
 
-    member_number = data.get('member_number') or data.get('account_number')
-    if member_number:
+    # A membership ID read off the provider's page is kept under its own key so
+    # it never overwrites a number the user typed in (Account.membership_number
+    # resolves the precedence).
+    membership_id = data.get('membership_id') or data.get('member_number') or data.get('account_number')
+    if membership_id:
         meta = account.extra_metadata
-        meta['membership_number'] = str(member_number)
+        meta['scraped_membership_id'] = str(membership_id).strip()
         account.extra_metadata = meta
 
     _notify_if_expiring(account, computed_expiration)

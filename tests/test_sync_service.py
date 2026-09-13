@@ -68,7 +68,7 @@ class TestSyncService(unittest.TestCase):
             'balance': 54321,
             'status': 'Diamond',
             'last_activity_date': datetime.utcnow() - timedelta(days=30),
-            'member_number': '378137745',
+            'membership_id': '378137745',
             'certificates': [{'name': 'Free Night', 'expiration_date': '2027-01-31', 'details': {}}],
         }
         data.update(extra)
@@ -79,7 +79,8 @@ class TestSyncService(unittest.TestCase):
         self.assertEqual(account.balance, 54321)
         self.assertEqual(account.status, 'Diamond')
         self.assertEqual(account.last_fetch_status, 'SUCCESS')
-        self.assertEqual(account.extra_metadata.get('membership_number'), '378137745')
+        self.assertEqual(account.scraped_membership_id, '378137745')
+        self.assertEqual(account.membership_number, '378137745')
         self.assertIsNotNone(account.expiration_date)
         self.assertEqual([c.name for c in Certificate.query.filter_by(account_id=account.id)], ['Free Night'])
         self.assertEqual(len(account.history), 1)

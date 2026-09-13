@@ -3533,14 +3533,26 @@ class TestAPIsAndPlugins(unittest.TestCase):
             )
             db.session.add(acc)
             db.session.commit()
-            self.assertEqual(acc.membership_number, 'skymiles_user_123')
+            # The login ID is not a membership number (it is often an email); nothing to show yet.
+            self.assertEqual(acc.membership_number, '')
+            self.assertIsNone(acc.membership_number_source)
 
-            # 2. Custom membership number in extra_metadata takes precedence
+            # 2. A membership ID scraped by the plugin is shown...
+            meta = acc.extra_metadata
+            meta['scraped_membership_id'] = '378137745'
+            acc.extra_metadata = meta
+            db.session.commit()
+            self.assertEqual(acc.membership_number, '378137745')
+            self.assertEqual(acc.membership_number_source, 'scraped')
+
+            # ...but a number the user typed in always wins over it.
             meta = acc.extra_metadata
             meta['membership_number'] = '9876543210'
             acc.extra_metadata = meta
             db.session.commit()
             self.assertEqual(acc.membership_number, '9876543210')
+            self.assertEqual(acc.membership_number_source, 'user')
+            self.assertEqual(acc.scraped_membership_id, '378137745')
 
             # 3. Manual account with account_number in extra_metadata
             manual_prov = Provider.query.filter_by(plugin_name='chase').first()

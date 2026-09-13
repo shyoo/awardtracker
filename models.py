@@ -98,14 +98,37 @@ class Account(db.Model):
     def category_key(self):
         return self.category.lower().replace(' ', '_')
 
+    # Membership / account number shown on the cards. Three sources, in priority order:
+    #   1. what the user typed into "Membership / Account #" (always wins),
+    #   2. what the provider's plugin read off the account page on the last sync,
+    #   3. (manual accounts) a legacy 'account_number' field.
+    # The login username is deliberately NOT a fallback: it is often an email
+    # address and is shown separately as the login ID.
+    @property
+    def user_membership_number(self):
+        return self.extra_metadata.get('membership_number') or ""
+
+    @property
+    def scraped_membership_id(self):
+        return self.extra_metadata.get('scraped_membership_id') or ""
+
     @property
     def membership_number(self):
-        custom = self.extra_metadata.get('membership_number')
-        if custom:
-            return custom
-        if self.is_manual:
-            return self.extra_metadata.get('account_number') or ""
-        return self.username
+        return (
+            self.user_membership_number
+            or self.scraped_membership_id
+            or (self.extra_metadata.get('account_number') if self.is_manual else "")
+            or ""
+        )
+
+    @property
+    def membership_number_source(self):
+        """'user', 'scraped', or None -- which source membership_number came from."""
+        if self.user_membership_number:
+            return 'user'
+        if self.scraped_membership_id:
+            return 'scraped'
+        return None
 
     @property
     def interactive_login_required(self):
