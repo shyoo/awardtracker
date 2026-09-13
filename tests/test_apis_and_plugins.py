@@ -2404,7 +2404,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
                 f"returned data in the same run (got call to {func.__name__})"
             )
 
-        with patch('app.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
+        with patch('plugins.base.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
             response = self.client.post(f'/accounts/{account.id}/interactive', follow_redirects=False)
             self.assertEqual(response.status_code, 302)
 
@@ -2449,7 +2449,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
                 f"(got call to {func.__name__})"
             )
 
-        with patch('app.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
+        with patch('plugins.base.safe_call_plugin_method', side_effect=fake_safe_call) as mock_safe_call:
             response = self.client.post(f'/accounts/{account.id}/interactive', follow_redirects=False)
             self.assertEqual(response.status_code, 302)
 

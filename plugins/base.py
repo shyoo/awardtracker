@@ -6,6 +6,8 @@ import inspect
 import threading
 from seleniumbase import BaseCase
 
+from .context import RunContext, RunMode, RunTrigger, set_run_context, current_run_context, clear_run_context
+
 active_drivers = {}
 active_drivers_lock = threading.Lock()
 
@@ -223,96 +225,24 @@ def is_hidden_node(node) -> bool:
 
 
 def inject_control_modal(sb):
+    """Overlay the Award Tracker guide card on the page the browser is showing.
+
+    Which text to show (interactive step list vs. "automated sync, hands off")
+    and which provider name/tip to use comes from the current run context set
+    by safe_call_plugin_method(); nothing is inferred from the page URL.
+    """
     try:
-        # Check if browser is headless
-        is_headless = getattr(sb, "headless", False)
-        if is_headless:
-            return
-            
-        # Determine active plugin from stack
-        active_plugin = None
-        try:
-            for frame_info in inspect.stack():
-                frame = frame_info.frame
-                self_obj = frame.f_locals.get('self')
-                if self_obj and isinstance(self_obj, ProviderPlugin):
-                    active_plugin = self_obj
-                    break
-        except Exception:
-            pass
-
-        # If we have an active plugin and it says not to show the control modal, skip
-        if active_plugin and not active_plugin.show_control_modal:
+        if getattr(sb, "headless", False):
             return
 
-        # Fallback check for known non-modal plugins if active_plugin is not detected from stack (e.g. direct test calls)
-        if not active_plugin:
-            current_url = sb.get_current_url().lower()
-            if any(domain in current_url for domain in ("britishairways", "ba.com", "wyndhamhotels", "wyndhamrewards", "jetblue")):
-                return
+        ctx = current_run_context()
+        active_plugin = ctx.plugin if ctx else None
+        if active_plugin is not None and not getattr(active_plugin, 'show_control_modal', True):
+            return
 
-        # Determine if this is an interactive login or a standard sync
-        interactive = False
-        for frame in inspect.stack():
-            if frame.function == 'interactive_login':
-                interactive = True
-                break
-                
-        provider_name = "Award Tracker"
-        custom_tip = ""
-        
-        if active_plugin:
-            provider_name = active_plugin.name
-            custom_tip = active_plugin.custom_tip
-        else:
-            # Fallback URL parsing if active_plugin isn't on stack (e.g., direct runner script or mock test environment)
-            current_url = sb.get_current_url().lower()
-            if "united.com" in current_url:
-                provider_name = "United Airlines"
-                custom_tip = "Check the checkbox for <strong>\"Don't require verification code again.\"</strong> to prevent future MFA prompts."
-            elif "marriott.com" in current_url:
-                provider_name = "Marriott Bonvoy"
-                custom_tip = "Check the checkbox/link for <strong>\"Trust this device for 90 days\"</strong> if prompted."
-            elif "lifemiles" in current_url or "avianca" in current_url:
-                provider_name = "Avianca LifeMiles"
-                custom_tip = "Check your email for the <strong>\"Confirm your identity\"</strong> verification code."
-            elif "aa.com" in current_url or "american" in current_url:
-                provider_name = "American Airlines"
-                custom_tip = "Check your email or phone for the <strong>\"Verification Code\"</strong>."
-            elif "asiana.com" in current_url:
-                provider_name = "Asiana Airlines"
-            elif "koreanair.com" in current_url:
-                provider_name = "Korean Air"
-                custom_tip = "After a successful sign-in, please wait a few seconds for the application to automatically redirect to your mileage overview page, or navigate to <strong>My Mileage > Overview</strong> manually if needed."
-            elif "alaskaair.com" in current_url:
-                provider_name = "Alaska Airlines"
-            elif "delta.com" in current_url:
-                provider_name = "Delta Air Lines"
-            elif "hilton.com" in current_url:
-                provider_name = "Hilton Honors"
-            elif "caesars.com" in current_url:
-                provider_name = "Caesars Rewards"
-                custom_tip = "Click the 'Maybe Later' button if prompted to enroll in MFA."
-            elif "hertz.com" in current_url:
-                provider_name = "Hertz Gold+ Rewards"
-            elif "enterprise.com" in current_url:
-                provider_name = "Enterprise Plus"
-            elif "nationalcar.com" in current_url:
-                provider_name = "National Emerald Club"
-            elif "hyatt.com" in current_url:
-                provider_name = "World of Hyatt"
-            elif "ihg.com" in current_url:
-                provider_name = "IHG One Rewards"
-            elif "southwest.com" in current_url:
-                provider_name = "Southwest Airlines"
-            elif "virginatlantic.com" in current_url:
-                provider_name = "Virgin Atlantic"
-            elif "aircanada.com" in current_url or "aeroplan" in current_url:
-                provider_name = "Air Canada Aeroplan"
-                custom_tip = "Complete any verification or security prompts if requested by Air Canada."
-            elif "evaair.com" in current_url or "flyeva" in current_url:
-                provider_name = "EVA Air"
-                custom_tip = "Complete the CAPTCHA image manually, then enter your email verification code if prompted."
+        interactive = bool(ctx and ctx.is_interactive)
+        provider_name = getattr(active_plugin, 'name', None) or (ctx.provider_name if ctx else None) or "Award Tracker"
+        custom_tip = getattr(active_plugin, 'custom_tip', "") if active_plugin is not None else ""
 
         title = f"{provider_name} Assistant"
         
@@ -697,6 +627,20 @@ def safe_call_plugin_method(method, *args, **kwargs):
     account_id = kwargs.pop('_account_id', None)
     provider_name = kwargs.pop('_provider_name', None)
     current_balance = kwargs.pop('_current_balance', None)
+    mode = kwargs.pop('_mode', None)
+    trigger = kwargs.pop('_trigger', None)
+
+    # Publish the run context so the guide modal, cache-fallback policy and
+    # logging know how this run was started without inspecting the call stack.
+    if mode is None:
+        mode = RunMode.INTERACTIVE if getattr(method, '__name__', '') == 'interactive_login' else RunMode.FETCH
+    set_run_context(RunContext(
+        account_id=account_id,
+        provider_name=provider_name or '',
+        plugin=getattr(method, '__self__', None),
+        mode=RunMode(mode),
+        trigger=RunTrigger(trigger) if trigger is not None else RunTrigger.MANUAL,
+    ))
 
     # A new run is starting for this account -- clear any stale cancellation
     # flag from a previous run so this one isn't refused before it starts.
@@ -769,6 +713,7 @@ def safe_call_plugin_method(method, *args, **kwargs):
                 pass
             raise e
     finally:
+        clear_run_context()
         if account_id:
             unregister_active_driver(account_id)
 

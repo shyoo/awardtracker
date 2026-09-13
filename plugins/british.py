@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional
+from .context import current_run_context
 from .base import ProviderPlugin, PluginError, InteractionRequiredError, add_months, get_sb_kwargs, get_chrome_binary
 from seleniumbase import SB
 from bs4 import BeautifulSoup
@@ -12,7 +13,6 @@ import platform
 import subprocess
 import time
 import shutil
-import inspect
 import stat
 try:
     import winreg
@@ -290,11 +290,10 @@ class BritishAirwaysPlugin(ProviderPlugin):
         }
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
-        is_manual = False
-        for frame in inspect.stack():
-            if frame.function == 'sync_account':
-                is_manual = True
-                break
+        # A user-initiated Sync Now must surface the real error; only an
+        # unattended scheduled sync may quietly fall back to cached data.
+        ctx = current_run_context()
+        is_manual = ctx.is_manual if ctx else True
 
         agent = self.get_consistent_user_agent()
         try:

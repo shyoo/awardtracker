@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional
+from .context import current_run_context
 from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
 from seleniumbase import SB
 from bs4 import BeautifulSoup
@@ -415,13 +416,10 @@ class EVAPlugin(ProviderPlugin):
             print(f"Failed to inject cookies: {e}")
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
-        # Check if this is a manual sync from the web interface
-        is_manual = False
-        import inspect
-        for frame in inspect.stack():
-            if frame.function == 'sync_account':
-                is_manual = True
-                break
+        # A user-initiated Sync Now must surface the real error; only an
+        # unattended scheduled sync may quietly fall back to cached data.
+        ctx = current_run_context()
+        is_manual = ctx.is_manual if ctx else True
 
         result = None
         try:

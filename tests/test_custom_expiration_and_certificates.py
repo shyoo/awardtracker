@@ -235,9 +235,9 @@ class TestCustomExpirationAndCertificates(unittest.TestCase):
         db.session.add_all([custom_cert, scraped_cert])
         db.session.commit()
 
-        # Mock plugin sync call - patch BOTH app.py local name and plugins.base module
-        with patch('app.safe_call_plugin_method') as mock_safe_call_app, \
-             patch('plugins.base.safe_call_plugin_method') as mock_safe_call_base, \
+        # Every sync path goes through services.sync_service, which calls the
+        # plugin via plugins.base.safe_call_plugin_method -- one patch target.
+        with patch('plugins.base.safe_call_plugin_method') as mock_safe_call, \
              patch('notifier.send_desktop_notification') as mock_notify:
             
             mock_data = {
@@ -252,8 +252,7 @@ class TestCustomExpirationAndCertificates(unittest.TestCase):
                     }
                 ]
             }
-            mock_safe_call_app.return_value = mock_data
-            mock_safe_call_base.return_value = mock_data
+            mock_safe_call.return_value = mock_data
 
             # Trigger sync route
             res = self.client.post(f'/api/accounts/{account.id}/sync')

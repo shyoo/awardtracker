@@ -4,8 +4,10 @@ from extensions import db, migrate
 from models import Provider, Account, AccountHistory, Certificate, Settings, Person
 from security import security_manager
 from plugins.manager import plugin_manager
-from plugins.base import safe_call_plugin_method
-from scheduler import scheduler, app_log
+from plugins.context import RunTrigger
+from scheduler import scheduler
+from applog import app_log
+from services import sync_service
 from datetime import datetime, timedelta
 import os
 import sys
@@ -211,109 +213,6 @@ def get_category_icon(category_name):
         'Other': '✨'
     }
     return icons.get(category_name, '✨')
-
-def _persist_fetch_result(account, provider, data):
-    """
-    Applies scraped plugin data (balance, status, expiration, certificates) to an
-    account and commits it, including the expiration-warning notification logic.
-    Shared by the manual "Sync Now" flow and the immediate post-login sync so both
-    paths compute expiration/notifications identically.
-    """
-    account.balance = data.get('balance', account.balance)
-    account.status = data.get('status', account.status)
-
-    from expiration import calculate_expiration
-    last_activity = data.get('last_activity_date')
-    scraped_exp = data.get('expiration_date')
-
-    if last_activity:
-        computed_expiration = calculate_expiration(
-            provider.plugin_name,
-            account.balance,
-            account.status,
-            last_activity,
-            account.has_exemption
-        )
-    else:
-        computed_expiration = calculate_expiration(
-            provider.plugin_name,
-            account.balance,
-            account.status,
-            scraped_exp if provider.plugin_name == 'korean' else None,
-            account.has_exemption
-        )
-        if provider.plugin_name != 'korean' and scraped_exp:
-            computed_expiration = scraped_exp
-
-    if account.has_exemption:
-        computed_expiration = None
-
-    if isinstance(computed_expiration, str):
-        try:
-            computed_expiration = datetime.fromisoformat(computed_expiration.replace('Z', '+00:00')).replace(tzinfo=None)
-        except ValueError:
-            computed_expiration = None
-
-    account.expiration_date = computed_expiration
-    account.expiration_meta = data.get('expiration_meta', {})
-
-    member_number = data.get('member_number') or data.get('account_number')
-    if member_number:
-        meta = account.extra_metadata
-        meta['membership_number'] = str(member_number)
-        account.extra_metadata = meta
-
-    # Spam-filtered warning notifications
-    warning_threshold_setting = Settings.query.filter_by(key='warning_threshold').first()
-    warning_threshold_days = int(warning_threshold_setting.value) if warning_threshold_setting else 30
-
-    if computed_expiration:
-        days_left = (computed_expiration - datetime.utcnow()).days
-        if days_left <= warning_threshold_days:
-            if (account.last_notified_expiration is None or
-                    computed_expiration < account.last_notified_expiration):
-                from notifier import send_desktop_notification
-                title = f"Points Expiring Soon: {account.provider.name}"
-                message = f"Your balance of {account.balance:,} points is set to expire on {computed_expiration.strftime('%Y-%m-%d')} ({days_left} days left)!"
-                send_desktop_notification(title, message)
-                account.last_notified_expiration = computed_expiration
-        else:
-            if account.last_notified_expiration and computed_expiration > account.last_notified_expiration:
-                account.last_notified_expiration = None
-    else:
-        account.last_notified_expiration = None
-
-    account.last_fetch_status = 'SUCCESS'
-    account.last_error = None
-    account.last_updated = datetime.utcnow()
-
-    history = AccountHistory(account_id=account.id, balance=account.balance)
-    db.session.add(history)
-
-    # Sync certificates/coupons if present in parsed data
-    if 'certificates' in data:
-        scraped_certs = Certificate.query.filter_by(account_id=account.id).all()
-        for c in scraped_certs:
-            if not c.details.get('is_custom'):
-                db.session.delete(c)
-        for cert_data in data.get('certificates', []):
-            exp_date_str = cert_data.get('expiration_date')
-            exp_date = None
-            if exp_date_str:
-                try:
-                    exp_date = datetime.strptime(exp_date_str, "%Y-%m-%d")
-                except Exception:
-                    pass
-            cert = Certificate(
-                account_id=account.id,
-                name=cert_data.get('name'),
-                expiration_date=exp_date,
-                details=cert_data.get('details', {})
-            )
-            db.session.add(cert)
-
-    db.session.commit()
-    return computed_expiration
 
 def create_app(config_class=Config):
     if getattr(sys, 'frozen', False):
@@ -1112,169 +1011,38 @@ def create_app(config_class=Config):
             return redirect(url_for('account_detail', account_id=account_id))
         return redirect(url_for('index'))
 
+    def _redirect_back_to_account(account_id):
+        """Return to the page the user clicked from (dashboard or detail page)."""
+        referrer = request.referrer
+        if referrer and ('/accounts/' in referrer) and ('/edit' not in referrer):
+            return redirect(referrer)
+        return redirect(url_for('index'))
+
     @app.route('/accounts/<int:account_id>/sync', methods=['POST'])
     def sync_account(account_id):
         account = Account.query.get_or_404(account_id)
-        provider = account.provider
-        plugin = plugin_manager.get_plugin(provider.plugin_name)
-
         if account.is_manual:
             flash(f'{account.display_name} is a manually-tracked account. Use "Update Balance" instead.')
             return redirect(url_for('account_detail', account_id=account_id))
 
-        if not plugin:
-            app_log.warning(f"Plugin {provider.plugin_name} not found for account {account.display_name}.")
-            flash(f'Plugin {provider.plugin_name} not found.')
+        outcome = sync_service.sync_account(account, trigger=RunTrigger.MANUAL)
+        flash(outcome.message)
+        if not outcome.ok and 'not found' in outcome.message:
             return redirect(url_for('index'))
-
-        try:
-            app_log.info(f"Starting manual sync for account {account.display_name}...")
-            from notifier import send_desktop_notification
-            send_desktop_notification("Sync Started", f"Synchronizing account: {account.display_name}")
-            
-            password = security_manager.decrypt(account.password_encrypted)
-            profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
-            data = safe_call_plugin_method(
-                plugin.fetch_data,
-                account.username,
-                password,
-                profile_dir=profile_dir,
-                _account_id=account.id,
-                _provider_name=account.provider.name,
-                _current_balance=account.balance,
-                **account.extra_metadata
-            )
-            
-            computed_expiration = _persist_fetch_result(account, provider, data)
-            app_log.info(f"Sync successful for {account.display_name}. Balance: {account.balance}, Expiration: {computed_expiration}")
-            from notifier import send_desktop_notification
-            send_desktop_notification("Sync Successful", f"{account.display_name} balance updated successfully to {account.balance:,} points.")
-            flash(f'{account.display_name} synced successfully.')
-            
-        except Exception as e:
-            account.last_fetch_status = 'FAILED'
-            account.last_error = str(e)
-            account.last_updated = datetime.utcnow()
-            db.session.commit()
-            app_log.error(f"Sync failed for {account.display_name}: {str(e)}", exc_info=True)
-            from notifier import send_desktop_notification
-            send_desktop_notification("Sync Failed", f"Synchronization failed for {account.display_name}: {str(e)}")
-            flash(f'Sync failed for {account.display_name}: {str(e)}')
-
         return redirect(url_for('account_detail', account_id=account.id))
 
     @app.route('/api/accounts/<int:account_id>/sync', methods=['POST'])
     def api_sync_account(account_id):
-        from flask import jsonify
         account = Account.query.get_or_404(account_id)
-        provider = account.provider
-        plugin = plugin_manager.get_plugin(provider.plugin_name)
-
-        if account.is_manual:
-            return jsonify({'status': 'error', 'message': f'{account.display_name} is a manually-tracked account.'})
-
-        if not plugin:
-            return jsonify({'status': 'error', 'message': f'Plugin {provider.plugin_name} not found.'})
-
-        try:
-            app_log.info(f"Starting manual sync for account {account.display_name} via API...")
-            from notifier import send_desktop_notification
-            send_desktop_notification("Sync Started", f"Synchronizing account: {account.display_name}")
-
-            password = security_manager.decrypt(account.password_encrypted)
-            profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
-            data = safe_call_plugin_method(
-                plugin.fetch_data,
-                account.username,
-                password,
-                profile_dir=profile_dir,
-                _account_id=account.id,
-                _provider_name=account.provider.name,
-                _current_balance=account.balance,
-                **account.extra_metadata
-            )
-            
-            account.balance = data.get('balance', account.balance)
-            account.status = data.get('status', account.status)
-            
-            from expiration import calculate_expiration
-            last_activity = data.get('last_activity_date')
-            scraped_exp = data.get('expiration_date')
-            
-            if last_activity:
-                computed_expiration = calculate_expiration(
-                    provider.plugin_name, account.balance, account.status, last_activity, account.has_exemption
-                )
-            else:
-                computed_expiration = calculate_expiration(
-                    provider.plugin_name, account.balance, account.status, 
-                    scraped_exp if provider.plugin_name == 'korean' else None, account.has_exemption
-                )
-                if provider.plugin_name != 'korean' and scraped_exp:
-                    computed_expiration = scraped_exp
-            
-            if account.has_exemption:
-                computed_expiration = None
-                
-            if isinstance(computed_expiration, str):
-                try:
-                    computed_expiration = datetime.fromisoformat(computed_expiration.replace('Z', '+00:00')).replace(tzinfo=None)
-                except ValueError:
-                    computed_expiration = None
-
-            account.expiration_date = computed_expiration
-            account.expiration_meta = data.get('expiration_meta', {})
-            
-            account.last_fetch_status = 'SUCCESS'
-            account.last_error = None
-            account.last_updated = datetime.utcnow()
-            
-            history = AccountHistory(account_id=account.id, balance=account.balance)
-            db.session.add(history)
-            
-            # Sync certificates/coupons if present in parsed data
-            if 'certificates' in data:
-                scraped_certs = Certificate.query.filter_by(account_id=account.id).all()
-                for c in scraped_certs:
-                    if not c.details.get('is_custom'):
-                        db.session.delete(c)
-                for cert_data in data.get('certificates', []):
-                    exp_date_str = cert_data.get('expiration_date')
-                    exp_date = None
-                    if exp_date_str:
-                        try:
-                            exp_date = datetime.strptime(exp_date_str, "%Y-%m-%d")
-                        except Exception:
-                            pass
-                    cert = Certificate(
-                        account_id=account.id,
-                        name=cert_data.get('name'),
-                        expiration_date=exp_date,
-                        details=cert_data.get('details', {})
-                    )
-                    db.session.add(cert)
-            
-            db.session.commit()
-            
-            from notifier import send_desktop_notification
-            send_desktop_notification("Sync Successful", f"{account.display_name} balance updated successfully to {account.balance:,} points.")
-            
-            return jsonify({
-                'status': 'success',
-                'balance': account.balance,
-                'last_updated': account.last_updated.isoformat(),
-                'message': 'Sync successful'
-            })
-            
-        except Exception as e:
-            account.last_fetch_status = 'FAILED'
-            account.last_error = str(e)
-            account.last_updated = datetime.utcnow()
-            db.session.commit()
-            app_log.error(f"API Sync failed for {account.display_name}: {str(e)}")
-            from notifier import send_desktop_notification
-            send_desktop_notification("Sync Failed", f"Synchronization failed for {account.display_name}: {str(e)}")
-            return jsonify({'status': 'error', 'message': str(e)})
+        outcome = sync_service.sync_account(account, trigger=RunTrigger.MANUAL)
+        if not outcome.ok:
+            return jsonify({'status': 'error', 'message': outcome.message})
+        return jsonify({
+            'status': 'success',
+            'balance': account.balance,
+            'last_updated': account.last_updated.isoformat(),
+            'message': 'Sync successful'
+        })
 
     @app.route('/api/sync-all/status', methods=['GET'])
     def sync_all_status():
@@ -1361,98 +1129,11 @@ def create_app(config_class=Config):
     @app.route('/accounts/<int:account_id>/interactive', methods=['POST'])
     def interactive_login(account_id):
         account = Account.query.get_or_404(account_id)
-        provider = account.provider
-        plugin = plugin_manager.get_plugin(provider.plugin_name)
-        
-        if not plugin:
-            flash(f'Plugin {provider.plugin_name} not found.')
+        outcome = sync_service.interactive_login(account)
+        flash(outcome.message)
+        if not outcome.login_ok and not outcome.cancelled and 'not found' in outcome.message:
             return redirect(url_for('index'))
-
-        password = security_manager.decrypt(account.password_encrypted)
-        profile_dir = os.path.join(app.config.get('ROOT_DIR', os.getcwd()), 'browser_profiles', str(account.id))
-
-        from plugins.base import is_cancelled
-        try:
-            app_log.info(f"Starting interactive login for account {account.display_name}...")
-            login_result = safe_call_plugin_method(
-                plugin.interactive_login,
-                account.username,
-                password,
-                profile_dir=profile_dir,
-                _account_id=account.id,
-                _provider_name=account.provider.name,
-                _current_balance=account.balance,
-                **account.extra_metadata
-            )
-            app_log.info(f"Interactive login completed for {account.display_name}.")
-        except Exception as e:
-            app_log.error(f"Interactive login failed for {account.display_name}: {str(e)}", exc_info=True)
-            if is_cancelled(account.id):
-                flash(f'Interactive login for {account.display_name} was cancelled.')
-            else:
-                flash(f'Interactive login failed for {account.display_name}: {str(e)}')
-            referrer = request.referrer
-            if referrer and ('/accounts/' in referrer) and ('/edit' not in referrer):
-                return redirect(referrer)
-            return redirect(url_for('index'))
-
-        # If the user cancelled mid-login, some plugins' own broad except blocks
-        # swallow the resulting cancellation error and return None rather than
-        # re-raising it -- which would otherwise be indistinguishable from "this
-        # plugin can't scrape mid-login, please fall back to fetch_data()" below.
-        # Check the cancellation flag explicitly so a cancelled run doesn't
-        # silently launch an entirely new, unprotected browser session anyway.
-        if is_cancelled(account.id):
-            app_log.info(f"Interactive login cancelled by user for {account.display_name}.")
-            flash(f'Interactive login for {account.display_name} was cancelled.')
-            referrer = request.referrer
-            if referrer and ('/accounts/' in referrer) and ('/edit' not in referrer):
-                return redirect(referrer)
-            return redirect(url_for('index'))
-
-        # If the plugin already scraped data from the still-open, authenticated
-        # session (see ProviderPlugin.interactive_login), use it directly instead
-        # of launching a second browser via fetch_data() — a second launch isn't
-        # guaranteed to inherit the login, e.g. on programs that gate every login
-        # behind MFA. Plugins that can't scrape from within the login flow (e.g.
-        # manual mode using a native, non-automated browser) return None here and
-        # fall back to a normal fetch_data() call.
-        try:
-            if isinstance(login_result, dict):
-                data = login_result
-            else:
-                app_log.info(f"Fetching balance immediately after login for {account.display_name}...")
-                data = safe_call_plugin_method(
-                    plugin.fetch_data,
-                    account.username,
-                    password,
-                    profile_dir=profile_dir,
-                    _account_id=account.id,
-                    _provider_name=account.provider.name,
-                    _current_balance=account.balance,
-                    **account.extra_metadata
-                )
-            _persist_fetch_result(account, provider, data)
-            app_log.info(f"Post-login sync successful for {account.display_name}. Balance: {account.balance}")
-            from notifier import send_desktop_notification
-            send_desktop_notification("Sync Successful", f"{account.display_name} balance updated successfully to {account.balance:,} points.")
-            flash(f'{account.display_name} logged in and synced successfully.')
-        except Exception as e:
-            # Discard any partial mutations _persist_fetch_result staged before raising
-            # (e.g. balance/status already set, old certificates marked for deletion)
-            # so only the FAILED status below gets committed, not a half-applied sync.
-            db.session.rollback()
-            account.last_fetch_status = 'FAILED'
-            account.last_error = str(e)
-            account.last_updated = datetime.utcnow()
-            db.session.commit()
-            app_log.error(f"Post-login sync failed for {account.display_name}: {str(e)}", exc_info=True)
-            flash(f'Interactive login succeeded for {account.display_name}, but the immediate sync failed: {str(e)}. Try "Sync Now".')
-
-        referrer = request.referrer
-        if referrer and ('/accounts/' in referrer) and ('/edit' not in referrer):
-            return redirect(referrer)
-        return redirect(url_for('index'))
+        return _redirect_back_to_account(account.id)
 
     @app.route('/accounts/<int:account_id>/edit', methods=['GET', 'POST'])
     def edit_account(account_id):
