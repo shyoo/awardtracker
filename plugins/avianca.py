@@ -193,20 +193,23 @@ class AviancaLifemilesPlugin(ProviderPlugin):
         """
         soup = BeautifulSoup(html, "html.parser")
         visible_text = soup.get_text(" ", strip=True)
-        # Prefer explicitly named DOM fields; current LifeMiles overview
-        # builds expose the number through data-testid/data-* attributes.
-        member_markers = ('member', 'membership', 'lifemiles-number', 'lifemiles_number',
-                          'account-number', 'account_number', 'loyalty-number')
-        for element in soup.find_all(True):
-            attributes = " ".join(
-                f"{key} {value}" for key, value in element.attrs.items()
-            ).lower()
-            if not any(marker in attributes for marker in member_markers):
-                continue
-            candidates = [element.get_text(" ", strip=True)]
-            candidates.extend(str(value) for value in element.attrs.values())
-            for candidate in candidates:
-                match = re.search(r'\b(\d[\d\s-]{4,19})\b', candidate)
+        # Prefer the account-card field used by the current LifeMiles
+        # overview. Do not scan arbitrary elements whose class happens to
+        # contain "member": those can wrap both the card and its 197,000-mile
+        # balance, causing the balance to be saved as the membership number.
+        explicit_selectors = (
+            "[data-cy='OverviewCardLmNumberDiv']",
+            "[data-testid='member-number']",
+            "[data-testid='membership-number']",
+            "[data-testid*='lifemiles-number']",
+            "[data-testid*='member-number']",
+            "[data-cy*='member-number']",
+            "[data-cy*='membership-number']",
+            ".account-ui-AccountActivityCard_userId",
+        )
+        for selector in explicit_selectors:
+            for element in soup.select(selector):
+                match = re.fullmatch(r'\s*(\d[\d\s-]{4,19})\s*', element.get_text(" "))
                 if match:
                     membership_id = re.sub(r'[\s-]+', '', match.group(1))
                     if 5 <= len(membership_id) <= 20:
@@ -226,6 +229,16 @@ class AviancaLifemilesPlugin(ProviderPlugin):
             membership_id = re.sub(r'[\s-]+', '', match.group(1)).upper()
             if 5 <= len(membership_id) <= 20 and any(char.isdigit() for char in membership_id):
                 return membership_id
+        return None
+
+    def _wait_for_membership_id(self, sb, attempts: int = 10) -> Optional[str]:
+        """Wait for the asynchronously rendered overview account card."""
+        for attempt in range(attempts):
+            membership_id = self._extract_membership_id(sb.get_page_source())
+            if membership_id:
+                return membership_id
+            if attempt < attempts - 1:
+                sb.sleep(1)
         return None
 
     def _extract_expiration_date(self, html: str) -> Optional[str]:
@@ -742,7 +755,7 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                 result["balance"] = balance
                 if status:
                     result["status"] = status
-                membership_id = self._extract_membership_id(html)
+                membership_id = self._wait_for_membership_id(sb)
                 if membership_id:
                     result["membership_id"] = membership_id
                 
@@ -849,7 +862,10 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                 "expiration_date": None,
                 "certificates": []
             }
-            membership_id = self._extract_membership_id(html)
+            # The account card often finishes rendering after the balance, so
+            # recapture the page after the settle delay instead of extracting
+            # from the pre-delay HTML snapshot.
+            membership_id = self._wait_for_membership_id(sb)
             if membership_id:
                 result["membership_id"] = membership_id
             # The overview page directly displays an explicit "Expiration date" field

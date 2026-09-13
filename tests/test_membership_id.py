@@ -150,6 +150,35 @@ class TestMembershipIdExtractors(unittest.TestCase):
             '13498929883',
         )
 
+    def test_avianca_prefers_current_overview_card_id_to_balance(self):
+        plugin = plugin_manager.get_plugin('avianca')
+        html = (
+            '<div class="member-overview">'
+            '<span class="balance">197,000 miles</span>'
+            '<div data-cy="OverviewCardLmNumberDiv" '
+            'class="account-ui-AccountActivityCard_userId">13498929883</div>'
+            '</div>'
+        )
+        self.assertEqual(plugin._extract_membership_id(html), '13498929883')
+
+    def test_avianca_does_not_use_a_member_container_balance_as_id(self):
+        plugin = plugin_manager.get_plugin('avianca')
+        self.assertIsNone(
+            plugin._extract_membership_id(
+                '<div class="member-overview">LifeMiles balance: 197,000</div>'
+            )
+        )
+
+    def test_avianca_waits_for_overview_card_membership_id(self):
+        plugin = plugin_manager.get_plugin('avianca')
+        sb = MagicMock()
+        sb.get_page_source.side_effect = [
+            '<div>LifeMiles balance: 197,000</div>',
+            '<div data-cy="OverviewCardLmNumberDiv">13498929883</div>',
+        ]
+        self.assertEqual(plugin._wait_for_membership_id(sb), '13498929883')
+        sb.sleep.assert_called_once_with(1)
+
     def test_default_hook_returns_none(self):
         self.assertIsNone(plugin_manager.get_plugin('delta').extract_membership_id(self._sb("<p>x</p>")))
 
