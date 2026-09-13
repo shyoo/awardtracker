@@ -183,6 +183,32 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                 
         return balance, status
 
+    def _extract_membership_id(self, html: str) -> Optional[str]:
+        """Return the LifeMiles number displayed on the signed-in overview.
+
+        LifeMiles has used both English and Spanish labels, and its React
+        payload has alternated between rendered text and a ``memberNumber``
+        field.  Require an explicit member-number label so a points balance,
+        date, or other numeric value cannot be mistaken for an account ID.
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        visible_text = soup.get_text(" ", strip=True)
+        patterns = (
+            r'(?:lifemiles\s*(?:member(?:ship)?\s*)?(?:number|no\.?|#)|'
+            r'(?:member(?:ship)?|account)\s*(?:number|no\.?|id)|'
+            r'n[uú]mero\s*(?:de\s*)?(?:socio|cuenta|lifemiles))'
+            r'\s*(?:is\s*)?(?:[:#]|no\.?)?\s*([A-Za-z0-9][A-Za-z0-9\s-]{3,30})',
+            r'["\']memberNumber["\']\s*:\s*["\']([A-Za-z0-9][A-Za-z0-9\s-]{3,30})["\']',
+        )
+        for pattern in patterns:
+            match = re.search(pattern, visible_text if 'memberNumber' not in pattern else html, re.I)
+            if not match:
+                continue
+            membership_id = re.sub(r'[\s-]+', '', match.group(1)).upper()
+            if 5 <= len(membership_id) <= 20 and any(char.isdigit() for char in membership_id):
+                return membership_id
+        return None
+
     def _extract_expiration_date(self, html: str) -> Optional[str]:
         """
         Parses the expiration date from the LifeMiles dashboard page HTML.
@@ -697,6 +723,9 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                 result["balance"] = balance
                 if status:
                     result["status"] = status
+                membership_id = self._extract_membership_id(html)
+                if membership_id:
+                    result["membership_id"] = membership_id
                 
                 # Expiration date extraction
                 try:
@@ -801,6 +830,9 @@ class AviancaLifemilesPlugin(ProviderPlugin):
                 "expiration_date": None,
                 "certificates": []
             }
+            membership_id = self._extract_membership_id(html)
+            if membership_id:
+                result["membership_id"] = membership_id
             # The overview page directly displays an explicit "Expiration date" field
             # (e.g. "Dec 31, 2026"), so unlike last_activity_date-based expiration
             # calculations, this doesn't need the fragile transactions-page URL hunt
