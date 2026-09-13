@@ -3037,6 +3037,26 @@ class TestAPIsAndPlugins(unittest.TestCase):
             finally:
                 debug_logger.clear_run_context()
 
+    def test_url_change_snapshot_records_redirect_once(self):
+        import debug_logger
+        from unittest.mock import MagicMock, patch
+
+        mock_sb = MagicMock()
+        mock_sb.get_current_url.return_value = "https://www.example.com/overview"
+        debug_logger._log_context.run_dir = "dummy_dir"
+        debug_logger._log_context.last_snapshot_url = "https://www.example.com/login"
+        debug_logger._log_context.in_logger = False
+        try:
+            with patch('debug_logger.is_debug_mode', return_value=True), \
+                 patch('debug_logger.save_snapshot') as save_snapshot:
+                debug_logger.save_snapshot_on_url_change(mock_sb, "url_sleep")
+                debug_logger.save_snapshot_on_url_change(mock_sb, "url_get_page_source")
+
+            save_snapshot.assert_called_once_with(mock_sb, "url_sleep")
+            self.assertEqual(debug_logger._log_context.last_snapshot_url, "https://www.example.com/overview")
+        finally:
+            debug_logger.clear_run_context()
+
     def test_export_logs_zip_filtering(self):
         import zipfile
         import io

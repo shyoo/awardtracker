@@ -104,6 +104,16 @@ class TestMembershipIdPersistence(unittest.TestCase):
         edit = self.client.get(f'/accounts/{self.account.id}/edit')
         self.assertIn(b'Detected from Hilton Honors', edit.data)
 
+    def test_dashboard_keeps_legacy_numeric_login_id_copyable(self):
+        self.account.username = '1234 5678 90'
+        db.session.commit()
+
+        self.assertEqual(self.account.membership_number, '1234 5678 90')
+        res = self.client.get('/')
+        self.assertIn(b"copyToClipboard('1234 5678 90', this)", res.data)
+        detail = self.client.get(f'/accounts/{self.account.id}')
+        self.assertIn(b"copyToClipboard('1234 5678 90', this)", detail.data)
+
 
 class TestMembershipIdExtractors(unittest.TestCase):
     def _sb(self, html):
@@ -122,6 +132,23 @@ class TestMembershipIdExtractors(unittest.TestCase):
         html = '<div data-testid="membership-number">Membership number 12 345 678</div>'
         self.assertEqual(plugin.extract_membership_id(self._sb(html)), "12345678")
         self.assertIsNone(plugin.extract_membership_id(self._sb("<div>nothing</div>")))
+
+    def test_avianca_reads_lifemiles_number_without_confusing_the_balance(self):
+        plugin = plugin_manager.get_plugin('avianca')
+        html = '<div>LifeMiles balance: 150,000</div><div>LifeMiles number: 1234 5678 90</div>'
+        self.assertEqual(plugin._extract_membership_id(html), "1234567890")
+        self.assertIsNone(plugin._extract_membership_id('<div>LifeMiles balance: 150,000</div>'))
+
+    def test_avianca_reads_overview_member_number_from_dom_or_react_payload(self):
+        plugin = plugin_manager.get_plugin('avianca')
+        self.assertEqual(
+            plugin._extract_membership_id('<span data-testid="member-number">13498929883</span>'),
+            '13498929883',
+        )
+        self.assertEqual(
+            plugin._extract_membership_id('<script>window.state={"membershipNumber":"13498929883"}</script>'),
+            '13498929883',
+        )
 
     def test_default_hook_returns_none(self):
         self.assertIsNone(plugin_manager.get_plugin('delta').extract_membership_id(self._sb("<p>x</p>")))

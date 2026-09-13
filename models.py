@@ -1,6 +1,7 @@
 from extensions import db
 from datetime import datetime
 import json
+import re
 
 class Settings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -102,8 +103,11 @@ class Account(db.Model):
     #   1. what the user typed into "Membership / Account #" (always wins),
     #   2. what the provider's plugin read off the account page on the last sync,
     #   3. (manual accounts) a legacy 'account_number' field.
-    # The login username is deliberately NOT a fallback: it is often an email
-    # address and is shown separately as the login ID.
+    # A legacy numeric login ID is a final fallback.  Before membership IDs
+    # were scraped separately, programs such as LifeMiles displayed numeric
+    # login IDs in the copy button.  Keep that useful behavior for existing
+    # accounts without ever mistaking an email (or a text username) for a
+    # membership number.
     @property
     def user_membership_number(self):
         return self.extra_metadata.get('membership_number') or ""
@@ -114,10 +118,14 @@ class Account(db.Model):
 
     @property
     def membership_number(self):
+        legacy_login_id = self.username.strip() if self.username else ""
+        if not re.fullmatch(r'[0-9][0-9\s-]{4,}', legacy_login_id):
+            legacy_login_id = ""
         return (
             self.user_membership_number
             or self.scraped_membership_id
             or (self.extra_metadata.get('account_number') if self.is_manual else "")
+            or legacy_login_id
             or ""
         )
 
