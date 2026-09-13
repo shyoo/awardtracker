@@ -16,6 +16,14 @@ class NationalPlugin(ProviderPlugin):
         return "national"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.nationalcar.com/en/emerald-club.html"
+
+    @property
+    def logo_domain(self) -> str:
+        return "nationalcar.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.0
 

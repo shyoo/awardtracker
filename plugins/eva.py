@@ -26,6 +26,14 @@ class EVAPlugin(ProviderPlugin):
         return "eva"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.evaair.com/en-us/infinity-mileagelands/"
+
+    @property
+    def logo_domain(self) -> str:
+        return "evaair.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.4
 

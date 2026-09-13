@@ -18,6 +18,14 @@ class AirCanadaPlugin(ProviderPlugin):
         return "aircanada"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.aircanada.com/aeroplan"
+
+    @property
+    def logo_domain(self) -> str:
+        return "aircanada.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.4
 

@@ -16,6 +16,14 @@ class AmericanAirlinesPlugin(ProviderPlugin):
         return "american"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.aa.com/aadvantage-program/"
+
+    @property
+    def logo_domain(self) -> str:
+        return "aa.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.5
 

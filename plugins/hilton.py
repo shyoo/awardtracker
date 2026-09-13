@@ -15,6 +15,14 @@ class HiltonHonorsPlugin(ProviderPlugin):
         return "hilton"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.hilton.com/en/hilton-honors/"
+
+    @property
+    def logo_domain(self) -> str:
+        return "hilton.com"
+
+    @property
     def default_cpp(self) -> float:
         return 0.6
 

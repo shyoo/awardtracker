@@ -16,6 +16,14 @@ class CaesarsRewardsPlugin(ProviderPlugin):
         return "caesars"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.caesars.com/myrewards"
+
+    @property
+    def logo_domain(self) -> str:
+        return "caesars.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.0
 

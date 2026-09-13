@@ -26,6 +26,14 @@ class ANAPlugin(ProviderPlugin):
         return "ana"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.ana.co.jp/en/us/amc/"
+
+    @property
+    def logo_domain(self) -> str:
+        return "ana.co.jp"
+
+    @property
     def default_cpp(self) -> float:
         return 1.5
 

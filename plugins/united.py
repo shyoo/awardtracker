@@ -14,6 +14,14 @@ class UnitedAirlinesPlugin(ProviderPlugin):
         return "united"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.united.com/ual/en/us/fly/mileageplus.html"
+
+    @property
+    def logo_domain(self) -> str:
+        return "united.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.2
 

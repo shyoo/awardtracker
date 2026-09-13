@@ -18,6 +18,14 @@ class WorldofHyattPlugin(ProviderPlugin):
         return "hyatt"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://world.hyatt.com"
+
+    @property
+    def logo_domain(self) -> str:
+        return "hyatt.com"
+
+    @property
     def default_cpp(self) -> float:
         return 2.3
 

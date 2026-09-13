@@ -16,6 +16,18 @@ class KoreanAirPlugin(ProviderPlugin):
     def plugin_id(self) -> str:
         return "korean"
 
+    def normalize_username(self, username: str) -> str:
+        # SKYPASS numbers are often pasted with grouping spaces ("1234 5678 9012").
+        return username.replace(' ', '') if username else username
+
+    @property
+    def homepage_url(self) -> str:
+        return "https://www.koreanair.com/skypass"
+
+    @property
+    def logo_domain(self) -> str:
+        return "koreanair.com"
+
     @property
     def default_cpp(self) -> float:
         return 1.8

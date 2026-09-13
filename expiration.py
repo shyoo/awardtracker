@@ -44,3 +44,60 @@ def get_never_expires_reason(plugin_id: str, status: str, has_exemption: bool = 
     if has_exemption:
         return " (Exempt)"
     return ""
+
+
+# --------------------------------------------------------------------------- #
+# Classifying an expiration date for the UI
+# --------------------------------------------------------------------------- #
+
+def classify_days_left(days_left: int, warning_days: int, advisory_days: int) -> str:
+    """Map a day count to the badge state used by the dashboard and detail page."""
+    if days_left < 0:
+        return 'expired'
+    if days_left <= warning_days:
+        return 'critical'
+    if days_left <= advisory_days:
+        return 'warning'
+    return 'safe'
+
+
+def annotate_account_expiration(account, now: datetime, warning_days: int, advisory_days: int) -> None:
+    """Set ``account.days_left`` and ``account.expiration_status`` for rendering.
+
+    Korean Air tracks per-batch expiry, so its earliest expiring batch (from
+    expiration_meta) takes precedence over the account-level date. Accounts
+    with points but no known date are flagged ``at_risk`` when the plugin said
+    so, or -- for Hilton accounts synced before the plugin reported it -- when
+    there is simply no date.
+    """
+    account.days_left = None
+    account.expiration_status = 'none'
+    meta = account.expiration_meta or {}
+    plugin_name = account.provider.plugin_name if account.provider else ''
+
+    exp_date = None
+    if plugin_name == 'korean' and meta.get('earliest_expiring_date'):
+        try:
+            exp_date = datetime.strptime(meta['earliest_expiring_date'], '%Y-%m-%d')
+        except Exception:
+            exp_date = None
+    if exp_date is None:
+        exp_date = account.expiration_date
+
+    if exp_date:
+        account.days_left = (exp_date - now).days
+        account.expiration_status = classify_days_left(account.days_left, warning_days, advisory_days)
+    elif not account.has_exemption and account.balance > 0 and (
+        meta.get('at_risk') or (plugin_name == 'hilton' and not account.expiration_date)
+    ):
+        account.expiration_status = 'at_risk'
+
+
+def annotate_certificate_expiration(cert, now: datetime, warning_days: int, advisory_days: int) -> None:
+    """Set ``cert.days_left`` and ``cert.expiration_status`` for rendering."""
+    if cert.expiration_date:
+        cert.days_left = (cert.expiration_date - now).days
+        cert.expiration_status = classify_days_left(cert.days_left, warning_days, advisory_days)
+    else:
+        cert.days_left = None
+        cert.expiration_status = 'none'

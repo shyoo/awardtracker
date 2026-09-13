@@ -16,6 +16,14 @@ class HertzPlugin(ProviderPlugin):
         return "hertz"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.hertz.com/rentacar/goldplusrewards/"
+
+    @property
+    def logo_domain(self) -> str:
+        return "hertz.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.0
 

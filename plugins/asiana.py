@@ -21,6 +21,14 @@ class AsianaAirlinesPlugin(ProviderPlugin):
         return "asiana"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://flyasiana.com/C/US/EN/contents/asiana-club-overview"
+
+    @property
+    def logo_domain(self) -> str:
+        return "flyasiana.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.4
 

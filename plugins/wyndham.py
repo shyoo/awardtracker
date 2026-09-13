@@ -16,6 +16,14 @@ class WyndhamPlugin(ProviderPlugin):
         return "wyndham"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.wyndhamhotels.com/wyndham-rewards"
+
+    @property
+    def logo_domain(self) -> str:
+        return "wyndhamhotels.com"
+
+    @property
     def default_cpp(self) -> float:
         return 0.7
 

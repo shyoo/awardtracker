@@ -36,6 +36,14 @@ class BritishAirwaysPlugin(ProviderPlugin):
         return "british"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.britishairways.com/executive-club"
+
+    @property
+    def logo_domain(self) -> str:
+        return "britishairways.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.5
 

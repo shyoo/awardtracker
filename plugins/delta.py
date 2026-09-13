@@ -15,6 +15,14 @@ class DeltaSkyMilesPlugin(ProviderPlugin):
         return "delta"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://www.delta.com/skymiles"
+
+    @property
+    def logo_domain(self) -> str:
+        return "delta.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.2
 

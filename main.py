@@ -36,9 +36,8 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, basedir)
 
 from app import create_app
+from bootstrap import register_providers
 from extensions import db
-from models import Provider
-from plugins.manager import plugin_manager
 from scheduler import scheduler
 
 def create_icon_image():
@@ -73,16 +72,7 @@ app = create_app()
 def start_flask():
     with app.app_context():
         db.create_all()
-        # Register plugins in database, updating name if it differs (self-healing migration)
-        for plugin in plugin_manager.get_all_plugins():
-            provider = Provider.query.filter_by(plugin_name=plugin.plugin_id).first()
-            if not provider:
-                provider = Provider(name=plugin.name, plugin_name=plugin.plugin_id)
-                db.session.add(provider)
-            else:
-                if provider.name != plugin.name:
-                    provider.name = plugin.name
-        db.session.commit()
+        register_providers()
         
     try:
         from notifier import send_desktop_notification

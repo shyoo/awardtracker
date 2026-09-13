@@ -807,6 +807,20 @@ class ProviderPlugin(ABC):
         return ""
 
     @property
+    def logo_domain(self) -> str:
+        """Domain used to look up the program's logo (e.g. 'hilton.com')."""
+        return ""
+
+    @property
+    def is_manual(self) -> bool:
+        """True for programs tracked by hand: no credentials, no scraping."""
+        return False
+
+    def normalize_username(self, username: str) -> str:
+        """Clean a login ID the way the provider expects it (override per program)."""
+        return username
+
+    @property
     def interactive_login_required(self) -> bool:
         """
         Whether this plugin always requires interactive login on first/new sign-ins.

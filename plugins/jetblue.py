@@ -36,6 +36,14 @@ class JetBluePlugin(ProviderPlugin):
         return "jetblue"
 
     @property
+    def homepage_url(self) -> str:
+        return "https://trueblue.jetblue.com"
+
+    @property
+    def logo_domain(self) -> str:
+        return "jetblue.com"
+
+    @property
     def default_cpp(self) -> float:
         return 1.3
 
