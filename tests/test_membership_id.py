@@ -139,6 +139,17 @@ class TestMembershipIdExtractors(unittest.TestCase):
         self.assertEqual(plugin._extract_membership_id(html), "1234567890")
         self.assertIsNone(plugin._extract_membership_id('<div>LifeMiles balance: 150,000</div>'))
 
+    def test_avianca_reads_overview_member_number_from_dom_or_react_payload(self):
+        plugin = plugin_manager.get_plugin('avianca')
+        self.assertEqual(
+            plugin._extract_membership_id('<span data-testid="member-number">13498929883</span>'),
+            '13498929883',
+        )
+        self.assertEqual(
+            plugin._extract_membership_id('<script>window.state={"membershipNumber":"13498929883"}</script>'),
+            '13498929883',
+        )
+
     def test_default_hook_returns_none(self):
         self.assertIsNone(plugin_manager.get_plugin('delta').extract_membership_id(self._sb("<p>x</p>")))
 

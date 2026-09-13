@@ -193,15 +193,34 @@ class AviancaLifemilesPlugin(ProviderPlugin):
         """
         soup = BeautifulSoup(html, "html.parser")
         visible_text = soup.get_text(" ", strip=True)
+        # Prefer explicitly named DOM fields; current LifeMiles overview
+        # builds expose the number through data-testid/data-* attributes.
+        member_markers = ('member', 'membership', 'lifemiles-number', 'lifemiles_number',
+                          'account-number', 'account_number', 'loyalty-number')
+        for element in soup.find_all(True):
+            attributes = " ".join(
+                f"{key} {value}" for key, value in element.attrs.items()
+            ).lower()
+            if not any(marker in attributes for marker in member_markers):
+                continue
+            candidates = [element.get_text(" ", strip=True)]
+            candidates.extend(str(value) for value in element.attrs.values())
+            for candidate in candidates:
+                match = re.search(r'\b(\d[\d\s-]{4,19})\b', candidate)
+                if match:
+                    membership_id = re.sub(r'[\s-]+', '', match.group(1))
+                    if 5 <= len(membership_id) <= 20:
+                        return membership_id
+
         patterns = (
             r'(?:lifemiles\s*(?:member(?:ship)?\s*)?(?:number|no\.?|#)|'
             r'(?:member(?:ship)?|account)\s*(?:number|no\.?|id)|'
             r'n[uú]mero\s*(?:de\s*)?(?:socio|cuenta|lifemiles))'
             r'\s*(?:is\s*)?(?:[:#]|no\.?)?\s*([A-Za-z0-9][A-Za-z0-9\s-]{3,30})',
-            r'["\']memberNumber["\']\s*:\s*["\']([A-Za-z0-9][A-Za-z0-9\s-]{3,30})["\']',
+            r'["\'](?:memberNumber|membershipNumber|memberId|lifeMilesNumber|lifemilesNumber|loyaltyNumber|accountNumber)["\']\s*:\s*["\']([A-Za-z0-9][A-Za-z0-9\s-]{3,30})["\']',
         )
         for pattern in patterns:
-            match = re.search(pattern, visible_text if 'memberNumber' not in pattern else html, re.I)
+            match = re.search(pattern, html if pattern.startswith(r'[') else visible_text, re.I)
             if not match:
                 continue
             membership_id = re.sub(r'[\s-]+', '', match.group(1)).upper()

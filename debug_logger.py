@@ -31,6 +31,7 @@ def init_run_context(account_id, provider_name, username, password, current_bala
     _log_context.date_str = _log_context.timestamp.strftime('%Y-%m-%d')
     _log_context.timestamp_str = _log_context.timestamp.strftime('%Y%m%d_%H%M%S')
     _log_context.step_counter = 0
+    _log_context.last_snapshot_url = None
     _log_context.in_logger = False
     _log_context.in_patched_call = False
     
@@ -69,6 +70,8 @@ def clear_run_context():
         del _log_context.timestamp_str
     if hasattr(_log_context, 'step_counter'):
         del _log_context.step_counter
+    if hasattr(_log_context, 'last_snapshot_url'):
+        del _log_context.last_snapshot_url
     if hasattr(_log_context, 'sensitive_data'):
         del _log_context.sensitive_data
     if hasattr(_log_context, 'run_dir'):
@@ -181,6 +184,28 @@ def save_snapshot(sb, action_name):
             
     finally:
         _log_context.in_logger = False
+
+
+def save_snapshot_on_url_change(sb, action_name):
+    """Save one snapshot for every URL a debug run reaches.
+
+    Navigation is often completed by a redirect while a plugin is polling or
+    sleeping, rather than by a later ``sb.open()`` call.  Recording the URL
+    after every wrapped browser operation makes those pages available for
+    selector debugging without creating a duplicate file for each poll.
+    """
+    if not getattr(_log_context, 'run_dir', None) or not is_debug_mode():
+        return
+    if getattr(_log_context, 'in_logger', False):
+        return
+    try:
+        current_url = sb.get_current_url()
+    except Exception:
+        return
+    if not current_url or current_url == getattr(_log_context, 'last_snapshot_url', None):
+        return
+    _log_context.last_snapshot_url = current_url
+    save_snapshot(sb, action_name)
 
 class SensitiveMaskingFilter(logging.Filter):
     def filter(self, record):

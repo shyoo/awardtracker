@@ -321,7 +321,12 @@ def _apply_selenium_patches():
         "type",
         "update_text",
         "execute_script",
-        "js_click"
+        "js_click",
+        # A redirect can complete while a plugin polls page HTML, without a
+        # fresh navigation call.  These common polling methods let the shared
+        # debug hook capture that newly reached URL for every provider.
+        "get_page_source",
+        "is_element_visible",
     ]
     
     import os
@@ -391,13 +396,12 @@ def _apply_selenium_patches():
                             except Exception:
                                 pass
                                 
-                            # Save screenshot & HTML source if debug mode is active
-                            if debug_logger.is_debug_mode() and m_name in (
-                                "open", "uc_open_with_reconnect", "open_if_not_on_page", 
-                                "click", "type", "update_text", "execute_script", "js_click"
-                            ):
+                            # Capture every URL the run reaches. This includes
+                            # redirect destinations discovered during polling
+                            # and sleep calls, not only explicit sb.open calls.
+                            if debug_logger.is_debug_mode():
                                 try:
-                                    debug_logger.save_snapshot(self, m_name)
+                                    debug_logger.save_snapshot_on_url_change(self, f"url_{m_name}")
                                 except Exception:
                                     pass
                                     
