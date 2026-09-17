@@ -259,6 +259,8 @@ jobs:
           flags=()
           if [ "$PRERELEASE" = true ]; then
             flags+=(--prerelease)
+          else
+            flags+=(--latest)
           fi
           # Keep x86_64 before arm64 for updater versions that select the first
           # macOS asset and do not yet understand architecture tags.

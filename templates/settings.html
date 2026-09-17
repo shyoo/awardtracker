@@ -38,6 +38,13 @@
             </span>
           {% endif %}
 
+          <button type="button" id="btn-check-updates" onclick="checkForUpdatesNow()" class="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-0.5 rounded-full transition-colors cursor-pointer select-none">
+            <svg id="btn-check-updates-icon" class="h-3 w-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            <span id="btn-check-updates-text">Check for Updates</span>
+          </button>
+
           <span class="text-slate-300 select-none">&bull;</span>
           <a href="https://github.com/shyoo/awardtracker" target="_blank" class="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-primary transition-colors font-bold">
             <svg class="h-3.5 w-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
@@ -944,5 +951,51 @@
       consoleBox.scrollTop = consoleBox.scrollHeight;
     }
   });
+
+  function checkForUpdatesNow() {
+    const btn = document.getElementById('btn-check-updates');
+    const btnText = document.getElementById('btn-check-updates-text');
+    const btnIcon = document.getElementById('btn-check-updates-icon');
+    if (!btn || btn.disabled) return;
+
+    btn.disabled = true;
+    btn.classList.add('opacity-70');
+    if (btnText) btnText.innerText = 'Checking...';
+    if (btnIcon) btnIcon.classList.add('animate-spin');
+
+    fetch("{{ url_for('api_updater_check') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        if (data.available) {
+          window.location.reload();
+        } else {
+          if (btnText) btnText.innerText = 'Up to date!';
+          if (btnIcon) btnIcon.classList.remove('animate-spin');
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.classList.remove('opacity-70');
+            if (btnText) btnText.innerText = 'Check for Updates';
+          }, 3000);
+        }
+      } else {
+        alert("Failed to check for updates: " + (data.error || "Unknown error"));
+        btn.disabled = false;
+        btn.classList.remove('opacity-70');
+        if (btnText) btnText.innerText = 'Check for Updates';
+        if (btnIcon) btnIcon.classList.remove('animate-spin');
+      }
+    })
+    .catch(err => {
+      alert("Error checking for updates: " + err);
+      btn.disabled = false;
+      btn.classList.remove('opacity-70');
+      if (btnText) btnText.innerText = 'Check for Updates';
+      if (btnIcon) btnIcon.classList.remove('animate-spin');
+    });
+  }
 </script>
 {% endblock %}

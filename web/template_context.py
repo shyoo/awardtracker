@@ -62,10 +62,11 @@ def _available_update(current_version, respect_dismissed):
     """Newer-release info for the update banner, or None."""
     if get_setting('check_for_updates', 'true') == 'false':
         return None
-    latest = get_setting('latest_version_available', '')
+    latest = get_setting('latest_version_available', '').lstrip('v').strip()
     if not latest:
         return None
-    if respect_dismissed and get_setting('update_dismissed_version', '') == latest:
+    dismissed = get_setting('update_dismissed_version', '').lstrip('v').strip()
+    if respect_dismissed and dismissed == latest:
         return None
     from updater import is_newer_version
     if is_newer_version(latest, current_version):

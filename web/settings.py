@@ -152,6 +152,9 @@ def register(app):
             flash('Settings saved successfully.')
             return redirect(url_for('settings'))
 
+        from updater import check_for_updates_bg
+        check_for_updates_bg(app)
+
         settings_data = get_settings(SETTINGS_DEFAULTS)
         settings_data['warning_threshold'] = int(settings_data['warning_threshold'])
         settings_data['advisory_threshold'] = int(settings_data['advisory_threshold'])
@@ -178,11 +181,30 @@ def register(app):
 
     @app.route('/api/updates/dismiss', methods=['POST'])
     def dismiss_update():
-        latest_version = get_setting('latest_version_available', '')
+        latest_version = get_setting('latest_version_available', '').lstrip('v').strip()
         if latest_version:
             set_setting('update_dismissed_version', latest_version)
         # Return 200 (not 204) so HTMX hx-swap="delete" triggers reliably
         return '', 200
+
+    @app.route('/api/updater/check', methods=['POST'])
+    def api_updater_check():
+        from updater import perform_update_check
+        result = perform_update_check(app, force=True)
+        current_ver = app.config.get('APP_VERSION', '1.0.0')
+        if result.get('error'):
+            return jsonify({
+                'success': False,
+                'error': result['error'],
+                'current_version': current_ver,
+            }), 200
+        return jsonify({
+            'success': True,
+            'current_version': current_ver,
+            'latest_version': result.get('version'),
+            'available': result.get('available', False),
+            'release_url': result.get('release_url', ''),
+        }), 200
 
     @app.route('/api/updater/status', methods=['GET'])
     def api_updater_status():
