@@ -19,7 +19,7 @@ not as prose here. Do not improvise an ad-hoc release procedure.
 | Skill | What it does |
 | --- | --- |
 | [`/push`](.claude/skills/push/SKILL.md) | Runs the full test suite, then pushes the current branch to `origin`. Never bumps the version, never cuts a release. |
-| [`/deploy`](.claude/skills/deploy/SKILL.md) | Bumps `version.txt` (minor by default), writes release notes, tags, and lets GitHub Actions test, build, sign and publish a **prerelease** for a human to promote. |
+| [`/release`](.claude/skills/release/SKILL.md) | Tags an RC for Actions to build as a prerelease, or promotes the verified RC commit with a final tag that becomes **latest**. |
 
 The same skills are available to Antigravity: `.agents/skills` is a directory
 junction pointing at `.claude/skills`, so both agents read one source. The link

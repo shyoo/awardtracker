@@ -9,6 +9,7 @@ from extensions import db
 from models import Settings
 from updater import (
     parse_version,
+    is_newer_version,
     select_best_asset_for_platform,
     is_installed_via_setup,
     get_macos_app_bundle_path,
@@ -53,8 +54,14 @@ class TestAutoUpdater:
         assert parse_version("v1.4.0") == (1, 4, 0)
         assert parse_version("v2.0") == (2, 0, 0)
         assert parse_version("v1.10.2-beta") == (1, 10, 2)
+        assert parse_version("1.10.2+7.gabc1234") == (1, 10, 2)
         assert parse_version("") == (0, 0, 0)
         assert parse_version(None) == (0, 0, 0)
+
+    def test_release_candidate_updates_to_final_of_same_version(self):
+        assert is_newer_version("v1.4.0", "1.4.0-rc.2") is True
+        assert is_newer_version("v1.4.0-rc.2", "1.4.0-rc.1") is True
+        assert is_newer_version("v1.4.0-rc.1", "1.4.0") is False
 
     def test_select_best_asset_windows_setup(self):
         assets = [

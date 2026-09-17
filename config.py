@@ -3,6 +3,8 @@ import sys
 import platform
 import json
 
+from versioning import resolve_version
+
 os_name = platform.system()
 if os_name == "Windows":
     base = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
@@ -48,13 +50,9 @@ def get_active_db_path():
             pass
     return os.path.abspath(os.path.join(write_dir, 'awardtracker.db'))
 
-# Read dynamic version from version.txt in basedir
-version_path = os.path.join(basedir, 'version.txt')
-try:
-    with open(version_path, 'r', encoding='utf-8') as f:
-        APP_VERSION = f.read().strip()
-except Exception:
-    APP_VERSION = "1.2.2"
+# Release builds materialize their tag into the bundled version.txt. Source
+# checkouts derive a useful development version from git instead.
+APP_VERSION = resolve_version(repo_dir=os.path.abspath(os.path.dirname(__file__)), bundle_dir=basedir)
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-key-change-in-production'

@@ -67,8 +67,8 @@ def _available_update(current_version, respect_dismissed):
         return None
     if respect_dismissed and get_setting('update_dismissed_version', '') == latest:
         return None
-    from updater import parse_version
-    if parse_version(latest) > parse_version(current_version):
+    from updater import is_newer_version
+    if is_newer_version(latest, current_version):
         return {'version': latest, 'url': get_setting('latest_release_url', '') or RELEASES_URL}
     return None
 

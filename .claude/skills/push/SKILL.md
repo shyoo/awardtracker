@@ -22,7 +22,7 @@ This skill **must not**:
 - create a git tag or a GitHub release
 - squash, rebase, or otherwise rewrite existing commits
 
-If the user wants a release, stop and point them at `/deploy`.
+If the user wants a release, stop and point them at `/release`.
 
 ## Steps
 

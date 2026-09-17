@@ -6,6 +6,7 @@ dist/
 downloaded_files/
 internal_docs/
 scratch/
+.build-cache/
 profiles/
 venv/
 venv-universal/
@@ -31,6 +32,8 @@ logs/
 
 # Test byproduct: a Chrome profile fixture written into the repo root by tests
 mock_profile_path/
+.pytest-tmp*/
+.test-appdata/
 
 # Antigravity workspace-skills junction -> .claude/skills (recreated by mklink)
 .agents/

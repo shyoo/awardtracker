@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import urllib.request
 import json
 import ssl
+import re
 from typing import Optional, Dict, Any, Tuple
 from models import Settings
 from extensions import db
@@ -23,18 +24,48 @@ def parse_version(v_str: Optional[str]) -> Tuple[int, int, int]:
     """
     if not v_str:
         return (0, 0, 0)
-    cleaned = v_str.lower().replace('v', '').strip()
-    parts = cleaned.split('.')
-    res = []
-    for p in parts:
-        digits = "".join(c for c in p if c.isdigit())
-        if digits:
-            res.append(int(digits))
-        else:
-            res.append(0)
-    while len(res) < 3:
-        res.append(0)
-    return tuple(res[:3])
+    match = re.search(r"(?i)v?(\d+)(?:\.(\d+))?(?:\.(\d+))?", v_str.strip())
+    if not match:
+        return (0, 0, 0)
+    return tuple(int(part or 0) for part in match.groups())
+
+
+def _prerelease(v_str: Optional[str]) -> Optional[list[str]]:
+    """Return SemVer prerelease identifiers, or None for a final version."""
+    if not v_str:
+        return None
+    match = re.search(r"\d+\.\d+\.\d+(?:-([0-9A-Za-z.-]+))?", v_str.strip())
+    if not match or not match.group(1):
+        return None
+    return match.group(1).split(".")
+
+
+def _compare_prerelease(left: list[str], right: list[str]) -> int:
+    for a, b in zip(left, right):
+        if a == b:
+            continue
+        if a.isdigit() and b.isdigit():
+            return (int(a) > int(b)) - (int(a) < int(b))
+        if a.isdigit() != b.isdigit():
+            return -1 if a.isdigit() else 1
+        return (a > b) - (a < b)
+    return (len(left) > len(right)) - (len(left) < len(right))
+
+
+def is_newer_version(candidate: Optional[str], current: Optional[str]) -> bool:
+    """Compare release versions, including the RC-to-final transition."""
+    candidate_triple = parse_version(candidate)
+    current_triple = parse_version(current)
+    if candidate_triple != current_triple:
+        return candidate_triple > current_triple
+
+    candidate_pre = _prerelease(candidate)
+    current_pre = _prerelease(current)
+    if candidate_pre is None:
+        return current_pre is not None
+    if current_pre is None:
+        return False
+    return _compare_prerelease(candidate_pre, current_pre) > 0
 
 
 def is_installed_via_setup() -> bool:
@@ -246,7 +277,7 @@ class AutoUpdateManager:
                     self.target_asset_url = best_asset.get('browser_download_url')
                     self.total_bytes = best_asset.get('size', 0)
 
-            is_available = parse_version(latest_tag) > parse_version(current_version)
+            is_available = is_newer_version(latest_tag, current_version)
             return {
                 "available": is_available,
                 "version": latest_tag,

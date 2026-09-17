@@ -155,18 +155,18 @@ We have provided streamlined build and release tools that compile the Flask app,
   ```
   Generates a native app bundle at `dist/AwardTracker.app` (~54 MB) and standalone binary at `dist/awardtracker`.
 
-#### Complete Release Packaging (Setup Installer & Portable Zip)
+#### Complete Local Packaging (Setup Installer & Portable Zip)
 * **Windows (Setup Wizard)**:
   ```powershell
   powershell -ExecutionPolicy Bypass -File release-win.ps1
   ```
-  Generates a Setup Wizard installer (`dist/awardtracker-setup.exe`) and portable zip (`dist/awardtracker-portable.zip`).
+  Generates a Setup Wizard installer (`dist/awardtracker-win64-setup-v<VERSION>.exe`) and portable zip (`dist/awardtracker-win64-portable-v<VERSION>.zip`).
 * **macOS (Disk Image DMG)**:
-  By default, this compiles the application bundle targeting the **local architecture** of the build machine:
+  By default, this compiles the application bundle for the **local architecture** of the build machine:
   ```bash
   ./release-macos.sh
   ```
-  To package a **Universal 2** release (supporting both Intel and Apple Silicon Macs natively), run:
+  A Universal 2 package can still be built locally with:
   ```bash
   ./release-macos.sh --universal
   ```
@@ -175,7 +175,11 @@ We have provided streamlined build and release tools that compile the Flask app,
   > 
   > The script will automatically locate your official Python installation, set up a dedicated `venv-universal` environment, compile C extensions for both architectures, and merge libraries like `Pillow` into a unified binary.
 
-  Both commands generate a native Drag-and-Drop Disk Image installer (`dist/awardtracker-macos-setup.dmg`) and portable zip (`dist/awardtracker-macos-portable.zip`).
+  Both commands generate a native Drag-and-Drop Disk Image installer (`dist/awardtracker-macos-setup-v<VERSION>.dmg`) and portable zip (`dist/awardtracker-macos-portable-v<VERSION>.zip`).
+
+  Published releases are built by GitHub Actions rather than on a maintainer's
+  computer. Each release contains separate `x86_64` (Intel) and `arm64` (Apple
+  Silicon) DMG and ZIP assets, so Apple Silicon users do not need Rosetta.
 
 ### 4. Running the Tests
 To verify all APIs, naming overrides, settings parameters, and plugin infrastructure are fully functional, execute our premium color-coded test runners:
@@ -246,13 +250,13 @@ If you experience synchronization issues or sync tasks fail repeatedly due to st
 
 ### Award Tracker will not start on an Apple Silicon Mac (M1/M2/M3/M4 or newer)
 
-Symptoms include the app quitting immediately, the tray icon never appearing, or
-macOS reporting that the application is damaged or cannot be opened. On recent
-Apple Silicon Macs this is almost always because **Rosetta 2 is not installed**.
-Macs shipped with the M4 generation (and newer) no longer include Rosetta 2 out
-of the box, and it is required whenever any Intel (x86_64) component is
-involved — including the Intel build of Award Tracker, which the auto-updater
-falls back to when no native arm64 asset is available for a release.
+Symptoms include the app quitting immediately, the tray icon never appearing,
+or macOS reporting that the application is damaged or cannot be opened. First
+confirm that you installed the release asset containing **`macos-arm64`**. It
+runs natively on Apple Silicon and does not require Rosetta 2.
+
+Older releases and assets containing **`macos-x86_64`** are Intel builds. They
+can run on Apple Silicon only when Rosetta 2 is installed:
 
 Install Rosetta 2 from Terminal, then relaunch Award Tracker:
 
@@ -266,10 +270,10 @@ Add `--agree-to-license` to skip the interactive license prompt:
 softwareupdate --install-rosetta --agree-to-license
 ```
 
-The installation only has to be done once per Mac. If Award Tracker still does
-not start afterwards, confirm you downloaded the macOS build for your
-architecture (`arm64` for Apple Silicon, `x86_64` for Intel) and check the log
-file listed under *A provider keeps failing to sync* below.
+The installation only has to be done once per Mac. Prefer the native `arm64`
+asset for current releases; use Rosetta only for a legacy Intel-only release.
+If Award Tracker still does not start, check the log file listed under *A
+provider keeps failing to sync* below.
 
 ### Google Chrome cannot be found or a browser window will not open
 
