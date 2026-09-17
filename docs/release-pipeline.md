@@ -74,12 +74,16 @@ Actions**:
 
 | Secret | Value |
 | --- | --- |
-| `MACOS_CERT_P12` | Base64-encoded Developer ID Application `.p12` certificate |
-| `MACOS_CERT_PASSWORD` | Password used when exporting the `.p12` |
-| `MACOS_SIGN_IDENTITY` | Exact Developer ID identity, including Team ID |
-| `MACOS_NOTARY_APPLE_ID` | Apple ID used for notarization |
-| `MACOS_NOTARY_TEAM_ID` | Apple Developer Team ID |
-| `MACOS_NOTARY_PASSWORD` | App-specific password for the Apple ID |
+| `MACOS_CERTIFICATE_P12` | Base64-encoded Developer ID Application `.p12` certificate |
+| `MACOS_CERTIFICATE_PASSWORD` | Password used when exporting the `.p12` |
+| `MACOS_SIGNING_IDENTITY` | Exact Developer ID identity, including Team ID |
+| `AC_API_KEY_ID` | App Store Connect API key ID used for notarization |
+| `AC_API_ISSUER_ID` | App Store Connect API issuer ID |
+| `AC_API_KEY_P8` | The API key's `.p8` contents (PEM text or base64) |
+
+`release-macos.sh` also accepts Apple ID notarization through
+`AT_NOTARY_APPLE_ID`, `AT_NOTARY_TEAM_ID` and `AT_NOTARY_PASSWORD` when the
+API-key variables are unset.
 
 The workflow fails instead of publishing an unsigned or unnotarized macOS
 release when these values are missing. Windows and release publication use the

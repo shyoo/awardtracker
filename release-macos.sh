@@ -158,7 +158,9 @@ fi
 #
 # Two sources are supported:
 #   1. Environment variables, used by CI where no keychain profile exists:
-#        AT_SIGN_IDENTITY, AT_NOTARY_APPLE_ID, AT_NOTARY_TEAM_ID, AT_NOTARY_PASSWORD
+#        AT_SIGN_IDENTITY plus either an App Store Connect API key
+#        (AT_NOTARY_KEY_ID, AT_NOTARY_ISSUER_ID, AT_NOTARY_KEY_PATH -> .p8 file)
+#        or an Apple ID (AT_NOTARY_APPLE_ID, AT_NOTARY_TEAM_ID, AT_NOTARY_PASSWORD)
 #   2. codesign_keys.json with "identity" + "keychain_profile" (local developer flow)
 # The environment wins when AT_SIGN_IDENTITY is set.
 NOTARY_ARGS=()
@@ -166,20 +168,37 @@ if [ "$CODESIGN_BUILD" = true ]; then
     if [ -n "$AT_SIGN_IDENTITY" ]; then
         IDENTITY="$AT_SIGN_IDENTITY"
 
-        MISSING=""
-        [ -z "$AT_NOTARY_APPLE_ID" ] && MISSING="$MISSING AT_NOTARY_APPLE_ID"
-        [ -z "$AT_NOTARY_TEAM_ID" ] && MISSING="$MISSING AT_NOTARY_TEAM_ID"
-        [ -z "$AT_NOTARY_PASSWORD" ] && MISSING="$MISSING AT_NOTARY_PASSWORD"
-        if [ -n "$MISSING" ]; then
-            echo -e "${RED}Error: AT_SIGN_IDENTITY is set but these are missing:$MISSING${NC}"
-            exit 1
+        if [ -n "$AT_NOTARY_KEY_ID" ] || [ -n "$AT_NOTARY_ISSUER_ID" ] || [ -n "$AT_NOTARY_KEY_PATH" ]; then
+            MISSING=""
+            [ -z "$AT_NOTARY_KEY_ID" ] && MISSING="$MISSING AT_NOTARY_KEY_ID"
+            [ -z "$AT_NOTARY_ISSUER_ID" ] && MISSING="$MISSING AT_NOTARY_ISSUER_ID"
+            [ -z "$AT_NOTARY_KEY_PATH" ] && MISSING="$MISSING AT_NOTARY_KEY_PATH"
+            if [ -n "$MISSING" ]; then
+                echo -e "${RED}Error: API-key notarization requested but these are missing:$MISSING${NC}"
+                exit 1
+            fi
+            if [ ! -f "$AT_NOTARY_KEY_PATH" ]; then
+                echo -e "${RED}Error: AT_NOTARY_KEY_PATH '$AT_NOTARY_KEY_PATH' does not exist.${NC}"
+                exit 1
+            fi
+            NOTARY_ARGS=(--key "$AT_NOTARY_KEY_PATH" --key-id "$AT_NOTARY_KEY_ID" --issuer "$AT_NOTARY_ISSUER_ID")
+            NOTARY_DESC="API key $AT_NOTARY_KEY_ID (issuer $AT_NOTARY_ISSUER_ID)"
+        else
+            MISSING=""
+            [ -z "$AT_NOTARY_APPLE_ID" ] && MISSING="$MISSING AT_NOTARY_APPLE_ID"
+            [ -z "$AT_NOTARY_TEAM_ID" ] && MISSING="$MISSING AT_NOTARY_TEAM_ID"
+            [ -z "$AT_NOTARY_PASSWORD" ] && MISSING="$MISSING AT_NOTARY_PASSWORD"
+            if [ -n "$MISSING" ]; then
+                echo -e "${RED}Error: AT_SIGN_IDENTITY is set but these are missing:$MISSING${NC}"
+                exit 1
+            fi
+            NOTARY_ARGS=(--apple-id "$AT_NOTARY_APPLE_ID" --team-id "$AT_NOTARY_TEAM_ID" --password "$AT_NOTARY_PASSWORD")
+            NOTARY_DESC="Apple ID $AT_NOTARY_APPLE_ID (team $AT_NOTARY_TEAM_ID)"
         fi
-
-        NOTARY_ARGS=(--apple-id "$AT_NOTARY_APPLE_ID" --team-id "$AT_NOTARY_TEAM_ID" --password "$AT_NOTARY_PASSWORD")
 
         echo -e "${GREEN}Code signing config loaded from environment:${NC}"
         echo -e "  Identity: $IDENTITY"
-        echo -e "  Notary Apple ID: $AT_NOTARY_APPLE_ID (team $AT_NOTARY_TEAM_ID)"
+        echo -e "  Notary: $NOTARY_DESC"
     else
         if [ ! -f "codesign_keys.json" ]; then
             echo -e "${RED}Error: Code signing requested (--codesign) but neither AT_SIGN_IDENTITY nor 'codesign_keys.json' is present.${NC}"

@@ -1,7 +1,8 @@
 # Award Tracker - Premium Release Packaging Script
 # Usage: .\release-win.ps1
 
-Clear-Host
+# Clear-Host throws "The handle is invalid" without a console (GitHub Actions).
+if (-not $env:CI) { Clear-Host }
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "      Award Tracker Release Builder Tool          " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
