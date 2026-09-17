@@ -13,11 +13,14 @@ $IssFile = "installer.iss"
 $DistDir = "dist"
 
 $VersionSuffix = ""
-if (Test-Path "version.txt") {
-    $AppVersion = (Get-Content "version.txt").Trim()
-    if ($AppVersion) {
-        $VersionSuffix = "-v$AppVersion"
-    }
+$AppVersion = ""
+if ($env:AT_RELEASE_VERSION) {
+    $AppVersion = $env:AT_RELEASE_VERSION.Trim().TrimStart('v')
+} elseif (Test-Path "version.txt") {
+    $AppVersion = (Get-Content "version.txt").Trim().TrimStart('v')
+}
+if ($AppVersion) {
+    $VersionSuffix = "-v$AppVersion"
 }
 
 $PortableZip = "dist\awardtracker-win64-portable$VersionSuffix.zip"

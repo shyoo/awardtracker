@@ -182,11 +182,10 @@ def select_best_asset_for_platform(assets: list, is_win_installer: Optional[bool
     elif system == "Darwin":
         ranked = _rank_macos_assets(assets, target_machine or platform.machine())
 
-        # Prefer the setup DMG, then the portable ZIP, at the best rank available.
-        for suffix in (".dmg", ".zip"):
-            for _rank, asset in ranked:
-                if asset.get("name", "").lower().endswith(suffix):
-                    return asset
+        # Prefer the best rank available; within the same rank prefer .dmg then .zip
+        ranked.sort(key=lambda pair: (pair[0], 0 if pair[1].get("name", "").lower().endswith(".dmg") else 1))
+        if ranked:
+            return ranked[0][1]
 
         # Nothing ranked means the release has no asset this Mac can run (for
         # example an Intel Mac facing an arm64-only release). Report that rather
@@ -545,23 +544,34 @@ fi
 auto_updater = AutoUpdateManager()
 
 
-def _check_updates_worker(flask_app):
+def perform_update_check(flask_app, force=False) -> dict:
+    """
+    Checks GitHub releases for an available update.
+    If force is False, respects the 6-hour throttle and check_for_updates setting.
+    Persists latest version/url/check timestamp to database.
+    Returns a result dict with:
+      - available: bool
+      - version: str (or None)
+      - release_url: str (or None)
+      - error: str (or None)
+      - checked: bool (False if throttled/disabled)
+    """
     with flask_app.app_context():
         try:
             check_enabled = Settings.query.filter_by(key='check_for_updates').first()
-            if check_enabled and check_enabled.value == 'false':
-                return
+            if not force and check_enabled and check_enabled.value == 'false':
+                return {"available": False, "checked": False, "reason": "disabled"}
 
-            last_check = Settings.query.filter_by(key='last_update_check_time').first()
             now = datetime.utcnow()
-            
-            if last_check and last_check.value:
-                try:
-                    last_check_time = datetime.fromisoformat(last_check.value)
-                    if now - last_check_time < timedelta(hours=6):
-                        return
-                except ValueError:
-                    pass
+            if not force:
+                last_check = Settings.query.filter_by(key='last_update_check_time').first()
+                if last_check and last_check.value:
+                    try:
+                        last_check_time = datetime.fromisoformat(last_check.value)
+                        if now - last_check_time < timedelta(hours=6):
+                            return {"available": False, "checked": False, "reason": "throttled"}
+                    except ValueError:
+                        pass
 
             current_ver = flask_app.config.get('APP_VERSION', '1.0.0')
             res = auto_updater.check_for_updates_sync(current_ver)
@@ -573,23 +583,40 @@ def _check_updates_worker(flask_app):
                     db.session.add(latest_ver_setting)
                 else:
                     latest_ver_setting.value = res['version']
-                    
+
                 latest_url_setting = Settings.query.filter_by(key='latest_release_url').first()
                 if not latest_url_setting:
-                    latest_url_setting = Settings(key='latest_release_url', value=res['release_url'])
+                    latest_url_setting = Settings(key='latest_release_url', value=res.get('release_url', ''))
                     db.session.add(latest_url_setting)
                 else:
-                    latest_url_setting.value = res['release_url']
+                    latest_url_setting.value = res.get('release_url', '')
 
+            last_check = Settings.query.filter_by(key='last_update_check_time').first()
             if not last_check:
                 last_check = Settings(key='last_update_check_time', value=now.isoformat())
                 db.session.add(last_check)
             else:
                 last_check.value = now.isoformat()
-                
+
             db.session.commit()
+            return {
+                "available": res.get("available", False),
+                "version": res.get("version"),
+                "release_url": res.get("release_url"),
+                "checked": True,
+            }
         except Exception as e:
-            print(f"Background update check failed: {str(e)}")
+            error_msg = str(e)
+            print(f"Update check failed: {error_msg}")
+            return {
+                "available": False,
+                "checked": False,
+                "error": error_msg,
+            }
+
+
+def _check_updates_worker(flask_app, force=False):
+    perform_update_check(flask_app, force=force)
 
 
 def check_for_updates_bg(flask_app, force=False):
@@ -600,12 +627,5 @@ def check_for_updates_bg(flask_app, force=False):
     if flask_app.config.get('TESTING'):
         return
 
-    if force:
-        with flask_app.app_context():
-            last_check = Settings.query.filter_by(key='last_update_check_time').first()
-            if last_check:
-                last_check.value = ""
-                db.session.commit()
-
-    t = threading.Thread(target=_check_updates_worker, args=(flask_app,), daemon=True)
+    t = threading.Thread(target=_check_updates_worker, args=(flask_app, force), daemon=True)
     t.start()

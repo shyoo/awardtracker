@@ -81,6 +81,8 @@ def start_flask():
         pass
         
     scheduler.start()
+    from updater import check_for_updates_bg
+    check_for_updates_bg(app)
     # use_reloader=False is mandatory when running in secondary thread
     app.run(debug=False, port=PORT, use_reloader=False)
 
@@ -122,6 +124,10 @@ def sync_accounts(icon, item):
     # Spawn background sync thread so tray UI remains responsive
     t = threading.Thread(target=run_background_sync, daemon=True)
     t.start()
+
+def check_updates_tray(icon, item):
+    from updater import check_for_updates_bg
+    check_for_updates_bg(app, force=True)
 
 def quit_app(icon, item):
     icon.stop()
@@ -209,6 +215,7 @@ def main():
     menu = pystray.Menu(
         pystray.MenuItem("Open Award Tracker", open_browser, default=True),
         pystray.MenuItem("Sync All Accounts", sync_accounts),
+        pystray.MenuItem("Check for Updates", check_updates_tray),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit", quit_app)
     )

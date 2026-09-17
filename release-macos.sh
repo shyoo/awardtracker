@@ -450,13 +450,16 @@ EOF
     xcrun stapler staple "$APP_PATH"
 fi
 
-# Read version from version.txt
+# Read version from AT_RELEASE_VERSION or version.txt
 VERSION_SUFFIX=""
-if [ -f "version.txt" ]; then
-    APP_VERSION=$(cat version.txt | tr -d '\r' | xargs)
-    if [ -n "$APP_VERSION" ]; then
-        VERSION_SUFFIX="-v$APP_VERSION"
-    fi
+APP_VERSION=""
+if [ -n "${AT_RELEASE_VERSION:-}" ]; then
+    APP_VERSION=$(echo "$AT_RELEASE_VERSION" | tr -d '\r' | sed 's/^v//' | xargs)
+elif [ -f "version.txt" ]; then
+    APP_VERSION=$(cat version.txt | tr -d '\r' | sed 's/^v//' | xargs)
+fi
+if [ -n "$APP_VERSION" ]; then
+    VERSION_SUFFIX="-v$APP_VERSION"
 fi
 
 # Optional architecture tag for release assets. CI builds Intel and Apple

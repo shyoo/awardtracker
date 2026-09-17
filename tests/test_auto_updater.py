@@ -14,7 +14,8 @@ from updater import (
     is_installed_via_setup,
     get_macos_app_bundle_path,
     AutoUpdateManager,
-    auto_updater
+    auto_updater,
+    perform_update_check,
 )
 
 
@@ -132,6 +133,15 @@ class TestAutoUpdater:
         ]
         chosen = select_best_asset_for_platform(assets, target_system="Darwin", target_machine="arm64")
         assert chosen["name"] == "awardtracker-macos-x86_64-setup-v1.4.0.dmg"
+
+    def test_select_best_asset_macos_prefers_native_zip_over_rosetta_dmg(self):
+        """Native arm64 zip must beat x86_64 dmg running via Rosetta 2."""
+        assets = [
+            {"name": "awardtracker-macos-x86_64-setup-v1.4.0.dmg", "browser_download_url": "https://example.com/intel.dmg", "size": 50000000},
+            {"name": "awardtracker-macos-arm64-portable-v1.4.0.zip", "browser_download_url": "https://example.com/arm.zip", "size": 48000000},
+        ]
+        chosen = select_best_asset_for_platform(assets, target_system="Darwin", target_machine="arm64")
+        assert chosen["name"] == "awardtracker-macos-arm64-portable-v1.4.0.zip"
 
     def test_auto_updater_state_and_reset(self):
         mgr = AutoUpdateManager()
@@ -252,3 +262,63 @@ class TestAutoUpdater:
         content_settings = res_settings.data.decode('utf-8')
         assert "Update Available: v1.4.0!" in content_settings
         assert "Update to v1.4.0" in content_settings
+        assert "Check for Updates" in content_settings
+
+    @patch("urllib.request.urlopen")
+    def test_api_updater_check(self, mock_urlopen, client, app):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "tag_name": "v1.4.0",
+            "html_url": "https://github.com/shyoo/awardtracker/releases/tag/v1.4.0",
+            "body": "New release notes",
+            "assets": [
+                {"name": "awardtracker-win64-setup-v1.4.0.exe", "browser_download_url": "https://example.com/setup.exe", "size": 45000000}
+            ]
+        }).encode('utf-8')
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        res = client.post('/api/updater/check')
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['success'] is True
+        assert data['available'] is True
+        assert data['latest_version'] == '1.4.0'
+        assert data['current_version'] == '1.3.9'
+
+        with app.app_context():
+            latest = Settings.query.filter_by(key='latest_version_available').first()
+            assert latest is not None
+            assert latest.value == '1.4.0'
+            last_check = Settings.query.filter_by(key='last_update_check_time').first()
+            assert last_check is not None
+            assert last_check.value != ''
+
+    @patch("urllib.request.urlopen")
+    def test_perform_update_check_throttle(self, mock_urlopen, app):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "tag_name": "v1.4.0",
+            "html_url": "https://github.com/shyoo/awardtracker/releases/tag/v1.4.0",
+            "body": "New release notes",
+            "assets": []
+        }).encode('utf-8')
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        with app.app_context():
+            # First check (force=True)
+            res1 = perform_update_check(app, force=True)
+            assert res1['checked'] is True
+            assert mock_urlopen.call_count == 1
+
+            # Second check within 6 hours without force: should be throttled
+            res2 = perform_update_check(app, force=False)
+            assert res2['checked'] is False
+            assert res2['reason'] == 'throttled'
+            assert mock_urlopen.call_count == 1  # Not called again!
+
+            # Third check with force=True: ignores throttle
+            res3 = perform_update_check(app, force=True)
+            assert res3['checked'] is True
+            assert mock_urlopen.call_count == 2  # Called again!
