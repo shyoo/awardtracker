@@ -36,6 +36,9 @@ jobs:
             echo "::error::$TAG is not vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-rc.N"
             exit 1
           fi
+          # actions/checkout replaces the annotated tag with a lightweight one
+          # pointing at the commit; re-fetch the real tag object from origin.
+          git fetch --quiet --force origin "refs/tags/$TAG:refs/tags/$TAG"
           if [ "$(git cat-file -t "refs/tags/$TAG")" != tag ]; then
             echo "::error::$TAG is lightweight; /release must create an annotated tag containing the notes."
             exit 1
@@ -223,6 +226,7 @@ jobs:
           cp artifacts/windows-x64/* staging/
           cp artifacts/macos-x86_64/* staging/
           cp artifacts/macos-arm64/* staging/
+          git fetch --quiet --force origin "refs/tags/$TAG:refs/tags/$TAG"
           git tag -l --format='%(contents:body)' "$TAG" > release-notes.md
           (cd staging && sha256sum * > SHA256SUMS.txt)
           cat staging/SHA256SUMS.txt
