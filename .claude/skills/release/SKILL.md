@@ -19,12 +19,12 @@ assets by hand.
 
 ## 1. Plan
 
-`rc` is the default and starts the next minor series. It continues an open RC
-series automatically. Use `patch` or `major` only when requested.
+`rc` is the default and starts the next patch series. It continues an open RC
+series automatically. Use `minor` or `major` only when requested.
 
 ```bash
 python scripts/release_tag.py plan rc
-python scripts/release_tag.py plan rc --bump patch
+python scripts/release_tag.py plan rc --bump minor
 python scripts/release_tag.py plan promote
 python scripts/release_tag.py plan 1.5.0-rc.1
 ```

@@ -92,7 +92,7 @@ def plan_release(
         elif open_rcs:
             triple = open_rcs[-1].triple
         else:
-            triple = bump_triple(base, "minor")
+            triple = bump_triple(base, "patch")
         series = [tag for tag in open_rcs if tag.triple == triple]
         rc = max((tag.rc or 0 for tag in series), default=0) + 1
         version = f"{'.'.join(map(str, triple))}-rc.{rc}"

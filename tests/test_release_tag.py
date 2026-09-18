@@ -22,9 +22,9 @@ def test_bump_triple():
     assert bump_triple((1, 3, 10), "major") == (2, 0, 0)
 
 
-def test_rc_starts_minor_series_by_default_and_honors_bump():
-    assert plan_release(SHIPPED, "rc", HEAD)["version"] == "1.4.0-rc.1"
-    assert plan_release(SHIPPED, "rc", HEAD, "patch")["version"] == "1.3.11-rc.1"
+def test_rc_starts_patch_series_by_default_and_honors_bump():
+    assert plan_release(SHIPPED, "rc", HEAD)["version"] == "1.3.11-rc.1"
+    assert plan_release(SHIPPED, "rc", HEAD, "minor")["version"] == "1.4.0-rc.1"
 
 
 def test_rc_continues_open_series():

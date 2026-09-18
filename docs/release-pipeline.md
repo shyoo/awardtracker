@@ -24,8 +24,8 @@ filenames carry the right RC or final version.
 ## RC and promotion flow
 
 1. Land and push the changes to `main`; its CI run must pass.
-2. `/release rc` plans the next version. By default it starts the next minor
-   line (`v1.3.10` → `v1.4.0-rc.1`) or continues its RC counter.
+2. `/release rc` plans the next version. By default it starts the next patch
+   line (`v1.3.10` → `v1.3.11-rc.1`) or continues its RC counter.
 3. The release workflow validates that the tag is annotated and points to a
    commit on `origin/main`, reruns the test suite, then builds all platforms.
 4. GitHub publishes an RC tag as a **prerelease**. Installed apps use
