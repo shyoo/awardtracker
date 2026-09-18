@@ -203,6 +203,38 @@ def select_best_asset_for_platform(assets: list, is_win_installer: Optional[bool
     return assets[0] if assets else None
 
 
+def get_app_port() -> Optional[int]:
+    """The port this instance's web UI is served on, if the launcher published it.
+
+    ``main.py`` picks a free port at startup and exports it. The relaunched
+    process is told to reuse it so the browser tab that is polling for the app
+    to come back finds it on the origin it is already sitting on.
+    """
+    raw = os.environ.get("AWARDTRACKER_PORT")
+    if not raw:
+        return None
+    try:
+        port = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return port if 0 < port < 65536 else None
+
+
+def get_update_log_path() -> str:
+    """Where the detached relaunch script records what it did.
+
+    The app is already gone by the time the installer runs, so this file is the
+    only account of an update that failed after the hand-off.
+    """
+    from config import write_dir
+    log_dir = os.path.join(write_dir, "logs")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+    except OSError:
+        return os.path.join(tempfile.gettempdir(), "awardtracker_update.log")
+    return os.path.join(log_dir, "update.log")
+
+
 class AutoUpdateManager:
     """
     Thread-safe manager for checking, downloading, and applying application updates.
@@ -415,24 +447,101 @@ class AutoUpdateManager:
     def _apply_windows_update(self, download_file: str, current_pid: int, current_exe: str):
         temp_dir = tempfile.gettempdir()
         ps1_script = os.path.join(temp_dir, f"awardtracker_update_{int(time.time())}.ps1")
+        log_path = get_update_log_path()
+        port = get_app_port()
+        app_args = f"'--port', '{port}'" if port else ""
 
-        if download_file.lower().endswith(".exe"):
-            # Inno Setup installer: run silently
-            script_content = f"""
+        preamble = f"""
 $ParentPid = {current_pid}
-$SetupPath = '{download_file}'
 $AppExe = '{current_exe}'
+$AppArgs = @({app_args})
+$LogPath = '{log_path}'
+
+function Write-UpdateLog($Message) {{
+    try {{
+        Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + ' ' + $Message)
+    }} catch {{ }}
+}}
+
+function Close-AwardTracker {{
+    # Setup registers our files with RestartManager and, if anything still holds
+    # awardtracker.exe, asks what to do -- a prompt /SUPPRESSMSGBOXES answers
+    # with Abort, rolling the whole install back with exit code 5. The packaged
+    # app is two processes (the PyInstaller bootloader and its child) and only
+    # the child's pid is known here, so sweep by name and force any straggler.
+    $deadline = (Get-Date).AddSeconds(15)
+    while ((Get-Date) -lt $deadline) {{
+        if (@(Get-Process -Name 'awardtracker' -ErrorAction SilentlyContinue).Count -eq 0) {{ return }}
+        Start-Sleep -Milliseconds 500
+    }}
+    $stuck = @(Get-Process -Name 'awardtracker' -ErrorAction SilentlyContinue)
+    if ($stuck.Count -gt 0) {{
+        Write-UpdateLog ("Forcing " + $stuck.Count + " awardtracker process(es) to exit before installing.")
+        $stuck | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+    }}
+}}
+
+function Restart-AwardTracker {{
+    Start-Sleep -Seconds 1
+    if (-not (Test-Path -LiteralPath $AppExe)) {{
+        Write-UpdateLog "Cannot relaunch: $AppExe is missing."
+        return
+    }}
+    try {{
+        if ($AppArgs.Count -gt 0) {{
+            Start-Process -FilePath $AppExe -ArgumentList $AppArgs
+        }} else {{
+            Start-Process -FilePath $AppExe
+        }}
+        Write-UpdateLog "Relaunched $AppExe"
+    }} catch {{
+        Write-UpdateLog ("Relaunch failed: " + $_.Exception.Message)
+    }}
+}}
 
 Start-Sleep -Milliseconds 600
 if ($ParentPid -gt 0) {{
     Wait-Process -Id $ParentPid -Timeout 30 -ErrorAction SilentlyContinue
 }}
 Start-Sleep -Seconds 1
-Start-Process -FilePath $SetupPath -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS" -Wait
-Start-Sleep -Seconds 1
-if (Test-Path $AppExe) {{
-    Start-Process -FilePath $AppExe
+"""
+
+        if download_file.lower().endswith(".exe"):
+            # Inno Setup installer. installer.iss declares PrivilegesRequired=admin
+            # and the default install location is under Program Files, so the
+            # silent install has to be elevated: launched with the app's own
+            # (unelevated) token it exits without writing anything, which is why
+            # updates appeared to succeed while leaving the old version in place.
+            # -Verb RunAs raises the UAC consent prompt; it is a no-op when the
+            # app already runs elevated.
+            setup_log = os.path.join(os.path.dirname(log_path), "update_setup.log")
+            script_content = preamble + f"""
+$SetupPath = '{download_file}'
+$SetupLog = '{setup_log}'
+Close-AwardTracker
+Write-UpdateLog "Running installer $SetupPath"
+# One pre-quoted string, not an array: Inno wants /LOG="path" with the quotes
+# after the '=', and -ArgumentList arrays get quoted around the whole token
+# instead, which Inno silently ignores.
+$SetupArgs = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG="' + $SetupLog + '"'
+try {{
+    $proc = Start-Process -FilePath $SetupPath -Verb RunAs -PassThru -Wait -ErrorAction Stop -ArgumentList $SetupArgs
+    # An elevated child's ExitCode is not always readable from the unelevated
+    # parent, so a missing code is not itself a failure.
+    $ExitCode = $null
+    try {{ $ExitCode = $proc.ExitCode }} catch {{ }}
+    if ($ExitCode -eq $null) {{
+        Write-UpdateLog ("Installer finished; exit code unavailable. See " + $SetupLog)
+    }} elseif ($ExitCode -eq 0) {{
+        Write-UpdateLog "Installer finished successfully."
+    }} else {{
+        Write-UpdateLog ("Installer exited with code " + $ExitCode + "; see " + $SetupLog)
+    }}
+}} catch {{
+    Write-UpdateLog ("Installer could not be started (elevation declined?): " + $_.Exception.Message)
 }}
+Restart-AwardTracker
 """
         else:
             # Portable zip: unpack and swap awardtracker.exe
@@ -451,19 +560,18 @@ if (Test-Path $AppExe) {{
             if not new_exe:
                 new_exe = download_file
 
-            script_content = f"""
-$ParentPid = {current_pid}
+            script_content = preamble + f"""
 $NewExe = '{new_exe}'
-$TargetExe = '{current_exe}'
-
-Start-Sleep -Milliseconds 600
-if ($ParentPid -gt 0) {{
-    Wait-Process -Id $ParentPid -Timeout 30 -ErrorAction SilentlyContinue
+Close-AwardTracker
+Write-UpdateLog "Replacing $AppExe with $NewExe"
+try {{
+    Copy-Item -LiteralPath $NewExe -Destination $AppExe -Force -ErrorAction Stop
+    Write-UpdateLog "Executable replaced."
+}} catch {{
+    Write-UpdateLog ("Could not replace the executable: " + $_.Exception.Message)
 }}
-Start-Sleep -Seconds 1
-Copy-Item -Path $NewExe -Destination $TargetExe -Force
 Start-Sleep -Milliseconds 500
-Start-Process -FilePath $TargetExe
+Restart-AwardTracker
 """
 
         with open(ps1_script, "w", encoding="utf-8") as f:
@@ -476,21 +584,47 @@ Start-Process -FilePath $TargetExe
             "-ExecutionPolicy", "Bypass",
             "-File", ps1_script
         ]
-        
+
         # Windows DETACHED_PROCESS flag to survive parent process exit
         CREATE_NEW_PROCESS_GROUP = 0x00000200
         DETACHED_PROCESS = 0x00000008
-        subprocess.Popen(cmd, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, close_fds=True)
+        # The packaged build is windowed (console=False), so it has no valid
+        # standard handles to pass on; hand the child explicit null ones.
+        subprocess.Popen(
+            cmd,
+            creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     def _apply_macos_update(self, download_file: str, current_pid: int, current_exe: str):
         temp_dir = tempfile.gettempdir()
         sh_script = os.path.join(temp_dir, f"awardtracker_update_{int(time.time())}.sh")
         app_target = get_macos_app_bundle_path() or "/Applications/Award Tracker.app"
+        log_path = get_update_log_path()
+        port = get_app_port()
+        # Relaunch on the same port so the browser tab polling for the app to
+        # come back finds it on the origin it is already sitting on.
+        # `open` needs --args to forward anything to the bundled binary; a bare
+        # binary relaunch takes the flags directly.
+        open_args = f"--args --port {port}" if port else ""
+        bin_args = f"--port {port}" if port else ""
 
         script_content = f"""#!/bin/bash
 PID={current_pid}
 DMG_PATH="{download_file}"
 APP_TARGET="{app_target}"
+LOG_PATH="{log_path}"
+OPEN_ARGS="{open_args}"
+BIN_ARGS="{bin_args}"
+
+log_update() {{
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG_PATH" 2>/dev/null || true
+}}
+
+log_update "Update script started ($DMG_PATH)"
 
 if [ -n "$PID" ] && [ "$PID" -gt 0 ]; then
     while kill -0 $PID 2>/dev/null; do sleep 0.5; done
@@ -504,6 +638,7 @@ if [[ "$DMG_PATH" == *.dmg ]]; then
         MOUNT_DIR="/Volumes/Award Tracker"
     fi
 
+    log_update "Mounted $MOUNT_DIR"
     if [ -d "$MOUNT_DIR/Award Tracker.app" ]; then
         if [ -d "$APP_TARGET" ]; then
             rm -rf "$APP_TARGET"
@@ -514,6 +649,9 @@ if [[ "$DMG_PATH" == *.dmg ]]; then
             APP_TARGET="/Applications/Award Tracker.app"
         fi
         hdiutil detach "$MOUNT_DIR" -quiet 2>/dev/null || true
+        log_update "Installed new bundle at $APP_TARGET"
+    else
+        log_update "No 'Award Tracker.app' inside the disk image; nothing installed"
     fi
 elif [[ "$DMG_PATH" == *.zip ]]; then
     UNPACK_DIR="{temp_dir}/awardtracker_mac_unpack_{int(time.time())}"
@@ -527,9 +665,13 @@ elif [[ "$DMG_PATH" == *.zip ]]; then
 fi
 
 if [ -d "$APP_TARGET" ]; then
-    open "$APP_TARGET"
+    log_update "Relaunching $APP_TARGET"
+    open "$APP_TARGET" $OPEN_ARGS || log_update "Relaunch failed for $APP_TARGET"
 elif [ -f "{current_exe}" ]; then
-    "{current_exe}" &
+    log_update "Relaunching {current_exe}"
+    "{current_exe}" $BIN_ARGS &
+else
+    log_update "Nothing to relaunch: neither $APP_TARGET nor {current_exe} exists"
 fi
 """
 

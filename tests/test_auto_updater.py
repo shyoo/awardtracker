@@ -16,6 +16,8 @@ from updater import (
     AutoUpdateManager,
     auto_updater,
     perform_update_check,
+    get_app_port,
+    get_update_log_path,
 )
 
 
@@ -322,3 +324,125 @@ class TestAutoUpdater:
             res3 = perform_update_check(app, force=True)
             assert res3['checked'] is True
             assert mock_urlopen.call_count == 2  # Called again!
+
+
+class TestUpdateRelaunch:
+    """The hand-off from the dying app to the detached installer script.
+
+    Two failures made an update look like it had worked while leaving 1.3.10 in
+    place: the silent Inno install ran unelevated against Program Files, and the
+    relaunched app picked a fresh random port so the browser tab polling for it
+    waited forever.
+    """
+
+    @pytest.fixture
+    def manager(self):
+        return AutoUpdateManager()
+
+    def test_get_app_port_reads_launcher_export(self, monkeypatch):
+        monkeypatch.setenv('AWARDTRACKER_PORT', '7767')
+        assert get_app_port() == 7767
+
+    def test_get_app_port_rejects_junk(self, monkeypatch):
+        monkeypatch.setenv('AWARDTRACKER_PORT', 'not-a-port')
+        assert get_app_port() is None
+        monkeypatch.setenv('AWARDTRACKER_PORT', '99999')
+        assert get_app_port() is None
+        monkeypatch.delenv('AWARDTRACKER_PORT')
+        assert get_app_port() is None
+
+    def test_update_log_lives_with_the_other_logs(self):
+        assert get_update_log_path().endswith(os.path.join('logs', 'update.log'))
+
+    def _windows_script(self, manager, monkeypatch, tmp_path, installer_name='awardtracker-win64-setup-v1.4.0.exe'):
+        installer = tmp_path / installer_name
+        if not installer.exists():
+            installer.write_text('setup')
+        monkeypatch.setattr('tempfile.gettempdir', lambda: str(tmp_path))
+        written = {}
+
+        def capture_popen(cmd, **kwargs):
+            written['cmd'] = cmd
+            with open(cmd[-1], encoding='utf-8') as fh:
+                written['script'] = fh.read()
+            return MagicMock()
+
+        monkeypatch.setattr('updater.subprocess.Popen', capture_popen)
+        manager._apply_windows_update(str(installer), 4321, r'C:\Program Files (x86)\AwardTrackerwardtracker.exe')
+        return written
+
+    def test_windows_installer_runs_elevated(self, manager, monkeypatch, tmp_path):
+        monkeypatch.setenv('AWARDTRACKER_PORT', '7767')
+        written = self._windows_script(manager, monkeypatch, tmp_path)
+        script = written['script']
+
+        # Without -Verb RunAs the admin-only Inno installer exits without
+        # installing anything, which is the bug this guards.
+        assert '-Verb RunAs' in script
+        assert '/VERYSILENT' in script
+
+    def test_windows_relaunch_reuses_the_port(self, manager, monkeypatch, tmp_path):
+        monkeypatch.setenv('AWARDTRACKER_PORT', '7767')
+        script = self._windows_script(manager, monkeypatch, tmp_path)['script']
+        assert "$AppArgs = @('--port', '7767')" in script
+
+    def test_windows_relaunch_without_a_known_port(self, manager, monkeypatch, tmp_path):
+        monkeypatch.delenv('AWARDTRACKER_PORT', raising=False)
+        script = self._windows_script(manager, monkeypatch, tmp_path)['script']
+        assert '$AppArgs = @()' in script
+
+    def test_windows_script_records_what_happened(self, manager, monkeypatch, tmp_path):
+        monkeypatch.setenv('AWARDTRACKER_PORT', '7767')
+        script = self._windows_script(manager, monkeypatch, tmp_path)['script']
+        assert 'Write-UpdateLog' in script
+        # Inno only honours /LOG="path" with the quotes after the '='; an
+        # -ArgumentList array quotes the whole token instead and Inno drops it.
+        assert r'''/LOG="' + $SetupLog + '"''' in script
+
+    def test_windows_installer_waits_for_the_app_to_die(self, manager, monkeypatch, tmp_path):
+        """Setup aborts with exit code 5 if anything still holds awardtracker.exe.
+
+        RestartManager asks what to do and /SUPPRESSMSGBOXES answers Abort, so
+        the install rolls back. Only the child pid is known here (the packaged
+        app is bootloader + child), hence the sweep by name.
+        """
+        monkeypatch.setenv('AWARDTRACKER_PORT', '7767')
+        script = self._windows_script(manager, monkeypatch, tmp_path)['script']
+        assert 'function Close-AwardTracker' in script
+        # The sweep has to run before Setup, not merely exist in the script.
+        assert script.index('\nClose-AwardTracker\n') < script.index('Start-Process -FilePath $SetupPath')
+
+    def test_portable_swap_also_waits_for_the_app_to_die(self, manager, monkeypatch, tmp_path):
+        import zipfile
+
+        portable = tmp_path / 'awardtracker-win-portable-v1.4.0.zip'
+        with zipfile.ZipFile(portable, 'w') as zf:
+            zf.writestr('awardtracker.exe', 'binary')
+        monkeypatch.setenv('AWARDTRACKER_PORT', '7767')
+        written = self._windows_script(
+            manager, monkeypatch, tmp_path, installer_name=portable.name
+        )
+        script = written['script']
+        # Copy-Item over a running executable fails just as surely as Setup does.
+        assert script.index('\nClose-AwardTracker\n') < script.index('Copy-Item -LiteralPath $NewExe')
+
+    def test_macos_relaunch_reuses_the_port(self, manager, monkeypatch, tmp_path):
+        monkeypatch.setenv('AWARDTRACKER_PORT', '7767')
+        monkeypatch.setattr('tempfile.gettempdir', lambda: str(tmp_path))
+        monkeypatch.setattr('updater.get_macos_app_bundle_path', lambda: '/Applications/Award Tracker.app')
+        scripts = {}
+
+        def capture_popen(cmd, **kwargs):
+            with open(cmd[-1], encoding='utf-8') as fh:
+                scripts['script'] = fh.read()
+            return MagicMock()
+
+        monkeypatch.setattr('updater.subprocess.Popen', capture_popen)
+        dmg = tmp_path / 'awardtracker-macos-arm64-setup-v1.4.0.dmg'
+        dmg.write_text('dmg')
+        manager._apply_macos_update(str(dmg), 4321, '/Applications/Award Tracker.app/Contents/MacOS/awardtracker')
+
+        script = scripts['script']
+        assert 'OPEN_ARGS="--args --port 7767"' in script
+        assert 'BIN_ARGS="--port 7767"' in script
+        assert 'log_update' in script
