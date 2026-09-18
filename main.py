@@ -29,7 +29,58 @@ def find_free_port():
     s.close()
     return port
 
-PORT = find_free_port()
+
+def is_port_available(port):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        # Werkzeug binds with SO_REUSEADDR, so the probe has to as well or a
+        # lingering TIME_WAIT from the process we just replaced looks like a
+        # busy port. On Windows SO_REUSEADDR would let the probe steal a port
+        # that is genuinely in use, so there it stays off.
+        if sys.platform != 'win32':
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(('127.0.0.1', port))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def requested_port():
+    """The port the launcher was asked to serve on, or None.
+
+    The auto-updater relaunches the app with `--port <n>` so the new version
+    comes back on the port the user's already-open browser tab is polling.
+    Without it the tab waits forever on a port nothing is listening on.
+    """
+    argv = sys.argv
+    candidate = None
+    if '--port' in argv:
+        index = argv.index('--port')
+        if index + 1 < len(argv):
+            candidate = argv[index + 1]
+    candidate = candidate or os.environ.get('AWARDTRACKER_PORT')
+    if not candidate:
+        return None
+    try:
+        port = int(candidate)
+    except (TypeError, ValueError):
+        return None
+    if not (0 < port < 65536):
+        return None
+    return port
+
+
+def resolve_port():
+    wanted = requested_port()
+    if wanted and is_port_available(wanted):
+        return wanted
+    return find_free_port()
+
+PORT = resolve_port()
+# Published so the updater can hand the port to the relaunched process.
+os.environ['AWARDTRACKER_PORT'] = str(PORT)
 
 # Add root folder to sys.path to enable smooth packaging imports
 basedir = os.path.abspath(os.path.dirname(__file__))

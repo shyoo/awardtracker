@@ -337,13 +337,24 @@
         });
     }
 
+    // The installer needs elevation on Windows and the app has already quit by
+    // then, so give the user long enough to answer the UAC prompt before
+    // declaring the restart lost.
+    const RESTART_WAIT_MS = 180000;
+
     function waitForAppRestart() {
       const statusText = document.getElementById('updateStatusText');
       const bytesText = document.getElementById('updateBytesText');
       if (statusText) statusText.textContent = 'Reconnecting to Award Tracker...';
-      if (bytesText) bytesText.textContent = 'Please wait while the new version starts up.';
+      if (bytesText) bytesText.textContent = 'Approve the permission prompt if Windows asks, then wait while the new version starts up.';
 
+      const deadline = Date.now() + RESTART_WAIT_MS;
       const checkInterval = setInterval(() => {
+        if (Date.now() > deadline) {
+          clearInterval(checkInterval);
+          showUpdaterError('Award Tracker did not come back on its own. Start it again from the Start menu or your Applications folder — if it still reports the old version, install the download manually.');
+          return;
+        }
         fetch('/', { method: 'HEAD', cache: 'no-store' })
           .then(res => {
             if (res.ok) {
