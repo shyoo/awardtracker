@@ -27,6 +27,21 @@ NEW_MEMBER_HTML = """
 </div>
 """
 
+# Sanitized header from /en/home, where Avis lands after MFA.
+HOME_SIGNED_IN_HTML = """
+<div data-testid="profile-menu-container">
+  <button data-testid="profile-menu-profile-btn">MEMBER</button>
+</div>
+<p data-testid="user-profile-info-name">Hi, MEMBER</p>
+<p data-testid="user-profile-info-pointsLabel"></p>
+<input data-testid="login-form-username-input">
+"""
+
+HOME_SIGNED_OUT_HTML = """
+<button data-testid="profile-menu-login-btn">Sign in or Join</button>
+<input data-testid="login-form-username-input">
+"""
+
 
 class AvisTests(unittest.TestCase):
     def setUp(self):
@@ -101,6 +116,33 @@ class AvisTests(unittest.TestCase):
         sb.click.assert_not_called()
         with self.assertRaises(InteractionRequiredError):
             self.plugin.fill_login_form(sb, "user", "secret", auto_submit=True)
+
+    def test_home_page_after_mfa_is_signed_in_but_not_rewards(self):
+        self.assertTrue(self.plugin.is_signed_in_elsewhere(HOME_SIGNED_IN_HTML))
+        self.assertFalse(self.plugin.is_signed_in_elsewhere(HOME_SIGNED_OUT_HTML))
+        self.assertFalse(self.plugin.is_logged_in(self._browser(HOME_SIGNED_IN_HTML)))
+
+    def test_interactive_wait_opens_rewards_after_landing_on_home(self):
+        sb = self._browser(HOME_SIGNED_IN_HTML)
+        sb.get_current_url.return_value = "https://www.avis.com/en/home"
+
+        def navigate(url):
+            sb.get_current_url.return_value = url
+            sb.get_page_source.return_value = HOME_SIGNED_IN_HTML + REWARDS_HTML
+        sb.open.side_effect = navigate
+        self.plugin.interactive_poll_seconds = 0
+        self.plugin.wait_for_user_login(sb)
+        sb.open.assert_called_once_with(self.plugin.login_url)
+        self.assertEqual(self.plugin.scrape(sb)["balance"], 1688)
+
+    def test_interactive_wait_leaves_login_pages_alone(self):
+        sb = self._browser(HOME_SIGNED_OUT_HTML)
+        sb.get_current_url.return_value = "https://www.avis.com/en/avis-preferred/login"
+        self.plugin.interactive_poll_seconds = 0
+        self.plugin.interactive_timeout_seconds = 0.05
+        with self.assertRaises(PluginError):
+            self.plugin.wait_for_user_login(sb)
+        sb.open.assert_not_called()
 
     @staticmethod
     def _browser(html):

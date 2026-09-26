@@ -4,13 +4,18 @@ Avis may require a one-time code during sign-in. Background sync only reads an
 existing session; it must never submit credentials or trigger another code.
 """
 import re
+import time
 from typing import Any, Dict, Optional, Tuple
 
 from bs4 import BeautifulSoup
 from seleniumbase import SB
 
 from .base import InteractionRequiredError, PluginError
-from .browser_plugin import BrowserPlugin
+from .browser_plugin import BrowserPlugin, log
+
+# Header markers Avis renders on any page once the user is signed in.
+SIGNED_IN_MARKERS = ('[data-testid="user-profile-info-name"]', '[data-testid="profile-menu-profile-btn"]')
+REWARDS_PATH = "/avis-preferred/dashboard/rewards"
 
 
 class AvisPlugin(BrowserPlugin):
@@ -52,14 +57,14 @@ class AvisPlugin(BrowserPlugin):
             "credential_hint": "your Avis username and password",
             "pre_submit_note": (
                 "Avis may show separate username, password, and verification pages. "
-                "Complete each page yourself, enter any code only once, then open "
-                "Rewards to finish syncing."
+                "Complete each page yourself and enter any code only once. Award "
+                "Tracker opens Rewards once you are signed in."
             ),
         }
 
     @property
     def interactive_login_hint(self) -> str:
-        return "Avis may request a verification code. Use Interactive Login and open Rewards after signing in."
+        return "Avis may request a verification code. Use Interactive Login; Rewards opens automatically after sign-in."
 
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Avis Preferred points expiration is not calculated automatically. Check your Avis account for current terms."
@@ -115,6 +120,35 @@ class AvisPlugin(BrowserPlugin):
             '[data-testid="loyalty-tier-label"]',
             '[data-testid="wizard-number"]',
         ))
+
+    @staticmethod
+    def is_signed_in_elsewhere(html: str) -> bool:
+        """Signed in, but on a page other than Rewards (Avis lands on /en/home after MFA)."""
+        soup = BeautifulSoup(html, "html.parser")
+        return any(soup.select_one(selector) is not None for selector in SIGNED_IN_MARKERS)
+
+    def wait_for_user_login(self, sb) -> None:
+        """Wait for sign-in; once Avis redirects elsewhere signed in, open Rewards ourselves."""
+        deadline = time.time() + self.interactive_timeout_seconds
+        redirects = 0
+        while time.time() < deadline:
+            if self.is_logged_in(sb):
+                return
+            try:
+                url = sb.get_current_url() or ""
+            except Exception:
+                url = ""
+            if (redirects < 3 and REWARDS_PATH not in url
+                    and self.is_signed_in_elsewhere(sb.get_page_source())):
+                redirects += 1
+                log(f"{self.name}: signed in on {url or 'another page'}; opening Rewards.")
+                self.open_login(sb)
+                continue
+            time.sleep(self.interactive_poll_seconds)
+        raise PluginError(
+            f"Interactive login timed out after {self.interactive_timeout_seconds // 60} minutes "
+            f"or the {self.name} account page did not load."
+        )
 
     def fill_login_form(self, sb, username: str, password: str, auto_submit: bool = True) -> None:
         if auto_submit:
