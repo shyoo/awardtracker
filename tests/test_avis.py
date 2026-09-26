@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from plugins.avis import AvisPlugin
-from plugins.base import InteractionRequiredError
+from plugins.base import InteractionRequiredError, PluginError
 
 
 REWARDS_HTML = """
@@ -12,6 +12,19 @@ REWARDS_HTML = """
 </span>
 <h5 data-testid="gauge-points-value">1,688</h5>
 <span data-testid="gauge-points-label">Available Points</span>
+"""
+
+NEW_MEMBER_HTML = """
+<div data-testid="loyalty-card">
+  <span data-testid="loyalty-tier-label">PREFERRED</span>
+  <span data-testid="wizard-number-title">WIZARD NUMBER</span>
+  <span data-testid="wizard-number">123456</span>
+</div>
+<div data-testid="manage-rewards_page">
+  <span data-testid="rewards-loyalty-tier-welcome-alert-description">
+    Your account has been successfully enrolled in Avis Preferred.
+  </span>
+</div>
 """
 
 
@@ -38,6 +51,21 @@ class AvisTests(unittest.TestCase):
     def test_zero_balance_is_valid(self):
         html = REWARDS_HTML.replace("1,688", "0")
         self.assertEqual(self.plugin.parse_rewards(html)[0], 0)
+
+    def test_newly_enrolled_rewards_page_has_zero_avis_points(self):
+        self.assertEqual(self.plugin.parse_rewards(NEW_MEMBER_HTML), (0, "Preferred", "123456"))
+        self.assertTrue(self.plugin.is_logged_in(self._browser(NEW_MEMBER_HTML)))
+
+    def test_current_membership_card_with_points_gauge(self):
+        html = NEW_MEMBER_HTML + '<h5 data-testid="gauge-points-value">2,500</h5>'
+        self.assertEqual(self.plugin.parse_rewards(html), (2500, "Preferred", "123456"))
+
+    def test_signed_in_page_without_points_or_welcome_is_not_mfa(self):
+        html = NEW_MEMBER_HTML.replace("successfully enrolled in Avis Preferred", "Check your rewards")
+        self.assertIsNone(self.plugin.parse_rewards(html))
+        self.assertTrue(self.plugin.is_logged_in(self._browser(html)))
+        with self.assertRaisesRegex(PluginError, "does not show an available points balance"):
+            self.plugin.scrape(self._browser(html))
 
     def test_login_or_partial_dashboard_is_not_success(self):
         self.assertIsNone(self.plugin.parse_rewards("<input type='password'><h5>1688</h5>"))

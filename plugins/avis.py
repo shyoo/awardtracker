@@ -66,25 +66,55 @@ class AvisPlugin(BrowserPlugin):
 
     @staticmethod
     def parse_rewards(html: str) -> Optional[Tuple[int, str, str]]:
-        """Read only the two fields confirmed on the authenticated Rewards page."""
+        """Read the points view or Avis's newly enrolled Rewards view."""
         soup = BeautifulSoup(html, "html.parser")
         member = soup.select_one('[data-testid="avis-preferred-member-label"]')
         points = soup.select_one('[data-testid="gauge-points-value"]')
-        if member is None or points is None:
+        if member is not None:
+            label = member.get_text(" ", strip=True)
+            match = re.fullmatch(r"Avis\s+(.+?)\s+Member\s*:\s*#?\s*([A-Za-z0-9]+)", label, re.I)
+            if not match:
+                return None
+            status = re.sub(r"\s+", " ", match.group(1)).strip()
+            member_id = match.group(2)
+        else:
+            # The current account layout uses a card above the Rewards section.
+            if soup.select_one('[data-testid="manage-rewards_page"]') is None:
+                return None
+            tier = soup.select_one('[data-testid="loyalty-tier-label"]')
+            wizard = soup.select_one('[data-testid="wizard-number"]')
+            if tier is None or wizard is None:
+                return None
+            status = tier.get_text(" ", strip=True)
+            member_id = wizard.get_text(" ", strip=True)
+            if status.isupper():
+                status = status.title()
+        if not status or not re.fullmatch(r"[A-Za-z0-9]+", member_id):
             return None
 
-        label = member.get_text(" ", strip=True)
-        match = re.fullmatch(r"Avis\s+(.+?)\s+Member\s*:\s*#?\s*([A-Za-z0-9]+)", label, re.I)
-        balance_text = points.get_text("", strip=True)
-        if not match or not re.fullmatch(r"[\d,]+", balance_text):
-            return None
-        tier = re.sub(r"\s+", " ", match.group(1)).strip()
-        if not tier:
-            return None
-        return int(balance_text.replace(",", "")), tier, match.group(2)
+        if points is not None:
+            balance_text = points.get_text("", strip=True)
+            if not re.fullmatch(r"[\d,]+", balance_text):
+                return None
+            return int(balance_text.replace(",", "")), status, member_id
+
+        # A newly enrolled account shows a membership card and welcome alert,
+        # but no gauge. That explicit state represents no earned Avis points.
+        welcome = soup.select_one('[data-testid="rewards-loyalty-tier-welcome-alert-description"]')
+        if welcome and "successfully enrolled in Avis Preferred" in welcome.get_text(" ", strip=True):
+            return 0, status, member_id
+        return None
 
     def is_logged_in(self, sb) -> bool:
-        return self.parse_rewards(sb.get_page_source()) is not None
+        html = sb.get_page_source()
+        if self.parse_rewards(html) is not None:
+            return True
+        soup = BeautifulSoup(html, "html.parser")
+        return all(soup.select_one(selector) is not None for selector in (
+            '[data-testid="manage-rewards_page"]',
+            '[data-testid="loyalty-tier-label"]',
+            '[data-testid="wizard-number"]',
+        ))
 
     def fill_login_form(self, sb, username: str, password: str, auto_submit: bool = True) -> None:
         if auto_submit:
@@ -102,7 +132,7 @@ class AvisPlugin(BrowserPlugin):
                 self.restore_session(sb, profile_dir)
                 self.open_login(sb)
                 if not self.is_logged_in(sb):
-                    raise InteractionRequiredError(self.mfa_message())
+                    raise InteractionRequiredError(self.login_failed_message())
                 return self.finish(sb, profile_dir, self.scrape(sb))
         except (InteractionRequiredError, PluginError):
             raise
@@ -110,8 +140,11 @@ class AvisPlugin(BrowserPlugin):
             raise PluginError(f"Avis Preferred sync failed: {exc}") from exc
 
     def scrape(self, sb) -> Dict[str, Any]:
-        parsed = self.parse_rewards(sb.get_page_source())
+        html = sb.get_page_source()
+        parsed = self.parse_rewards(html)
         if parsed is None:
+            if self.is_logged_in(sb):
+                raise PluginError("Avis Rewards is signed in but does not show an available points balance.")
             raise InteractionRequiredError(self.mfa_message())
         balance, status, member_id = parsed
         return {
