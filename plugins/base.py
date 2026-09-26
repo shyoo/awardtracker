@@ -181,6 +181,7 @@ PROVIDER_CATEGORIES = {
     'wyndham': 'Hotels',
 
     # Car Rentals
+    'avis': 'Car Rentals',
     'enterprise': 'Car Rentals',
     'hertz': 'Car Rentals',
     'national': 'Car Rentals',

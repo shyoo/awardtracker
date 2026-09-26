@@ -86,6 +86,7 @@ Provides a tracking chart that shows points history over the times.
 * **World of Hyatt**
 
 ### 🚗 Car Rentals
+* **Avis Preferred** — points, status, and membership number; interactive sign-in may require a verification code
 * **Hertz Gold+ Rewards**
 
 ---
