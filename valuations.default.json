@@ -19,6 +19,10 @@
     "cpp": 1.0,
     "name": "Caesars Rewards"
   },
+  "avis": {
+    "cpp": 1.0,
+    "name": "Avis Preferred"
+  },
   "hertz": {
     "cpp": 1.0,
     "name": "Hertz Gold+ Rewards"

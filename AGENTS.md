@@ -139,4 +139,19 @@ For troubleshooting scraper issues, SeleniumBase step-by-step debug outputs, scr
 * **Step-by-step Browser Logs**: Under the daily directory structure, e.g., `%APPDATA%\AwardTracker\logs\YYYY-MM-DD\YYYYMMDD_HHMMSS-<ID>-<Provider_Name>\`.
   * These directories contain sequential HTML page source files (`001_open.html`, etc.) and visual screenshots (`001_open.png`, etc.) for every WebDriver action, which are invaluable for debugging CAPTCHA lockouts, layout shifts, or modal prompt blockers.
 
+### Credentialed browser research
+
+Follow [the provider login research procedure](docs/scraper-research-safety.md)
+before using a real account. The owner may supply credentials in a temporary
+file outside the repository or in ignored `internal_docs/`. Read that file
+privately at runtime; never print its contents, copy it into code, or commit it.
+The owner's request to research a provider authorizes one careful login
+attempt: inspect each page's HTML before choosing and taking the next action,
+including staged username and password pages. Keep captures private and out
+of git. At MFA or any verification challenge, stop and ask the owner for the
+current code, then continue in the **same** browser session after they respond.
+Never refresh, reopen the login URL, resend a code, or retry a failed step
+without their direction. Finish by inspecting the authenticated rewards page
+and building tests from sanitized fixtures.
+
 ---
