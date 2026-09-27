@@ -361,6 +361,9 @@ def _apply_selenium_patches():
                         return orig_method(self, *args, **kwargs)
                         
                     debug_logger._log_context.in_patched_call = True
+                    # Only the latest call's error snapshot stands in for the
+                    # final page; see save_failure_snapshot.
+                    debug_logger._log_context.failure_snapshot_saved = False
                     try:
                         # Register driver to active registry
                         try:
@@ -412,6 +415,7 @@ def _apply_selenium_patches():
                                 debug_logger.log_action(f"Exception raised in sb.{m_name}: {e}", level="ERROR")
                                 if debug_logger.is_debug_mode():
                                     debug_logger.save_snapshot(self, f"error_{m_name}")
+                                    debug_logger._log_context.failure_snapshot_saved = True
                             except Exception:
                                 pass
                             raise e
@@ -422,6 +426,39 @@ def _apply_selenium_patches():
                 return wrapper
                 
             setattr(BaseCase, method_name, make_wrapper(method_name, original))
+
+def snapshot_failed_run(sb) -> None:
+    """Save the final page if the ``with SB(...)`` block exited on an exception."""
+    if not getattr(sb, "_has_failure", False):
+        return
+    try:
+        import debug_logger
+        account_id = getattr(debug_logger._log_context, "account_id", None)
+        # A cancelled run's browser is already being killed; touching it could
+        # make uc mode reconnect and relaunch Chrome.
+        if not (account_id and is_cancelled(account_id)):
+            debug_logger.save_failure_snapshot(sb)
+    except Exception:
+        pass
+
+def _apply_failure_snapshot_patch():
+    """Capture the final page when a run fails inside ``with SB(...)``.
+
+    SeleniumBase's ``SB`` context manager sets ``_has_failure`` when an
+    exception leaves the ``with`` block and then calls ``tearDown()``, which
+    quits Chrome.  Hooking ``tearDown`` is the last point the page still
+    exists, and it covers every plugin without changing how each opens SB.
+    """
+    original = BaseCase.tearDown
+    if hasattr(original, "_is_awardtracker_patched"):
+        return
+
+    def tearDown(self, *args, **kwargs):
+        snapshot_failed_run(self)
+        return original(self, *args, **kwargs)
+
+    tearDown._is_awardtracker_patched = True
+    BaseCase.tearDown = tearDown
 
 def _apply_sb_context_patch():
     import sys
@@ -442,6 +479,7 @@ def _apply_sb_context_patch():
 
 try:
     _apply_selenium_patches()
+    _apply_failure_snapshot_patch()
     _apply_sb_context_patch()
 except Exception:
     pass

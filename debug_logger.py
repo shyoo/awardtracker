@@ -34,7 +34,8 @@ def init_run_context(account_id, provider_name, username, password, current_bala
     _log_context.last_snapshot_url = None
     _log_context.in_logger = False
     _log_context.in_patched_call = False
-    
+    _log_context.failure_snapshot_saved = False
+
     # Store sensitive data to mask
     _log_context.sensitive_data = {
         'username': username,
@@ -80,6 +81,8 @@ def clear_run_context():
         del _log_context.in_logger
     if hasattr(_log_context, 'in_patched_call'):
         del _log_context.in_patched_call
+    if hasattr(_log_context, 'failure_snapshot_saved'):
+        del _log_context.failure_snapshot_saved
 
 def mask_sensitive(text: str) -> str:
     if not text or not is_privacy_masked():
@@ -206,6 +209,23 @@ def save_snapshot_on_url_change(sb, action_name):
         return
     _log_context.last_snapshot_url = current_url
     save_snapshot(sb, action_name)
+
+
+def save_failure_snapshot(sb):
+    """Save the page a debug run was on when it failed, before Chrome closes.
+
+    Plugins usually fail by raising their own error after reading a page that
+    was already captured on arrival, so the state that caused the failure
+    (a late modal, a security notice) would otherwise be lost.  Skipped when
+    the last browser call already saved an ``error_*`` snapshot of this state.
+    """
+    if not getattr(_log_context, 'run_dir', None) or not is_debug_mode():
+        return
+    if getattr(_log_context, 'failure_snapshot_saved', False):
+        return
+    _log_context.failure_snapshot_saved = True
+    log_action("Run failed; saving the final page before closing the browser.", level="WARNING")
+    save_snapshot(sb, "error_final")
 
 class SensitiveMaskingFilter(logging.Filter):
     def filter(self, record):

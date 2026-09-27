@@ -76,6 +76,12 @@ def save_cookies_to_json(sb, profile_dir: Optional[str], filename: str = "cookie
         return 0
 
 
+#: Anti-bot cookies the site rotates on every response. The profile already
+#: keeps the current value; replaying an older copy from the jar reads as a
+#: stolen cookie and gets the browser hard-blocked (DataDome ``t=bv``).
+NEVER_RESTORED_COOKIES = frozenset({"datadome"})
+
+
 def load_cookies_from_json(sb, profile_dir: Optional[str], filename: str = "cookies.json",
                            robots_domains: Iterable[str] = ("auth0",)) -> int:
     """Re-inject cookies saved by save_cookies_to_json.
@@ -98,6 +104,8 @@ def load_cookies_from_json(sb, profile_dir: Optional[str], filename: str = "cook
 
     by_domain: Dict[str, list] = {}
     for cookie in cookies:
+        if cookie.get('name') in NEVER_RESTORED_COOKIES:
+            continue
         domain = cookie.get('domain', '')
         if domain:
             by_domain.setdefault(domain.lstrip('.'), []).append(cookie)
