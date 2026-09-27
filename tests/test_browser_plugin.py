@@ -268,6 +268,19 @@ class TestBrowserPluginPersistence(unittest.TestCase):
         self.assertEqual(sb.add_cookie.call_args_list[0].args[0]["expiry"], 1)
         self.assertEqual(save_cookies_to_json(sb, None), 0)
 
+    def test_cookie_jar_never_replays_rotating_datadome_cookie(self):
+        sb = MagicMock()
+        sb.get_current_url.return_value = "https://www.avis.com/en/home"
+        sb.get_cookies.return_value = [
+            {"name": "SESSION_ID", "value": "s", "domain": "www.avis.com"},
+            {"name": "datadome", "value": "stale", "domain": ".avis.com", "expiry": 2},
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            save_cookies_to_json(sb, d, "jar.json")
+            self.assertEqual(load_cookies_from_json(sb, d, "jar.json"), 1)
+        injected = [c.args[0]["name"] for c in sb.add_cookie.call_args_list]
+        self.assertEqual(injected, ["SESSION_ID"])
+
 
 if __name__ == '__main__':
     unittest.main()

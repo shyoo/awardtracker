@@ -27,19 +27,11 @@ NEW_MEMBER_HTML = """
 </div>
 """
 
-# Sanitized header from /en/home, where Avis lands after MFA.
-HOME_SIGNED_IN_HTML = """
-<div data-testid="profile-menu-container">
-  <button data-testid="profile-menu-profile-btn">MEMBER</button>
-</div>
-<p data-testid="user-profile-info-name">Hi, MEMBER</p>
-<p data-testid="user-profile-info-pointsLabel"></p>
-<input data-testid="login-form-username-input">
-"""
-
-HOME_SIGNED_OUT_HTML = """
-<button data-testid="profile-menu-login-btn">Sign in or Join</button>
-<input data-testid="login-form-username-input">
+# Sanitized Rewards shell with DataDome's hard-block overlay (t=bv).
+REWARDS_SHELL_BLOCKED_HTML = """
+<span data-testid="wizard-number-title">WIZARD NUMBER</span>
+<iframe src="https://geo.captcha-delivery.com/captcha/?initialCid=X&amp;cid=X&amp;t=bv"
+        title="Verification system" id="ddChallengeBody1"></iframe>
 """
 
 
@@ -89,60 +81,77 @@ class AvisTests(unittest.TestCase):
 
     def test_background_sync_opens_once_and_never_types_or_submits(self):
         sb = self._browser("<input type='password'>")
-        context = MagicMock()
-        context.__enter__.return_value = sb
-        with patch("plugins.avis.SB", return_value=context):
+        with self._sb(sb):
             with self.assertRaises(InteractionRequiredError):
                 self.plugin.fetch_data("username", "password")
-        sb.open.assert_called_once_with(self.plugin.login_url)
+        sb.uc_open_with_reconnect.assert_called_once_with(self.plugin.login_url, 4)
         sb.type.assert_not_called()
         sb.click.assert_not_called()
 
+    def test_background_sync_reports_datadome_block_instead_of_login(self):
+        sb = self._browser(REWARDS_SHELL_BLOCKED_HTML)
+        with self._sb(sb):
+            with self.assertRaises(PluginError) as caught:
+                self.plugin.fetch_data("username", "password")
+        self.assertNotIsInstance(caught.exception, InteractionRequiredError)
+        self.assertIn("temporarily restricted", str(caught.exception))
+        self.assertFalse(self.plugin.is_bot_blocked("<input type='password'>"))
+
     def test_background_sync_returns_authenticated_data(self):
         sb = self._browser(REWARDS_HTML)
-        context = MagicMock()
-        context.__enter__.return_value = sb
-        with patch("plugins.avis.SB", return_value=context):
+        with self._sb(sb) as sb_factory:
             result = self.plugin.fetch_data("username", "password")
         self.assertEqual(result["balance"], 1688)
         self.assertEqual(result["membership_id"], "1AB23C")
-        sb.open.assert_called_once_with(self.plugin.login_url)
+        kwargs = sb_factory.call_args.kwargs
+        self.assertFalse(kwargs["headless"])
+        self.assertEqual(kwargs["agent"], "pinned-ua")
 
-    def test_interactive_prefill_never_submits(self):
-        sb = self._browser("")
-        sb.is_element_visible.side_effect = lambda selector: selector == self.plugin.username_selector
-        self.plugin.fill_login_form(sb, "user", "secret", auto_submit=False)
-        sb.type.assert_called_once_with(self.plugin.username_selector, "user")
-        sb.click.assert_not_called()
-        with self.assertRaises(InteractionRequiredError):
-            self.plugin.fill_login_form(sb, "user", "secret", auto_submit=True)
+    def test_interactive_login_uses_users_chrome_then_reads_rewards_visibly(self):
+        """DataDome rejects WebDriver at sign-in and headless Chrome afterwards."""
+        sb = self._browser(REWARDS_HTML)
+        with self._sb(sb) as sb_factory,              patch("plugins.browser_plugin.launch_native_chrome") as launch,              patch("plugins.browser_plugin.wait_for_chrome_exit"),              patch("plugins.browser_plugin.clear_profile_session") as clear:
+            result = self.plugin.interactive_login("username", "password", profile_dir="profile")
+        clear.assert_called_once_with("profile", "avis_cookies.json")
+        launch.assert_called_once_with("profile", "https://www.avis.com/en/avis-preferred/login")
+        self.assertFalse(sb_factory.call_args.kwargs["headless"])
+        self.assertEqual(result["balance"], 1688)
+        sb.type.assert_not_called()
+        self.assertEqual(self.plugin.interactive_login_instructions["mode"], "manual")
+        self.assertIn("Remember me", self.plugin.interactive_login_instructions["special_note"])
 
-    def test_home_page_after_mfa_is_signed_in_but_not_rewards(self):
-        self.assertTrue(self.plugin.is_signed_in_elsewhere(HOME_SIGNED_IN_HTML))
-        self.assertFalse(self.plugin.is_signed_in_elsewhere(HOME_SIGNED_OUT_HTML))
-        self.assertFalse(self.plugin.is_logged_in(self._browser(HOME_SIGNED_IN_HTML)))
+    def test_interactive_login_reports_block_after_chrome_closes(self):
+        sb = self._browser(REWARDS_SHELL_BLOCKED_HTML)
+        with self._sb(sb),              patch("plugins.browser_plugin.launch_native_chrome"),              patch("plugins.browser_plugin.wait_for_chrome_exit"),              patch("plugins.browser_plugin.clear_profile_session"):
+            with self.assertRaises(PluginError) as caught:
+                self.plugin.interactive_login("username", "password", profile_dir="profile")
+        self.assertIn("temporarily restricted", str(caught.exception))
 
-    def test_interactive_wait_opens_rewards_after_landing_on_home(self):
-        sb = self._browser(HOME_SIGNED_IN_HTML)
-        sb.get_current_url.return_value = "https://www.avis.com/en/home"
+    def test_interactive_login_reports_session_lost_after_chrome_closes(self):
+        sb = self._browser('<span>Sign in or Join</span>')
+        with self._sb(sb),              patch("plugins.browser_plugin.launch_native_chrome"),              patch("plugins.browser_plugin.wait_for_chrome_exit"),              patch("plugins.browser_plugin.clear_profile_session"):
+            with self.assertRaises(PluginError) as caught:
+                self.plugin.interactive_login("username", "password", profile_dir="profile")
+        self.assertIn("did not keep the signed-in session", str(caught.exception))
+        self.assertNotIn("try Interactive Login again", str(caught.exception))
 
-        def navigate(url):
-            sb.get_current_url.return_value = url
-            sb.get_page_source.return_value = HOME_SIGNED_IN_HTML + REWARDS_HTML
-        sb.open.side_effect = navigate
-        self.plugin.interactive_poll_seconds = 0
-        self.plugin.wait_for_user_login(sb)
-        sb.open.assert_called_once_with(self.plugin.login_url)
-        self.assertEqual(self.plugin.scrape(sb)["balance"], 1688)
+    @staticmethod
+    def _sb(sb):
+        """Patch SB for both the Avis fetch and the shared native flow."""
+        from contextlib import ExitStack, contextmanager
 
-    def test_interactive_wait_leaves_login_pages_alone(self):
-        sb = self._browser(HOME_SIGNED_OUT_HTML)
-        sb.get_current_url.return_value = "https://www.avis.com/en/avis-preferred/login"
-        self.plugin.interactive_poll_seconds = 0
-        self.plugin.interactive_timeout_seconds = 0.05
-        with self.assertRaises(PluginError):
-            self.plugin.wait_for_user_login(sb)
-        sb.open.assert_not_called()
+        @contextmanager
+        def patched():
+            context = MagicMock()
+            context.__enter__.return_value = sb
+            factory = MagicMock(return_value=context)
+            with ExitStack() as stack:
+                stack.enter_context(patch("plugins.avis.SB", factory))
+                stack.enter_context(patch("plugins.browser_plugin.SB", factory))
+                stack.enter_context(patch("plugins.browser_plugin.get_consistent_user_agent",
+                                          return_value="pinned-ua"))
+                yield factory
+        return patched()
 
     @staticmethod
     def _browser(html):

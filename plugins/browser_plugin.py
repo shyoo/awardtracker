@@ -138,6 +138,13 @@ class BrowserPlugin(ProviderPlugin):
         """Runs before the user's Chrome is launched (e.g. clear stale cookies)."""
         clear_profile_session(profile_dir, self.cookie_jar_name if self.use_cookie_jar else None)
 
+    def native_session_missing_message(self) -> str:
+        """Explain a native login that cannot be read after Chrome closes."""
+        return (
+            f"Chrome was closed, but {self.name} does not show a signed-in account page. "
+            "Please try Interactive Login again and finish signing in before closing the window."
+        )
+
     # ------------------------------------------------------------------ #
     # Shared machinery
     # ------------------------------------------------------------------ #
@@ -273,10 +280,7 @@ class BrowserPlugin(ProviderPlugin):
             with SB(**self.sb_kwargs(profile_dir, headless=True)) as sb:
                 self.open_login(sb)
                 if not self.is_logged_in(sb):
-                    raise PluginError(
-                        f"Chrome was closed, but {self.name} does not show a signed-in account page. "
-                        "Please try Interactive Login again and finish signing in before closing the window."
-                    )
+                    raise PluginError(self.native_session_missing_message())
                 result = self.scrape(sb)
                 return self.finish(sb, profile_dir, result)
         except (PluginError, InteractionRequiredError):

@@ -3057,6 +3057,55 @@ class TestAPIsAndPlugins(unittest.TestCase):
         finally:
             debug_logger.clear_run_context()
 
+    def test_failed_run_captures_final_page_before_teardown(self):
+        """A plugin error raised after the page loaded still saves that page."""
+        import debug_logger
+        from seleniumbase import BaseCase
+        from unittest.mock import MagicMock, patch
+        from plugins import browser
+
+        self.assertTrue(getattr(BaseCase.tearDown, '_is_awardtracker_patched', False))
+        sb = MagicMock()
+        debug_logger._log_context.account_id = 7
+        debug_logger._log_context.run_dir = "dummy_dir"
+        debug_logger._log_context.failure_snapshot_saved = False
+        try:
+            with patch('debug_logger.is_debug_mode', return_value=True),                  patch('debug_logger.log_action'),                  patch('debug_logger.save_snapshot') as save_snapshot:
+                sb._has_failure = False
+                browser.snapshot_failed_run(sb)
+                save_snapshot.assert_not_called()
+
+                sb._has_failure = True
+                browser.snapshot_failed_run(sb)
+                browser.snapshot_failed_run(sb)  # captured once per failure
+                save_snapshot.assert_called_once_with(sb, "error_final")
+
+                # A cancelled run's browser is being killed; leave it alone.
+                save_snapshot.reset_mock()
+                debug_logger._log_context.failure_snapshot_saved = False
+                browser.mark_cancelled(7)
+                try:
+                    browser.snapshot_failed_run(sb)
+                finally:
+                    browser.clear_cancelled(7)
+                save_snapshot.assert_not_called()
+        finally:
+            debug_logger.clear_run_context()
+
+    def test_failure_snapshot_skipped_when_last_call_already_captured_error(self):
+        import debug_logger
+        from unittest.mock import MagicMock, patch
+
+        debug_logger._log_context.run_dir = "dummy_dir"
+        debug_logger._log_context.failure_snapshot_saved = True
+        try:
+            with patch('debug_logger.is_debug_mode', return_value=True), \
+                 patch('debug_logger.save_snapshot') as save_snapshot:
+                debug_logger.save_failure_snapshot(MagicMock())
+            save_snapshot.assert_not_called()
+        finally:
+            debug_logger.clear_run_context()
+
     def test_export_logs_zip_filtering(self):
         import zipfile
         import io

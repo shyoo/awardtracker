@@ -37,6 +37,24 @@ procedure whenever a provider requires credentials.
    text for raw captures, personal details, credentials, codes, local paths,
    and temporary research notes.
 
-Avis sync reads only the signed-in Rewards dashboard. Its interactive window
-lets the user advance the staged login and enter any verification code. The
-plugin does not click sign-in, send a code, or retry a failed challenge.
+Avis sync reads only the signed-in Rewards dashboard. Avis's session check is
+behind DataDome, which hard-blocks WebDriver ("Access is temporarily
+restricted") and does not render its slider challenge in an automated window,
+so Interactive Login opens the user's own Chrome, where they can select
+"Remember me", sign in and enter the code. A live test showed that Avis may
+still reject the session after Chrome closes: the signed-in tab's session
+storage entries were deleted on a clean Chrome exit, and a fresh Rewards tab
+received HTTP 401 from `/ido/api/v2/auth/assert`. The cookie database had no
+session cookies after exit. Which lost item Avis requires is not yet proven.
+In a later controlled test, the signed-in tab's 18 session-storage entries
+were recovered from Chrome's log in a private copy of the profile. Chrome
+reopened the Rewards tab and retained the recovered auth-context entries while
+open, but the page still appeared signed out or kept spinning. Restoring those
+entries alone therefore did not establish a reusable Avis session. Chrome
+deleted them again on clean exit. Do not treat session-storage restoration as
+an established fix without a fresh, supervised test that verifies the active
+tab uses the restored namespace and the auth check succeeds.
+The plugin never types, clicks sign-in, sends a code, or retries a challenge.
+Never replay DataDome's
+`datadome` cookie from a saved jar: DataDome rotates it, and a stale copy gets
+the profile banned.
