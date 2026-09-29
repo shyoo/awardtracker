@@ -110,10 +110,13 @@ class AvisTests(unittest.TestCase):
     def test_interactive_login_uses_users_chrome_then_reads_rewards_visibly(self):
         """DataDome rejects WebDriver at sign-in and headless Chrome afterwards."""
         sb = self._browser(REWARDS_HTML)
-        with self._sb(sb) as sb_factory,              patch("plugins.browser_plugin.launch_native_chrome") as launch,              patch("plugins.browser_plugin.wait_for_chrome_exit"),              patch("plugins.browser_plugin.clear_profile_session") as clear:
+        with self._sb(sb) as sb_factory,              patch("plugins.browser_plugin.launch_native_chrome") as launch,              patch("plugins.browser_plugin.wait_for_chrome_exit"),              patch("plugins.browser_plugin.clear_profile_session") as clear, \
+             patch("plugins.browser_plugin.save_cookies_to_json"):
             result = self.plugin.interactive_login("username", "password", profile_dir="profile")
         clear.assert_called_once_with("profile", "avis_cookies.json")
-        launch.assert_called_once_with("profile", "https://www.avis.com/en/avis-preferred/login")
+        launch.assert_called_once_with("profile", "https://www.avis.com/en/avis-preferred/login",
+                                       ["--restore-last-session"])
+        self.assertEqual(sb_factory.call_args.kwargs["chromium_arg"], "--restore-last-session")
         self.assertFalse(sb_factory.call_args.kwargs["headless"])
         self.assertEqual(result["balance"], 1688)
         sb.type.assert_not_called()

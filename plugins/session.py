@@ -245,7 +245,16 @@ def raise_if_window_closed(e: Exception) -> None:
         raise PluginError("Browser window closed by user.")
 
 
-def launch_native_chrome(profile_dir: str, url: str) -> None:
+#: Chrome's own "restore last session" switch. Without it Chrome drops session
+#: cookies at startup and gives every tab fresh sessionStorage, even when the
+#: profile's "Continue where you left off" preference is set (Chrome does not
+#: honour that preference when it is written from outside the browser). With it
+#: on every launch, the previous tab comes back with its sessionStorage and the
+#: session cookies are restored.
+RESTORE_LAST_SESSION_ARG = "--restore-last-session"
+
+
+def launch_native_chrome(profile_dir: str, url: str, extra_args: Iterable[str] = ()) -> None:
     """Open the user's real Chrome (no automation flags, no debug port) on the
     profile and block until they close it. Anti-bot systems that flag WebDriver
     sessions accept this because it is a normal browser."""
@@ -258,6 +267,7 @@ def launch_native_chrome(profile_dir: str, url: str) -> None:
         url,
         "--no-first-run",
         "--no-default-browser-check",
+        *extra_args,
     ]
     try:
         subprocess.run(cmd, check=True)

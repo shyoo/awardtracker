@@ -26,13 +26,14 @@ from __future__ import annotations
 import time
 from abc import abstractmethod
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 from seleniumbase import SB  # noqa: F401  (single patch seam for tests: plugins.browser_plugin.SB)
 
 from .base import InteractionRequiredError, PluginError, ProviderPlugin, get_sb_kwargs, wait_for_chrome_exit
 from .context import current_run_context
-from .session import (ResultCache, clear_profile_session, get_consistent_user_agent, launch_native_chrome,
-                      load_cookies_from_json, raise_if_window_closed, save_cookies_to_json)
+from .session import (RESTORE_LAST_SESSION_ARG, ResultCache, clear_profile_session, get_consistent_user_agent,
+                      launch_native_chrome, load_cookies_from_json, raise_if_window_closed, save_cookies_to_json)
 
 
 def log(message: str, level: str = "INFO") -> None:
@@ -81,6 +82,10 @@ class BrowserPlugin(ProviderPlugin):
     interactive_mode: str = "assisted"
     #: URL opened in native mode; defaults to ``login_url``.
     native_login_url: Optional[str] = None
+    #: Launch every Chrome on the profile (native login and syncs) as a session
+    #: restore, so session cookies and the signed-in tab's sessionStorage survive
+    #: Chrome closing. The sync then reads the site in that restored tab.
+    restore_browser_session: bool = False
 
     # ------------------------------------------------------------------ #
     # Hooks -- override as needed
@@ -90,6 +95,8 @@ class BrowserPlugin(ProviderPlugin):
         kwargs = dict(uc=True, user_data_dir=profile_dir, headless=self.headless if headless is None else headless)
         if self.lock_user_agent:
             kwargs["agent"] = get_consistent_user_agent()
+        if self.restore_browser_session:
+            kwargs["chromium_arg"] = RESTORE_LAST_SESSION_ARG
         return get_sb_kwargs(**kwargs)
 
     def open_url(self, sb, url: str, settle: Optional[float] = None) -> None:
@@ -152,7 +159,24 @@ class BrowserPlugin(ProviderPlugin):
     def cache(self, profile_dir: Optional[str]) -> ResultCache:
         return ResultCache(profile_dir, self.cache_name)
 
+    def select_restored_tab(self, sb) -> None:
+        """Switch to the restored tab already on the site: sessionStorage belongs to
+        that tab, so navigating any other tab would start without it."""
+        host = urlparse(self.login_url).netloc
+        try:
+            if urlparse(sb.get_current_url()).netloc == host:
+                return
+            for handle in sb.driver.window_handles:
+                sb.driver.switch_to.window(handle)
+                if urlparse(sb.get_current_url()).netloc == host:
+                    log(f"Using the restored {self.name} tab.")
+                    return
+        except Exception as e:
+            log(f"Could not inspect restored tabs: {e}", level="WARNING")
+
     def restore_session(self, sb, profile_dir: Optional[str]) -> None:
+        if self.restore_browser_session:
+            self.select_restored_tab(sb)
         if self.use_cookie_jar and profile_dir:
             n = load_cookies_from_json(sb, profile_dir, self.cookie_jar_name, self.cookie_jar_robots_domains)
             if n:
@@ -273,11 +297,14 @@ class BrowserPlugin(ProviderPlugin):
             wait_for_chrome_exit(profile_dir)
             self.before_native_login(profile_dir)
             log(f"Launching native Chrome for {self.name} login...")
-            launch_native_chrome(profile_dir, self.native_login_url or self.login_url)
+            launch_native_chrome(profile_dir, self.native_login_url or self.login_url,
+                                 [RESTORE_LAST_SESSION_ARG] if self.restore_browser_session else [])
             wait_for_chrome_exit(profile_dir)
 
             log("Chrome closed by user. Reading the account page in the background...")
             with SB(**self.sb_kwargs(profile_dir, headless=True)) as sb:
+                if self.restore_browser_session:
+                    self.select_restored_tab(sb)
                 self.open_login(sb)
                 if not self.is_logged_in(sb):
                     raise PluginError(self.native_session_missing_message())

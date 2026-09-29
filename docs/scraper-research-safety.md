@@ -54,6 +54,17 @@ entries alone therefore did not establish a reusable Avis session. Chrome
 deleted them again on clean exit. Do not treat session-storage restoration as
 an established fix without a fresh, supervised test that verifies the active
 tab uses the restored namespace and the auth check succeeds.
+A later local-only experiment (a localhost page, no Avis traffic) showed why
+both earlier observations happen. Chrome ignores the profile's "Continue where
+you left off" preference when it is written from outside the browser, so a
+clean close drops session cookies and a new tab starts with empty
+sessionStorage. The restoration test put back sessionStorage but not the
+session cookies. When both the native sign-in and the automated launch pass
+Chrome's `--restore-last-session` switch, the session cookie comes back and
+the automated window starts in the restored tab with its sessionStorage, across
+repeated launches. Avis therefore sets `restore_browser_session`. Whether
+Avis's server keeps the session alive between hourly or daily syncs still
+needs a supervised live test.
 The plugin never types, clicks sign-in, sends a code, or retries a challenge.
 Never replay DataDome's
 `datadome` cookie from a saved jar: DataDome rotates it, and a stale copy gets
