@@ -109,7 +109,13 @@ class AvisTests(unittest.TestCase):
         with self._sb(sb):
             with self.assertRaises(InteractionRequiredError):
                 self.plugin.fetch_data("username", "password")
-        sb.uc_open_with_reconnect.assert_called_once_with(self.plugin.login_url, 4)
+        # Navigates the restored tab in place: SeleniumBase's reconnect-open
+        # would close that tab (and with it Chrome, if it is the last one).
+        sb.uc_open_with_reconnect.assert_not_called()
+        sb.driver.close.assert_not_called()
+        sb.execute_script.assert_called_once()
+        self.assertIn(self.plugin.login_url, sb.execute_script.call_args.args[0])
+        sb.driver.reconnect.assert_called_once_with(4)
         sb.type.assert_not_called()
         sb.click.assert_not_called()
 
