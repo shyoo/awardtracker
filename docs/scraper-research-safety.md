@@ -62,9 +62,16 @@ sessionStorage. The restoration test put back sessionStorage but not the
 session cookies. When both the native sign-in and the automated launch pass
 Chrome's `--restore-last-session` switch, the session cookie comes back and
 the automated window starts in the restored tab with its sessionStorage, across
-repeated launches. Avis therefore sets `restore_browser_session`. Whether
-Avis's server keeps the session alive between hourly or daily syncs still
-needs a supervised live test.
+repeated launches. Avis therefore sets `restore_browser_session`.
+A supervised live test confirmed it. After a native sign-in with MFA and a
+clean close, plain Chrome restored the Rewards tab still signed in, and the
+automated sync then read signed-in Rewards in that restored tab without a
+DataDome block. Avis's sign-in lives in Transmit Security state (session
+cookies such as `SESSION_ID`, plus `__idcontext*` sessionStorage entries), not
+in a single auth cookie. A sign-in abandoned at the code step leaves a
+signed-out session that the sync reports as needing Interactive Login. A
+membership that earns airline partner miles shows the partner program and no
+points gauge; it is recorded as 0 Avis points.
 The plugin never types, clicks sign-in, sends a code, or retries a challenge.
 Never replay DataDome's
 `datadome` cookie from a saved jar: DataDome rotates it, and a stale copy gets

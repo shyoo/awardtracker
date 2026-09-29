@@ -21,10 +21,19 @@ procedure and detailed findings.
 - Earlier work (on main): final error page capture, `datadome` never restored
   from the jar, DataDome block reported as such, native Chrome sign-in.
 
+- Live test 2026-09-28 (owner signed in with MFA, closed Chrome): plain Chrome
+  restored Rewards still signed in; the automated sync then read signed-in
+  Rewards in the restored tab, no DataDome block. An earlier attempt that
+  was closed before the code was entered stayed signed out, as expected.
+- The owner's membership earns United MileagePlus miles, so Rewards shows no
+  points gauge. The parser now records 0 Avis points with the partner in
+  the status (owner's choice).
+
 ## Next step
 
-One supervised live test, with the owner's direction: owner runs the native
-sign-in from this branch (including MFA) and closes Chrome; immediately run a
-background sync; run another sync about an hour later to learn whether Avis's
-server expires the session between scheduled syncs. Stop at any security
-challenge and ask the owner. Keep credentials, tokens and captures out of Git.
+A sync one hour after the successful one was scheduled to test whether
+Avis's server expires an idle session between hourly syncs. If it does,
+consider a shorter Avis keep-alive or report the limit in the UI. The full
+in-app Interactive Login (native sign-in followed by the automatic read) has
+not been repeated live since the fix; confirm it once the branch is in the
+installed app.
