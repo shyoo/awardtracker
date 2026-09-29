@@ -136,6 +136,14 @@ class AvisPlugin(BrowserPlugin):
         welcome = soup.select_one('[data-testid="rewards-loyalty-tier-welcome-alert-description"]')
         if welcome and "successfully enrolled in Avis Preferred" in welcome.get_text(" ", strip=True):
             return 0, status, member_id
+        # A membership that earns an airline or hotel partner's miles instead
+        # of Avis points shows the partner program and no gauge.
+        partner = soup.select_one('[data-testid="manage-rewards_membership-details-partner-airline"]')
+        partner_name = partner.get_text(" ", strip=True) if partner else ""
+        if partner_name:
+            if partner_name.isupper():
+                partner_name = partner_name.title()
+            return 0, f"{status} (earns {partner_name})", member_id
         return None
 
     def is_logged_in(self, sb) -> bool:
