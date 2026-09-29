@@ -23,6 +23,7 @@ Three site archetypes are covered by attributes rather than subclasses:
 """
 from __future__ import annotations
 
+import json
 import time
 from abc import abstractmethod
 from typing import Any, Dict, Optional
@@ -100,11 +101,33 @@ class BrowserPlugin(ProviderPlugin):
         return get_sb_kwargs(**kwargs)
 
     def open_url(self, sb, url: str, settle: Optional[float] = None) -> None:
-        if self.uc_reconnect_tries:
+        if self.uc_reconnect_tries and self.restore_browser_session:
+            self._open_in_same_tab_disconnected(sb, url)
+        elif self.uc_reconnect_tries:
             sb.uc_open_with_reconnect(url, self.uc_reconnect_tries)
         else:
             sb.open(url)
         sb.sleep(self.page_settle_seconds if settle is None else settle)
+
+    def _open_in_same_tab_disconnected(self, sb, url: str) -> None:
+        """Like ``uc_open_with_reconnect``, but without its tab swap.
+
+        SeleniumBase opens the URL in a new tab and closes the current one. On a
+        restored session the current tab holds the site's sessionStorage, and if
+        the new tab does not take over, closing the last tab exits Chrome
+        ("invalid session id"). Instead navigate this tab once the driver has
+        disconnected, then reattach to it.
+        """
+        handle = sb.driver.current_window_handle
+        log(f"Opening {url} in the restored tab with the driver disconnected.")
+        # Deferred so the page loads after chromedriver has gone.
+        sb.execute_script(f"setTimeout(function () {{ window.location.href = {json.dumps(url)}; }}, 300);")
+        sb.driver.reconnect(self.uc_reconnect_tries)
+        try:
+            sb.driver.switch_to.window(handle)
+        except Exception as e:
+            raise_if_window_closed(e)
+            raise
 
     def open_login(self, sb) -> None:
         """Land on the page where the login form (or the signed-in dashboard) lives."""
