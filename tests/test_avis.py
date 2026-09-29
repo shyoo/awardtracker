@@ -27,6 +27,25 @@ NEW_MEMBER_HTML = """
 </div>
 """
 
+# Sanitized current layout for a membership that earns partner miles instead
+# of Avis points: no gauge, no welcome alert.
+PARTNER_MILES_HTML = """
+<div data-testid="loyalty-card">
+  <span data-testid="loyalty-tier-label">PREFERRED</span>
+  <span data-testid="wizard-number">A1234B</span>
+</div>
+<div data-testid="manage-rewards_page">
+  <div data-testid="manage-rewards_membership-details">
+    <span data-testid="manage-rewards_membership-details-partner-label">Partner Rewards Program</span>
+    <div>
+      <span data-testid="manage-rewards_membership-details-partner-airline">UNITED MILEAGEPLUS</span>
+      <span data-testid="manage-rewards_membership-details-partner-member-number">XYZ00000</span>
+    </div>
+  </div>
+</div>
+<p data-testid="user-profile-info-pointsLabel"></p>
+"""
+
 # Sanitized Rewards shell with DataDome's hard-block overlay (t=bv).
 REWARDS_SHELL_BLOCKED_HTML = """
 <span data-testid="wizard-number-title">WIZARD NUMBER</span>
@@ -62,6 +81,12 @@ class AvisTests(unittest.TestCase):
     def test_newly_enrolled_rewards_page_has_zero_avis_points(self):
         self.assertEqual(self.plugin.parse_rewards(NEW_MEMBER_HTML), (0, "Preferred", "123456"))
         self.assertTrue(self.plugin.is_logged_in(self._browser(NEW_MEMBER_HTML)))
+
+    def test_membership_earning_partner_miles_has_zero_avis_points(self):
+        self.assertEqual(self.plugin.parse_rewards(PARTNER_MILES_HTML),
+                         (0, "Preferred (earns United Mileageplus)", "A1234B"))
+        no_partner = PARTNER_MILES_HTML.replace("UNITED MILEAGEPLUS", "")
+        self.assertIsNone(self.plugin.parse_rewards(no_partner))
 
     def test_current_membership_card_with_points_gauge(self):
         html = NEW_MEMBER_HTML + '<h5 data-testid="gauge-points-value">2,500</h5>'
@@ -110,10 +135,13 @@ class AvisTests(unittest.TestCase):
     def test_interactive_login_uses_users_chrome_then_reads_rewards_visibly(self):
         """DataDome rejects WebDriver at sign-in and headless Chrome afterwards."""
         sb = self._browser(REWARDS_HTML)
-        with self._sb(sb) as sb_factory,              patch("plugins.browser_plugin.launch_native_chrome") as launch,              patch("plugins.browser_plugin.wait_for_chrome_exit"),              patch("plugins.browser_plugin.clear_profile_session") as clear:
+        with self._sb(sb) as sb_factory,              patch("plugins.browser_plugin.launch_native_chrome") as launch,              patch("plugins.browser_plugin.wait_for_chrome_exit"),              patch("plugins.browser_plugin.clear_profile_session") as clear, \
+             patch("plugins.browser_plugin.save_cookies_to_json"):
             result = self.plugin.interactive_login("username", "password", profile_dir="profile")
         clear.assert_called_once_with("profile", "avis_cookies.json")
-        launch.assert_called_once_with("profile", "https://www.avis.com/en/avis-preferred/login")
+        launch.assert_called_once_with("profile", "https://www.avis.com/en/avis-preferred/login",
+                                       ["--restore-last-session"])
+        self.assertEqual(sb_factory.call_args.kwargs["chromium_arg"], "--restore-last-session")
         self.assertFalse(sb_factory.call_args.kwargs["headless"])
         self.assertEqual(result["balance"], 1688)
         sb.type.assert_not_called()

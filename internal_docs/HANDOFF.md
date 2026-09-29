@@ -1,36 +1,39 @@
 # Avis sync handoff
 
-Updated 2026-09-26. See `docs/scraper-research-safety.md` for the Avis research
-procedure and detailed findings. The Avis code and research changes are on the
-task branch.
+Updated 2026-09-28. See `docs/scraper-research-safety.md` for the Avis research
+procedure and detailed findings.
 
 ## Current result
 
-- Avis regular sync still fails after native Chrome closes. A fresh Rewards
-  load previously returned HTTP 401 from `/ido/api/v2/auth/assert`; the cause
-  of that response is not proven.
-- In a controlled test, 18 deleted session-storage entries from a signed-in
-  Rewards tab were restored into a private copy of the Avis Chrome profile.
-  The owner saw Rewards signed out or spinning. Chrome kept the recovered
-  auth-context entries while open and deleted them again on clean exit.
-  Restoration alone is **not** an established fix. The test did not verify
-  whether the active tab used the restored storage namespace or record that
-  test run's `/ido/api/v2/auth/assert` status.
-- The original Avis profile was not modified by the restoration test. No new
-  sign-in or MFA occurred during it. The owner reports deleting the private
-  test copy.
-- The task branch contains final error page capture (HTML and PNG when debug
-  logging is enabled), DataDome cookie handling, native Chrome sign-in flow,
-  session-loss guidance, and the research findings.
+- Cause found (locally, not yet on Avis): Chrome ignores the profile's
+  "Continue where you left off" preference written by
+  `configure_session_restore`, so a clean close drops session cookies and a
+  new tab gets empty sessionStorage. The earlier restoration test put back
+  sessionStorage but never the session cookies.
+- Fix built: `BrowserPlugin.restore_browser_session` (on for Avis only) passes
+  Chrome's `--restore-last-session` to the native sign-in launch and to every
+  SeleniumBase launch, and the sync switches to the restored site tab before
+  navigating (`select_restored_tab`).
+- Verified against a localhost site (session cookie + sessionStorage sign-in):
+  the real native Interactive Login flow followed by two chained background
+  syncs all stay signed in; with the flag off the same run fails with the
+  Avis symptom. Probe scripts live in ignored `scratch/`.
+- Earlier work (on main): final error page capture, `datadome` never restored
+  from the jar, DataDome block reported as such, native Chrome sign-in.
+
+- Live test 2026-09-28 (owner signed in with MFA, closed Chrome): plain Chrome
+  restored Rewards still signed in; the automated sync then read signed-in
+  Rewards in the restored tab, no DataDome block. An earlier attempt that
+  was closed before the code was entered stayed signed out, as expected.
+- The owner's membership earns United MileagePlus miles, so Rewards shows no
+  points gauge. The parser now records 0 Avis points with the partner in
+  the status (owner's choice).
 
 ## Next step
 
-Do not implement session-storage restoration from this result. Before another
-live attempt, review `AGENTS.md` and the credentialed browser procedure in
-`docs/scraper-research-safety.md`. A further sign-in needs the owner's explicit
-direction. For that supervised test, keep one browser session open after the
-owner completes any MFA, confirm the signed-in Rewards state, and determine
-which session-storage namespace the active tab uses. On the subsequent fresh
-Rewards load, record the `/ido/api/v2/auth/assert` status and final page
-capture. Stop at any security challenge and ask the owner before proceeding.
-Keep credentials, tokens, and browser captures out of Git.
+A sync one hour after the successful one was scheduled to test whether
+Avis's server expires an idle session between hourly syncs. If it does,
+consider a shorter Avis keep-alive or report the limit in the UI. The full
+in-app Interactive Login (native sign-in followed by the automatic read) has
+not been repeated live since the fix; confirm it once the branch is in the
+installed app.

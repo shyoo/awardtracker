@@ -96,6 +96,7 @@ Attributes select the archetype instead of re-implementing flows:
 | Anti-bot rejects WebDriver on login (Akamai, hCaptcha) | `interactive_mode = "native"` -- the user's own Chrome is launched on the profile, then a headless session reads the page |
 | Auth0-style checks tie the session to the UA | `lock_user_agent = True` |
 | Session cookies must survive between SB launches | `use_cookie_jar = True`, `cookie_jar_name = "<id>_cookies.json"` |
+| Native sign-in lives in session cookies / the tab's sessionStorage, lost when Chrome closes | `restore_browser_session = True` -- every launch passes `--restore-last-session` and the sync reads the restored tab |
 | Site is flaky; scheduled syncs should not flap | `cache_max_age_seconds = 900` (`cache_fallback_on_manual = True` to also serve Sync Now) |
 
 Read `plugins.context.current_run_context()` when behaviour must depend on

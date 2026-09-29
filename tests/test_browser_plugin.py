@@ -171,10 +171,27 @@ class TestBrowserPluginFlows(unittest.TestCase):
              patch('plugins.browser_plugin.wait_for_chrome_exit') as wait_exit:
             result = plugin.interactive_login("u", "p", profile_dir=profile_dir)
         self.assertEqual(result["balance"], 4242)
-        launch.assert_called_once_with(profile_dir, "https://example.com/login")
+        launch.assert_called_once_with(profile_dir, "https://example.com/login", [])
+        self.assertNotIn("chromium_arg", sb_factory.call_args.kwargs)
         self.assertEqual(wait_exit.call_count, 2)
         self.assertTrue(sb_factory.call_args.kwargs["headless"])
         self.assertNotIn(("fill", "u", "p", False), plugin.calls)
+
+    def test_restored_session_syncs_in_the_sites_restored_tab(self):
+        """sessionStorage belongs to the restored tab, so the sync must navigate that tab."""
+        plugin = FakeSite()
+        plugin.restore_browser_session = True
+        sb, ctx = _browser(logged_in=True)
+        urls = {"blank": "chrome://new-tab-page/", "site": "https://example.com/account"}
+        current = ["blank"]
+        sb.driver.window_handles = ["blank", "site"]
+        sb.driver.switch_to.window.side_effect = lambda handle: current.__setitem__(0, handle)
+        sb.get_current_url.side_effect = lambda: urls[current[0]]
+        sb_factory = MagicMock(return_value=ctx)
+        with patch('plugins.browser_plugin.SB', sb_factory):
+            plugin.fetch_data("u", "p")
+        self.assertEqual(current[0], "site")
+        self.assertEqual(sb_factory.call_args.kwargs["chromium_arg"], "--restore-last-session")
 
     def test_native_mode_needs_signed_in_page_after_chrome_closes(self):
         plugin = FakeSite()

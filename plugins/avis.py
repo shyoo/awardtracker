@@ -4,8 +4,11 @@ Avis fronts its session check with DataDome, which hard-blocks WebDriver
 sessions and will not render its slider challenge in one, so sign-in happens
 in the user's own Chrome (``interactive_mode = "native"``). Background sync
 only reads that saved session; it must never submit credentials or trigger
-another code. Avis may reject that session after Chrome closes even when the
-user selected "Remember me".
+another code. The sign-in lives partly in session cookies and the Rewards
+tab's sessionStorage, which Chrome discards on close, so every Chrome on the
+profile is started as a session restore (``restore_browser_session``) and the
+sync reads Rewards in the restored tab. Avis's server may still expire the
+session between syncs.
 """
 import re
 from typing import Any, Dict, Optional, Tuple
@@ -30,6 +33,9 @@ class AvisPlugin(BrowserPlugin):
     lock_user_agent = True
     use_cookie_jar = True
     cookie_jar_name = "avis_cookies.json"
+    # The sign-in lives in session cookies and the Rewards tab's sessionStorage,
+    # both of which Chrome discards on close unless it restores the session.
+    restore_browser_session = True
     # Load pages with the driver disconnected so DataDome does not see it.
     uc_reconnect_tries = 4
 
@@ -130,6 +136,14 @@ class AvisPlugin(BrowserPlugin):
         welcome = soup.select_one('[data-testid="rewards-loyalty-tier-welcome-alert-description"]')
         if welcome and "successfully enrolled in Avis Preferred" in welcome.get_text(" ", strip=True):
             return 0, status, member_id
+        # A membership that earns an airline or hotel partner's miles instead
+        # of Avis points shows the partner program and no gauge.
+        partner = soup.select_one('[data-testid="manage-rewards_membership-details-partner-airline"]')
+        partner_name = partner.get_text(" ", strip=True) if partner else ""
+        if partner_name:
+            if partner_name.isupper():
+                partner_name = partner_name.title()
+            return 0, f"{status} (earns {partner_name})", member_id
         return None
 
     def is_logged_in(self, sb) -> bool:
