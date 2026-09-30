@@ -1,12 +1,12 @@
 import os
-import json
 import re
-import time
 from datetime import datetime
 from typing import Dict, Any, Tuple, Optional
 
 from seleniumbase import SB
 from .base import ProviderPlugin, PluginError, InteractionRequiredError, get_sb_kwargs
+from .session import load_cookies_from_json, save_cookies_to_json, clear_profile_session
+
 
 class WorldofHyattPlugin(ProviderPlugin):
     @property
@@ -36,6 +36,20 @@ class WorldofHyattPlugin(ProviderPlugin):
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Points expire after 24 months of inactivity. Any earning or redemption transaction extends them."
 
+    def extract_membership_id(self, sb) -> Optional[str]:
+        """Extracts the Hyatt membership number from the account page."""
+        for selector in ['[data-locator="member-number"]', '[data-locator="membership-number"]', '[data-locator="memberId"]']:
+            if sb.is_element_visible(selector):
+                try:
+                    text = sb.get_text(selector).strip()
+                    clean = re.sub(r'^(?:member\s*(?:#|number|no\.?)?|#)\s*', '', text, flags=re.IGNORECASE).strip()
+                    clean = re.sub(r'[^0-9A-Za-z]', '', clean)
+                    if clean and not clean.startswith("***"):
+                        return clean
+                except Exception:
+                    pass
+        return None
+
     def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str]]:
         """Extracts points balance and status from the Hyatt dashboard."""
         balance, status = None, None
@@ -52,13 +66,25 @@ class WorldofHyattPlugin(ProviderPlugin):
                     balance = int(clean_points)
             except Exception:
                 pass
+
+        if balance is None:
+            for fallback_sel in ['[data-locator="totalPoints"]', '[data-locator="currentPoints"]', '[data-locator="memberPoints"]']:
+                if sb.is_element_visible(fallback_sel):
+                    try:
+                        points_text = sb.get_text(fallback_sel)
+                        clean_points = "".join(filter(str.isdigit, points_text))
+                        if clean_points:
+                            balance = int(clean_points)
+                            break
+                    except Exception:
+                        pass
                 
         if sb.is_element_visible(status_selector):
             try:
                 status_text = sb.get_text(status_selector)
                 # Parse tier from text (e.g. "Member since Nov 2, 2016" or "Explorist through Feb 2027")
                 status = "Member"
-                for tier in ["Globalist", "Explorist", "Discoverist", "Courtesy Card"]:
+                for tier in ["Lifetime Globalist", "Globalist", "Explorist", "Discoverist", "Courtesy Card"]:
                     if tier.lower() in status_text.lower():
                         status = tier
                         break
@@ -67,41 +93,113 @@ class WorldofHyattPlugin(ProviderPlugin):
                 
         return balance, status
 
+    def _check_for_mfa(self, sb) -> bool:
+        """Detects if Hyatt is presenting an MFA or verification challenge."""
+        try:
+            url = sb.get_current_url().lower()
+            if any(k in url for k in ["/mfa", "otp", "verify", "challenge", "security-check"]):
+                return True
+            text = sb.get_text("body").lower()
+            mfa_phrases = [
+                "verification code",
+                "verify your identity",
+                "enter the code",
+                "one-time passcode",
+                "security challenge",
+                "two-step verification",
+                "two-factor",
+            ]
+            if ("sign-in" in url or "challenge" in url or "verify" in url) and any(p in text for p in mfa_phrases):
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _check_for_login_errors(self, sb) -> Optional[str]:
+        """Detects specific error messages on the Hyatt sign-in page."""
+        try:
+            url = sb.get_current_url().lower()
+            # 1. Check for specific error container or messages
+            for selector in [".p-error-container", ".error-message", "span.error-message"]:
+                if sb.is_element_visible(selector):
+                    raw = sb.get_text(selector)
+                    txt = raw.strip() if isinstance(raw, str) else str(raw).strip()
+                    if txt and "required" not in txt.lower():
+                        return txt
+
+            # 2. Check for URL containing /error
+            if "/error" in url:
+                body_text = sb.get_text("body")
+                for line in body_text.splitlines():
+                    line_str = line.strip()
+                    if any(w in line_str.lower() for w in ["does not match", "too many attempts", "locked", "invalid"]):
+                        return line_str
+                return "The information you entered does not match what Hyatt has on file."
+
+            # 3. Check for bot / access denied
+            page_source = sb.get_page_source().lower()
+            if "access denied" in page_source or "you don't have permission to access" in page_source:
+                return "Access denied by Hyatt bot protection. Please try again later or use Interactive Login."
+        except Exception:
+            pass
+        return None
+
     def _fill_login_form(self, sb, username: str, password: str, last_name: str = "", auto_submit: bool = True) -> None:
-        """Fills the Hyatt login form and submits."""
+        """Fills the Hyatt login form and dispatches required events to enable the submit button."""
         user_selector = "input[name='userId']"
         pass_selector = "input[name='password']"
         last_name_selector = "input[name='lastName']"
         submit_selector = "button[type='submit']"
         
-        sb.wait_for_element_visible(user_selector, timeout=10)
+        sb.wait_for_element_visible(user_selector, timeout=15)
         sb.type(user_selector, username)
-        sb.sleep(0.5)
+        sb.sleep(0.3)
         
         if last_name and sb.is_element_visible(last_name_selector):
-            sb.type(last_name_selector, last_name)
-            sb.sleep(0.5)
+            sb.type(last_name_selector, last_name.strip())
+            sb.sleep(0.3)
             
         sb.wait_for_element_visible(pass_selector, timeout=10)
-        if auto_submit:
-            sb.type(pass_selector, password + "\n")
-        else:
-            sb.type(pass_selector, password)
+        sb.type(pass_selector, password)
+        sb.sleep(0.3)
+        
+        # Hyatt's form listener gates on blur/change/keyup events to remove the 'disabled'
+        # attribute from the submit button. sb.type() alone does not trigger these events,
+        # leaving the button disabled and blocking submission.
+        try:
+            sb.execute_script("""(() => {
+                for (const sel of ["input[name='userId']", "input[name='lastName']", "input[name='password']"]) {
+                    const el = document.querySelector(sel);
+                    if (el) {
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                        el.dispatchEvent(new Event('keyup', { bubbles: true }));
+                        el.dispatchEvent(new Event('blur', { bubbles: true }));
+                    }
+                }
+            })()""")
+        except Exception:
+            pass
         sb.sleep(0.5)
         
         if auto_submit:
-            sb.sleep(1)
-            # If the page hasn't navigated yet and the submit button is still there, click it explicitly
-            if "profile" not in sb.get_current_url() and sb.is_element_visible(submit_selector):
+            # Click the enabled submit button
+            try:
+                sb.click(submit_selector)
+            except Exception:
                 try:
-                    sb.click(submit_selector)
+                    sb.execute_script("""(() => {
+                        const btn = document.querySelector("button[type='submit']");
+                        if (btn) btn.click();
+                    })()""")
                 except Exception:
-                    # Fallback click via JS execution
-                    btn = sb.find_element(submit_selector)
-                    sb.execute_script("arguments[0].click();", btn)
+                    pass
 
     def fetch_data(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Dict[str, Any]:
         last_name = kwargs.get('last_name', '')
+        if not last_name or not last_name.strip():
+            raise PluginError("World of Hyatt requires a Last Name. Please edit the account in Award Tracker to set your last name.")
+
         result = {
             "balance": 0,
             "status": "Unknown",
@@ -109,91 +207,42 @@ class WorldofHyattPlugin(ProviderPlugin):
             "certificates": []
         }
         
-        cookie_file = None
-        if profile_dir:
-            try:
-                os.makedirs(profile_dir, exist_ok=True)
-                cookie_file = os.path.join(profile_dir, "cookies.json")
-            except Exception as e:
-                print(f"Error preparing profile directory: {e}")
-                
-        # Try up to 2 attempts: 
-        # Attempt 1: Try with existing saved cookies (if they exist).
-        # Attempt 2: If Attempt 1 fails, we purge the cookies.json file and do a clean-slate login from scratch.
-        attempts = 2 if (cookie_file and os.path.exists(cookie_file)) else 1
+        cookie_file_name = "cookies.json"
+        has_saved_cookies = bool(profile_dir and os.path.exists(os.path.join(profile_dir, cookie_file_name)))
+        attempts = 2 if has_saved_cookies else 1
         
         for attempt in range(attempts):
-            use_cookies = (attempt == 0 and cookie_file and os.path.exists(cookie_file))
-            print(f"Hyatt sync attempt {attempt + 1}/{attempts} (use_cookies={use_cookies})...")
+            use_cookies = (attempt == 0 and has_saved_cookies)
             
             try:
-                # Launch with a 100% clean-slate profile to avoid Akamai/Kasada blocks
-                with SB(**get_sb_kwargs(uc=True, headless=False)) as sb:
-                    # Skip the homepage entirely (homepage is a React SPA where Kasada blocks JS hydration under automation)
-                    # The sign-in page is server-rendered and loads reliably directly.
-
+                with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir)) as sb:
                     if use_cookies:
-                        print("Opening Hyatt sign-in page to inject saved cookies...")
-                        sb.open("https://www.hyatt.com/en-US/member/sign-in/traditional")
-                        sb.sleep(4)
-                        print("Injecting saved cookies...")
-                        try:
-                            with open(cookie_file, "r") as f:
-                                cookies = json.load(f)
-                            for c in cookies:
-                                try:
-                                    sb.add_cookie(c)
-                                except Exception:
-                                    pass
-                        except Exception as cookie_err:
-                            print(f"Failed to inject cookies: {cookie_err}")
-                        
-                        # Navigate to profile overview to check if cookies are still valid
-                        print("Navigating to Hyatt account overview with injected cookies...")
+                        load_cookies_from_json(sb, profile_dir, cookie_file_name, robots_domains=("hyatt",))
                         sb.open("https://www.hyatt.com/profile/account-overview")
                         sb.sleep(6)
                         
-                        # If redirected back to sign-in or login, cookies are expired
-                        current_url = sb.get_current_url()
+                        current_url = sb.get_current_url().lower()
                         if "sign-in" in current_url or "login" in current_url:
-                            print("Saved cookies expired. Triggering clean-slate login...")
                             raise InteractionRequiredError("Saved cookies expired")
 
-                    # Check if we were redirected to the dashboard (e.g. points balance visible)
-                    if not sb.is_element_visible('[data-locator="points-balance"]') and "profile" in sb.get_current_url():
-                        print("Hyatt dashboard detected early redirect. Refreshing session...")
-                        sb.refresh()
-                        sb.sleep(5)
-                    
-                    balance, status = self._extract_data(sb)
-                    if balance is not None:
-                        result["balance"] = balance
-                        if status:
-                            result["status"] = status
-                        
-                        result["last_activity_date"] = self._fetch_last_activity_date(sb)
-                        
-                        # Save fresh cookies
-                        if cookie_file:
-                            try:
-                                with open(cookie_file, "w") as f:
-                                    json.dump(sb.get_cookies(), f)
-                                print("Saved updated cookies after successful session reuse.")
-                            except Exception as save_err:
-                                print(f"Failed to save cookies: {save_err}")
-                                
-                        return result
-                        
-                    if use_cookies:
-                        print("Saved cookies were invalid or session expired. Triggering clean-slate login...")
+                        balance, status = self._extract_data(sb)
+                        if balance is not None:
+                            result["balance"] = balance
+                            if status:
+                                result["status"] = status
+                            mem_id = self.extract_membership_id(sb)
+                            if mem_id:
+                                result["membership_id"] = mem_id
+                            result["last_activity_date"] = self._fetch_last_activity_date(sb)
+                            if profile_dir:
+                                save_cookies_to_json(sb, profile_dir, cookie_file_name)
+                            return result
+
                         raise InteractionRequiredError("Saved cookies expired")
 
                     # Clean-slate traditional login flow
-                    print("Opening Hyatt traditional login page directly...")
                     sb.open("https://www.hyatt.com/en-US/member/sign-in/traditional")
                     
-                    # Wait up to 20 seconds for the login form to render
-                    print("Waiting for Hyatt login form...")
                     user_selector = "input[name='userId']"
                     loaded = False
                     for _ in range(5):
@@ -205,19 +254,45 @@ class WorldofHyattPlugin(ProviderPlugin):
                                 break
                                 
                     if not loaded:
-                        print("Hyatt login page failed to render login form.")
+                        err = self._check_for_login_errors(sb)
+                        if err:
+                            raise PluginError(f"World of Hyatt login page error: {err}")
                         raise PluginError("Login form not found on Hyatt sign-in page")
 
                     # Fill and submit form
                     self._fill_login_form(sb, username, password, last_name, auto_submit=True)
-                    sb.sleep(8)
                     
+                    # Wait for redirect or error
+                    for _ in range(10):
+                        sb.sleep(1)
+                        curr_url = sb.get_current_url().lower()
+                        if "sign-in" not in curr_url:
+                            break
+                        if self._check_for_mfa(sb):
+                            raise InteractionRequiredError("World of Hyatt requested additional verification (MFA). Please perform an Interactive Login.")
+                        err = self._check_for_login_errors(sb)
+                        if err:
+                            raise PluginError(f"World of Hyatt login failed: {err}")
+
+                    if self._check_for_mfa(sb):
+                        raise InteractionRequiredError("World of Hyatt requested additional verification (MFA). Please perform an Interactive Login.")
+                    err = self._check_for_login_errors(sb)
+                    if err:
+                        raise PluginError(f"World of Hyatt login failed: {err}")
+
                     # Force open profile page if not redirected automatically
-                    if "profile" not in sb.get_current_url():
-                        print("Opening Hyatt account-overview page...")
+                    if "profile" not in sb.get_current_url().lower():
                         sb.open("https://www.hyatt.com/profile/account-overview")
                         sb.sleep(5)
                         
+                    if "sign-in" in sb.get_current_url().lower():
+                        err = self._check_for_login_errors(sb)
+                        if err:
+                            raise PluginError(f"World of Hyatt login failed: {err}")
+                        if self._check_for_mfa(sb):
+                            raise InteractionRequiredError("World of Hyatt requested additional verification (MFA). Please perform an Interactive Login.")
+                        raise InteractionRequiredError("World of Hyatt login did not complete or session expired. Please perform an Interactive Login.")
+
                     # Extract data
                     balance, status = self._extract_data(sb)
                     if balance is None:
@@ -227,42 +302,32 @@ class WorldofHyattPlugin(ProviderPlugin):
                         balance, status = self._extract_data(sb)
                         
                     if balance is None:
+                        if "sign-in" in sb.get_current_url().lower():
+                            raise InteractionRequiredError("World of Hyatt session expired. Please perform an Interactive Login.")
                         raise PluginError("Could not find points on Hyatt account overview page after login.")
                         
                     result["balance"] = balance
                     if status:
                         result["status"] = status
+                    mem_id = self.extract_membership_id(sb)
+                    if mem_id:
+                        result["membership_id"] = mem_id
                     result["last_activity_date"] = self._fetch_last_activity_date(sb)
                     
-                    # Save fresh cookies
-                    if cookie_file:
-                        try:
-                            with open(cookie_file, "w") as f:
-                                json.dump(sb.get_cookies(), f)
-                            print("Saved new session cookies after successful login.")
-                        except Exception as save_err:
-                            print(f"Failed to save cookies: {save_err}")
+                    if profile_dir:
+                        save_cookies_to_json(sb, profile_dir, cookie_file_name)
                             
                     return result
-                    
             except Exception as e:
-                print(f"Attempt {attempt + 1} failed: {e}")
-                # Clear potentially poisoned cookie file on failure
-                if cookie_file and os.path.exists(cookie_file):
-                    print("Purging Hyatt session cookies to reset state...")
-                    try:
-                        os.remove(cookie_file)
-                    except Exception as rm_err:
-                        print(f"Could not delete cookie file: {rm_err}")
-                
+                if profile_dir:
+                    clear_profile_session(profile_dir, cookie_file_name)
                 if attempt == attempts - 1:
-                    if isinstance(e, InteractionRequiredError):
+                    if isinstance(e, (InteractionRequiredError, PluginError)):
                         raise
                     raise PluginError(f"Scraping failed: {str(e)}")
 
     def _fetch_last_activity_date(self, sb) -> Optional[datetime]:
         try:
-            print("Opening Hyatt account-activity page...")
             sb.open("https://www.hyatt.com/profile/account-activity")
             sb.sleep(5)
             text = sb.get_text('body')
@@ -292,35 +357,20 @@ class WorldofHyattPlugin(ProviderPlugin):
 
     def interactive_login(self, username: str, password: str, profile_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
         """
-        Opens an interactive browser window for the user to resolve MFA.
-        Uses clean profiles and saves cookies dynamically to bypass Akamai bot blocks.
+        Opens an interactive browser window for the user to resolve MFA / Captcha.
+        Pre-fills credentials and enables the submit button for convenient sign-in.
         """
         last_name = kwargs.get('last_name', '')
+        cookie_file_name = "cookies.json"
         
-        cookie_file = None
+        # Reset previous cookies to guarantee a clean slate
         if profile_dir:
-            try:
-                os.makedirs(profile_dir, exist_ok=True)
-                cookie_file = os.path.join(profile_dir, "cookies.json")
-            except Exception as e:
-                print(f"Error preparing profile directory: {e}")
-                
-        # Proactively delete old cookies to guarantee a clean slate and avoid Akamai blocks
-        if cookie_file and os.path.exists(cookie_file):
-            print("Resetting Hyatt session cookies to guarantee a clean slate...")
-            try:
-                os.remove(cookie_file)
-            except Exception as e:
-                print(f"Could not reset session cookies: {e}")
-                
+            clear_profile_session(profile_dir, cookie_file_name)
+
         try:
-            with SB(**get_sb_kwargs(uc=True, headless=False)) as sb:
-                # Skip homepage and navigate directly to sign-in
-                print("Opening Hyatt traditional login page directly (skipping homepage)...")
+            with SB(**get_sb_kwargs(uc=True, user_data_dir=profile_dir, headless=False)) as sb:
                 sb.open("https://www.hyatt.com/en-US/member/sign-in/traditional")
                 
-                # Wait up to 16 seconds for login elements to render
-                print("Waiting for Hyatt login form in interactive mode...")
                 user_selector = "input[name='userId']"
                 loaded = False
                 for _ in range(4):
@@ -332,44 +382,41 @@ class WorldofHyattPlugin(ProviderPlugin):
                             break
                             
                 if not loaded:
-                    print("Hyatt login page failed to render login form.")
+                    err = self._check_for_login_errors(sb)
+                    if err:
+                        raise PluginError(f"World of Hyatt login page error: {err}")
                     raise PluginError("Login form not found on Hyatt sign-in page")
 
-                # Prefill credentials if visible
+                # Prefill credentials and enable submit button
                 try:
                     self._fill_login_form(sb, username, password, last_name, auto_submit=False)
                 except Exception:
                     pass
                 
-                # Wait up to 5 minutes for the user to resolve MFA/captcha and leave
-                # the sign-in page. Waiting directly for the points-balance locator
-                # (the previous approach) could time out entirely: Hyatt's natural
-                # post-login redirect doesn't reliably land on account-overview, the
-                # only page that locator actually appears on -- fetch_data() always
-                # force-navigates there explicitly rather than trusting the redirect.
+                # Wait up to 5 minutes for the user to submit and leave sign-in
                 left_sign_in = False
                 for _ in range(60):
                     try:
-                        if "sign-in" not in sb.get_current_url().lower():
+                        curr_url = sb.get_current_url().lower()
+                        if "sign-in" not in curr_url and "/member/sign-in" not in curr_url:
                             left_sign_in = True
                             break
                     except Exception:
                         pass
                     sb.sleep(5)
                 if not left_sign_in:
+                    err = self._check_for_login_errors(sb)
+                    if err:
+                        raise PluginError(f"Interactive login failed: {err}")
                     raise PluginError("Interactive login timed out after 5 minutes or dashboard failed to load.")
                 sb.sleep(3)
 
-                # Force open account-overview regardless of where the post-login
-                # redirect landed, matching fetch_data()'s reliable navigation.
-                if "profile" not in sb.get_current_url():
-                    print("Opening Hyatt account-overview page...")
+                if "profile" not in sb.get_current_url().lower():
                     sb.open("https://www.hyatt.com/profile/account-overview")
                     sb.sleep(5)
 
                 balance, status = self._extract_data(sb)
                 if balance is None:
-                    # Fallback refresh in case of slow API render, matching fetch_data().
                     sb.refresh()
                     sb.sleep(6)
                     balance, status = self._extract_data(sb)
@@ -382,25 +429,19 @@ class WorldofHyattPlugin(ProviderPlugin):
                     "expiration_date": None,
                     "certificates": []
                 }
+                mem_id = self.extract_membership_id(sb)
+                if mem_id:
+                    result["membership_id"] = mem_id
                 result["last_activity_date"] = self._fetch_last_activity_date(sb)
 
-                # Save cookies dynamically
-                if cookie_file:
-                    try:
-                        cookies = sb.get_cookies()
-                        with open(cookie_file, "w") as f:
-                            json.dump(cookies, f)
-                        print(f"Saved interactive login session cookies to {cookie_file}")
-                    except Exception as save_err:
-                        print(f"Failed to save cookies after interactive login: {save_err}")
+                if profile_dir:
+                    save_cookies_to_json(sb, profile_dir, cookie_file_name)
 
                 return result
 
         except Exception as e:
-            if cookie_file and os.path.exists(cookie_file):
-                print("Interactive login failed. Purging session cookies...")
-                try:
-                    os.remove(cookie_file)
-                except Exception as rmtree_err:
-                    print(f"Could not delete cookie file: {rmtree_err}")
+            if profile_dir:
+                clear_profile_session(profile_dir, cookie_file_name)
+            if isinstance(e, (PluginError, InteractionRequiredError)):
+                raise
             raise PluginError(f"Interactive login failed: {str(e)}")

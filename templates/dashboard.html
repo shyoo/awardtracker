@@ -372,7 +372,11 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                   <div>
-                    <span class="font-bold">Sync failed.</span> Please try syncing again. If it repeatedly fails or is blocked by an undetected MFA/CAPTCHA challenge, click the orange lock icon on the right to perform an <strong class="text-rose-800">Interactive Login</strong>.
+                    <span class="font-bold">Sync failed.</span>
+                    {% if account.last_error %}
+                    <span class="block text-rose-800 font-normal my-0.5">{{ account.last_error }}</span>
+                    {% endif %}
+                    Please try syncing again. If it repeatedly fails or is blocked by an undetected MFA/CAPTCHA challenge, click the orange lock icon on the right to perform an <strong class="text-rose-800">Interactive Login</strong>.
                   </div>
                 </div>
                 {% endif %}
