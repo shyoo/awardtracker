@@ -36,61 +36,75 @@ class WorldofHyattPlugin(ProviderPlugin):
     def get_expiration_policy_description(self, status: str = None) -> str:
         return "Points expire after 24 months of inactivity. Any earning or redemption transaction extends them."
 
+    def _read_text(self, sb, selector: str) -> Optional[str]:
+        """Returns the text of the first visible element matching selector.
+
+        Hyatt renders the member card twice: a copy in the mobile nav menu (hidden
+        on desktop) comes first in the DOM, then the visible sidebar card. Both carry
+        the same data-locator attributes, and sb.is_element_visible / sb.get_text only
+        look at the first match, so every element is scanned instead. If no copy is
+        visible, the hidden copy's textContent is used since it holds the same data.
+        """
+        try:
+            elements = sb.find_elements(selector)
+        except Exception:
+            return None
+        hidden = []
+        for el in elements:
+            try:
+                if el.is_displayed():
+                    text = (el.text or "").strip()
+                    if text:
+                        return text
+                else:
+                    hidden.append(el)
+            except Exception:
+                pass
+        for el in hidden:
+            try:
+                text = (el.get_attribute("textContent") or "").strip()
+                if text:
+                    return text
+            except Exception:
+                pass
+        return None
+
     def extract_membership_id(self, sb) -> Optional[str]:
         """Extracts the Hyatt membership number from the account page."""
         for selector in ['[data-locator="member-number"]', '[data-locator="membership-number"]', '[data-locator="memberId"]']:
-            if sb.is_element_visible(selector):
-                try:
-                    text = sb.get_text(selector).strip()
-                    clean = re.sub(r'^(?:member\s*(?:#|number|no\.?)?|#)\s*', '', text, flags=re.IGNORECASE).strip()
-                    clean = re.sub(r'[^0-9A-Za-z]', '', clean)
-                    if clean and not clean.startswith("***"):
-                        return clean
-                except Exception:
-                    pass
+            text = self._read_text(sb, selector)
+            if text:
+                clean = re.sub(r'^(?:member\s*(?:#|number|no\.?)?|#)\s*', '', text, flags=re.IGNORECASE).strip()
+                clean = re.sub(r'[^0-9A-Za-z]', '', clean)
+                if clean and not clean.startswith("***"):
+                    return clean
         return None
 
     def _extract_data(self, sb) -> Tuple[Optional[int], Optional[str]]:
         """Extracts points balance and status from the Hyatt dashboard."""
         balance, status = None, None
-        
+
         # Selectors based on Hyatt's React data-locator attributes
-        points_selector = '[data-locator="points-balance"]'
-        status_selector = '[data-locator="status"]'
+        for points_sel in ['[data-locator="points-balance"]', '[data-locator="totalPoints"]',
+                           '[data-locator="currentPoints"]', '[data-locator="memberPoints"]']:
+            points_text = self._read_text(sb, points_sel)
+            clean_points = "".join(filter(str.isdigit, points_text or ""))
+            if clean_points:
+                balance = int(clean_points)
+                break
 
-        if sb.is_element_visible(points_selector):
-            try:
-                points_text = sb.get_text(points_selector)
-                clean_points = "".join(filter(str.isdigit, points_text))
-                if clean_points:
-                    balance = int(clean_points)
-            except Exception:
-                pass
-
-        if balance is None:
-            for fallback_sel in ['[data-locator="totalPoints"]', '[data-locator="currentPoints"]', '[data-locator="memberPoints"]']:
-                if sb.is_element_visible(fallback_sel):
-                    try:
-                        points_text = sb.get_text(fallback_sel)
-                        clean_points = "".join(filter(str.isdigit, points_text))
-                        if clean_points:
-                            balance = int(clean_points)
-                            break
-                    except Exception:
-                        pass
-                
-        if sb.is_element_visible(status_selector):
-            try:
-                status_text = sb.get_text(status_selector)
-                # Parse tier from text (e.g. "Member since Nov 2, 2016" or "Explorist through Feb 2027")
+        # The member card shows the tier under data-locator="type" ("Member", "Explorist", ...);
+        # data-locator="status" holds "Member since <date>" and is only a fallback.
+        for tier_sel in ['[data-locator="type"]', '[data-locator="status"]']:
+            tier_text = self._read_text(sb, tier_sel)
+            if tier_text:
                 status = "Member"
                 for tier in ["Lifetime Globalist", "Globalist", "Explorist", "Discoverist", "Courtesy Card"]:
-                    if tier.lower() in status_text.lower():
+                    if tier.lower() in tier_text.lower():
                         status = tier
                         break
-            except Exception:
-                pass
-                
+                break
+
         return balance, status
 
     def _check_for_mfa(self, sb) -> bool:

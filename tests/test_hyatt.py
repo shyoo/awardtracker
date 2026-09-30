@@ -20,40 +20,76 @@ class TestHyattPlugin(unittest.TestCase):
         exp = self.plugin.calculate_expiration(5000, "Member", act_date)
         self.assertEqual(exp.strftime("%Y-%m-%d"), "2027-05-20")
 
-    def test_extract_data_standard(self):
+    @staticmethod
+    def _element(text, displayed=True):
+        el = MagicMock()
+        el.is_displayed.return_value = displayed
+        # Selenium's .text is empty for hidden elements; textContent still holds the data.
+        el.text = text if displayed else ""
+        el.get_attribute.side_effect = lambda name: text if name == "textContent" else None
+        return el
+
+    def _page_sb(self, elements_by_selector):
         mock_sb = MagicMock()
-        mock_sb.is_element_visible.side_effect = lambda sel: sel in [
-            '[data-locator="points-balance"]',
-            '[data-locator="status"]'
-        ]
-        mock_sb.get_text.side_effect = lambda sel: {
-            '[data-locator="points-balance"]': "24,500 Points",
-            '[data-locator="status"]': "Globalist through Feb 2027"
-        }.get(sel, "")
+        mock_sb.find_elements.side_effect = lambda sel: elements_by_selector.get(sel, [])
+        return mock_sb
+
+    def test_extract_data_standard(self):
+        mock_sb = self._page_sb({
+            '[data-locator="points-balance"]': [self._element("24,500 Points")],
+            '[data-locator="type"]': [self._element("Globalist")],
+            '[data-locator="status"]': [self._element("Member since Nov 2, 2016")],
+        })
 
         bal, status = self.plugin._extract_data(mock_sb)
         self.assertEqual(bal, 24500)
         self.assertEqual(status, "Globalist")
 
     def test_extract_data_fallbacks(self):
-        mock_sb = MagicMock()
-        mock_sb.is_element_visible.side_effect = lambda sel: sel in [
-            '[data-locator="totalPoints"]',
-            '[data-locator="status"]'
-        ]
-        mock_sb.get_text.side_effect = lambda sel: {
-            '[data-locator="totalPoints"]': "Total Points: 10,250",
-            '[data-locator="status"]': "Explorist Member"
-        }.get(sel, "")
+        mock_sb = self._page_sb({
+            '[data-locator="totalPoints"]': [self._element("Total Points: 10,250")],
+            '[data-locator="status"]': [self._element("Explorist through Feb 2027")],
+        })
 
         bal, status = self.plugin._extract_data(mock_sb)
         self.assertEqual(bal, 10250)
         self.assertEqual(status, "Explorist")
 
+    def test_extract_data_duplicate_member_card_hidden_copy_first(self):
+        # Sanitized from the account-overview page: the member card is rendered in the
+        # hidden mobile nav menu first, then in the visible desktop sidebar.
+        mock_sb = self._page_sb({
+            '[data-locator="points-balance"]': [self._element("683", displayed=False), self._element("683")],
+            '[data-locator="type"]': [self._element("Member", displayed=False), self._element("Member")],
+            '[data-locator="status"]': [self._element("Member since Nov 2, 2016", displayed=False),
+                                        self._element("Member since Nov 2, 2016")],
+            '[data-locator="member-number"]': [self._element("123456789A", displayed=False), self._element("123456789A")],
+        })
+
+        bal, status = self.plugin._extract_data(mock_sb)
+        self.assertEqual(bal, 683)
+        self.assertEqual(status, "Member")
+        self.assertEqual(self.plugin.extract_membership_id(mock_sb), "123456789A")
+
+    def test_extract_data_uses_hidden_copy_when_none_visible(self):
+        mock_sb = self._page_sb({
+            '[data-locator="points-balance"]': [self._element("1,234", displayed=False)],
+            '[data-locator="type"]': [self._element("Discoverist", displayed=False)],
+        })
+
+        bal, status = self.plugin._extract_data(mock_sb)
+        self.assertEqual(bal, 1234)
+        self.assertEqual(status, "Discoverist")
+
+    def test_extract_data_missing_returns_none(self):
+        bal, status = self.plugin._extract_data(self._page_sb({}))
+        self.assertIsNone(bal)
+        self.assertIsNone(status)
+
     def test_extract_membership_id(self):
-        mock_sb = MagicMock()
-        mock_sb.is_element_visible.side_effect = lambda sel: sel == '[data-locator="member-number"]'
-        mock_sb.get_text.return_value = "Member # 123456789A"
+        mock_sb = self._page_sb({
+            '[data-locator="member-number"]': [self._element("Member # 123456789A")],
+        })
 
         mem_id = self.plugin.extract_membership_id(mock_sb)
         self.assertEqual(mem_id, "123456789A")
