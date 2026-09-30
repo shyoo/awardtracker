@@ -8,4 +8,4 @@ python-dotenv==1.0.1
 pystray==0.19.5
 Pillow==12.2.0
 pyinstaller==6.20.0
-
+certifi

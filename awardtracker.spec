@@ -25,6 +25,7 @@ a = Analysis(
         'cryptography',
         'apscheduler',
         'seleniumbase',
+        'certifi',
         'pystray',
         'PIL',
         'PIL.Image',

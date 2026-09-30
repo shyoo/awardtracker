@@ -196,6 +196,7 @@ def register(app):
             return jsonify({
                 'success': False,
                 'error': result['error'],
+                'releases_url': result.get('releases_url', ''),
                 'current_version': current_ver,
             }), 200
         return jsonify({
