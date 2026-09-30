@@ -30,6 +30,24 @@ is not tracked by git — recreate it after a fresh clone with
 See [docs/release-pipeline.md](docs/release-pipeline.md) for the CI details and
 the repository secrets the release workflow needs.
 
+### Pull request write-ups and privacy
+
+Write PR titles and descriptions from a short, sanitized change summary. Never
+paste a user request, handoff, log, or browser capture into them. Keep personal
+names and email addresses, home or AppData paths, account and membership IDs,
+profile or process IDs, credentials, cookies, tokens, and verification codes out
+of PR text, branch names, commit messages, and tracked research notes. Use
+repository-relative paths and generic descriptions instead.
+
+Before a tool publishes a PR, review its **exact** proposed title and body,
+the branch name, the diff (including force-added ignored files), and commit
+messages and author metadata. Check how automation derives PR text: a task
+title or handoff is not a safe default. If the tool cannot publish sanitized
+text at creation, use a supported safe route or surface that limitation before
+publishing. Editing a PR or force-pushing later may leave the earlier text or
+commits visible in GitHub history. If sensitive details were already published,
+remove them from the current PR and report any history that still needs cleanup.
+
 ---
 
 ## 2. Code Layout
