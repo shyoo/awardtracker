@@ -2830,6 +2830,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         
         # Should render the instruction warning text for vague failures
         self.assertIn(b"Sync failed.", res.data)
+        self.assertIn(b"Connection timed out", res.data)
         self.assertIn(b"Please try syncing again. If it repeatedly fails or is blocked by an undetected MFA/CAPTCHA challenge", res.data)
 
     def test_account_detail_renders_mfa_requirement_message(self):
