@@ -18,6 +18,36 @@ from extensions import db
 from config import Config
 
 
+RELEASES_PAGE_URL = "https://github.com/shyoo/awardtracker/releases"
+
+
+def build_ssl_context() -> ssl.SSLContext:
+    """
+    HTTPS context for the GitHub calls: the system trust store plus the bundled
+    certifi CA list, so machines with a missing or incomplete root store (and
+    packaged Pythons without one) can still verify github.com.
+    """
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+        ctx.load_verify_locations(cafile=certifi.where())
+    except Exception:
+        pass  # certifi missing or unreadable: keep the system store only
+    return ctx
+
+
+def describe_update_error(exc: BaseException) -> str:
+    """Turn a network/SSL exception into a message the user can act on."""
+    reason = getattr(exc, "reason", exc)
+    if isinstance(reason, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(exc):
+        return (
+            "Could not verify the GitHub security certificate (this computer may be missing "
+            "trusted root certificates, or a proxy/antivirus is intercepting HTTPS). "
+            f"Download the latest version manually from {RELEASES_PAGE_URL}"
+        )
+    return str(exc)
+
+
 def parse_version(v_str: Optional[str]) -> Tuple[int, int, int]:
     """
     Converts a version string into a comparable numeric tuple, e.g. "v1.2.3" -> (1, 2, 3)
@@ -288,7 +318,7 @@ class AutoUpdateManager:
         """
         url = "https://api.github.com/repos/shyoo/awardtracker/releases/latest"
         req = urllib.request.Request(url, headers={'User-Agent': 'AwardTracker-Client'})
-        ctx = ssl.create_default_context()
+        ctx = build_ssl_context()
 
         with urllib.request.urlopen(req, context=ctx, timeout=10) as response:
             data = json.loads(response.read().decode('utf-8'))
@@ -362,7 +392,7 @@ class AutoUpdateManager:
             target_path = os.path.join(temp_dir, f"{int(time.time())}_{asset_filename}")
 
             req = urllib.request.Request(self.target_asset_url, headers={'User-Agent': 'AwardTracker-Client'})
-            ctx = ssl.create_default_context()
+            ctx = build_ssl_context()
 
             with urllib.request.urlopen(req, context=ctx, timeout=20) as response:
                 content_length = response.headers.get('Content-Length')
@@ -400,7 +430,7 @@ class AutoUpdateManager:
         except Exception as e:
             with self._lock:
                 self.status = "error"
-                self.error_message = str(e)
+                self.error_message = describe_update_error(e)
 
     def apply_update_and_restart(self, flask_app=None) -> Dict[str, Any]:
         """
@@ -748,12 +778,12 @@ def perform_update_check(flask_app, force=False) -> dict:
                 "checked": True,
             }
         except Exception as e:
-            error_msg = str(e)
-            print(f"Update check failed: {error_msg}")
+            print(f"Update check failed: {e}")
             return {
                 "available": False,
                 "checked": False,
-                "error": error_msg,
+                "error": describe_update_error(e),
+                "releases_url": RELEASES_PAGE_URL,
             }
 
 

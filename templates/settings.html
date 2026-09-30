@@ -32,7 +32,7 @@
             </button>
             <a href="{{ update_info_raw.url }}" target="_blank" class="text-[10px] text-primary hover:underline font-bold">View Release Notes</a>
           {% else %}
-            <span class="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-full text-[10px]">
+            <span id="update-status-pill" class="inline-flex items-center gap-1.5 text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-full text-[10px]">
               <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
               You are at the latest version.
             </span>
@@ -952,6 +952,13 @@
     }
   });
 
+  function markUpdateCheckFailed() {
+    const pill = document.getElementById('update-status-pill');
+    if (!pill) return;
+    pill.className = 'inline-flex items-center gap-1.5 text-rose-600 bg-rose-50 border border-rose-100 px-2.5 py-0.5 rounded-full text-[10px]';
+    pill.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span> Update check failed.';
+  }
+
   function checkForUpdatesNow() {
     const btn = document.getElementById('btn-check-updates');
     const btnText = document.getElementById('btn-check-updates-text');
@@ -982,6 +989,7 @@
           }, 3000);
         }
       } else {
+        markUpdateCheckFailed();
         alert("Failed to check for updates: " + (data.error || "Unknown error"));
         btn.disabled = false;
         btn.classList.remove('opacity-70');
@@ -990,6 +998,7 @@
       }
     })
     .catch(err => {
+      markUpdateCheckFailed();
       alert("Error checking for updates: " + err);
       btn.disabled = false;
       btn.classList.remove('opacity-70');

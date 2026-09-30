@@ -297,6 +297,31 @@ class TestAutoUpdater:
             assert last_check.value != ''
 
     @patch("urllib.request.urlopen")
+    def test_api_updater_check_ssl_failure(self, mock_urlopen, client):
+        import ssl
+        import urllib.error
+        mock_urlopen.side_effect = urllib.error.URLError(
+            ssl.SSLCertVerificationError(
+                1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate"
+            )
+        )
+
+        res = client.post('/api/updater/check')
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data['success'] is False
+        assert "certificate" in data['error']
+        assert "https://github.com/shyoo/awardtracker/releases" in data['error']
+        assert data['releases_url'] == "https://github.com/shyoo/awardtracker/releases"
+
+    def test_build_ssl_context_loads_certifi_bundle(self):
+        import certifi
+        from updater import build_ssl_context
+        with patch("ssl.SSLContext.load_verify_locations") as load:
+            build_ssl_context()
+        load.assert_any_call(cafile=certifi.where())
+
+    @patch("urllib.request.urlopen")
     def test_perform_update_check_throttle(self, mock_urlopen, app):
         mock_response = MagicMock()
         mock_response.read.return_value = json.dumps({
