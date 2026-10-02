@@ -40,8 +40,12 @@ def send_desktop_notification(title: str, message: str):
             """
             subprocess.run(["powershell", "-Command", ps_script], capture_output=True)
         elif os_name == "Darwin":
-            # macOS AppleScript
-            subprocess.run(["osascript", "-e", f'display notification "{message}" with title "{title}"'])
+            # pymacos hands the text to AppleScript as arguments, so quotes in a
+            # message (sync errors often quote selectors as JSON) can't break the
+            # script, and it raises when notifications are turned off instead of
+            # macOS dropping them silently.
+            import macos
+            macos.notify(message, title=title)
         elif os_name == "Linux":
             # Linux notify-send
             subprocess.run(["notify-send", title, message])
