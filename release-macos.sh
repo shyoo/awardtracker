@@ -484,6 +484,8 @@ else
     cp "$APP_PATH/Contents/MacOS/awardtracker" "$PORTABLE_DIR/awardtracker"
 fi
 
+cp LICENSE NOTICE "$PORTABLE_DIR/"
+
 if [ -f "settings.json" ]; then
     cp "settings.json" "$PORTABLE_DIR/settings.json"
 fi
