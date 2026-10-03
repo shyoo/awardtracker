@@ -11,6 +11,8 @@ added_files = [
     ('valuations.default.json', '.'),
     ('settings.default.json', '.'),
     ('version.txt', '.'),
+    ('LICENSE', '.'),
+    ('NOTICE', '.'),
 ]
 
 a = Analysis(

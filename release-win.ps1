@@ -61,8 +61,9 @@ $TempPortableDir = "dist\AwardTracker-Portable"
 if (Test-Path $TempPortableDir) { Remove-Item -Recurse -Force $TempPortableDir }
 New-Item -ItemType Directory -Path $TempPortableDir -Force > $null
 
-# Copy executable and settings configuration to portable folder
+# Copy executable, license files and settings configuration to portable folder
 Copy-Item $ExePath -Destination $TempPortableDir\awardtracker.exe -Force
+Copy-Item "LICENSE", "NOTICE" -Destination $TempPortableDir -Force
 if (Test-Path "settings.json") {
     Copy-Item "settings.json" -Destination $TempPortableDir\settings.json -Force
 }
