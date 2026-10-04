@@ -309,3 +309,12 @@ When Diagnostic Debug Mode is enabled, the same log directory also contains a
 dated folder for each browser run with step-by-step logs, screenshots, and HTML
 snapshots. Include the relevant diagnostic zip or log details when reporting an
 issue.
+
+---
+
+## 📄 License
+
+Award Tracker is licensed under the [Apache License, Version 2.0](LICENSE).
+See [NOTICE](NOTICE) for attribution. Unless you state otherwise, any
+contribution you submit for inclusion in this project is licensed under the
+same terms, as described in section 5 of the license.
