@@ -1,6 +1,9 @@
 #!/bin/bash
 # Award Tracker - Test Runner for macOS/Linux
 
+# Run from the repository root so relative paths (venv, dist, packaging) resolve.
+cd "$(dirname "$0")/.." || exit 1
+
 # Colors for terminal
 GREEN='\033[0;32m'
 RED='\033[0;31m'

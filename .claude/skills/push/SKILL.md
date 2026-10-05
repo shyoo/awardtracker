@@ -18,7 +18,7 @@ This skill **must not**:
 
 - modify `version.txt`
 - write or update anything under `docs/release_notes/`
-- run `release-win.ps1` or `release-macos.sh`
+- run `scripts/release-win.ps1` or `scripts/release-macos.sh`
 - create a git tag or a GitHub release
 - squash, rebase, or otherwise rewrite existing commits
 

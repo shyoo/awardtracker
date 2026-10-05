@@ -8,10 +8,10 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
-from extensions import db
-from models import Provider, Person, Account, Settings
+from core.extensions import db
+from core.models import Provider, Person, Account, Settings
 from plugins.manager import plugin_manager
-from security import security_manager
+from core.security import security_manager
 
 
 def _months_from_today(months: int):
@@ -64,7 +64,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         security_manager.fernet = None
         
         try:
-            import debug_logger
+            from core import debug_logger
             debug_logger.clear_run_context()
         except Exception:
             pass
@@ -818,7 +818,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         3. Dashboard renders the expiration badge with time remaining and does NOT show 'Never Expires'.
         """
         from datetime import datetime
-        from expiration import calculate_expiration
+        from services.expiration import calculate_expiration
 
         # 1. Setup mock HTML simulating Hilton activity page for the user's account
         mock_html = """
@@ -2346,7 +2346,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
             self.assertFalse(normal_account.interactive_login_required)
             
             # Run sync_all_accounts
-            from scheduler import sync_all_accounts
+            from services.scheduler import sync_all_accounts
             sync_all_accounts()
             
             # Refresh from db and assert state
@@ -2899,7 +2899,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
 
     def test_selenium_patch_nested_calls_guard(self):
         from seleniumbase import BaseCase
-        import debug_logger
+        from core import debug_logger
         from unittest.mock import patch, MagicMock
 
         # Create a mock/dummy BaseCase instance
@@ -2912,9 +2912,9 @@ class TestAPIsAndPlugins(unittest.TestCase):
 
         sb = DummyBaseCase()
 
-        with patch('debug_logger.is_debug_mode', return_value=True), \
-             patch('debug_logger.save_snapshot') as mock_save_snapshot, \
-             patch('debug_logger.log_action') as mock_log_action:
+        with patch('core.debug_logger.is_debug_mode', return_value=True), \
+             patch('core.debug_logger.save_snapshot') as mock_save_snapshot, \
+             patch('core.debug_logger.log_action') as mock_log_action:
              
             # Ensure the context has required attributes
             debug_logger._log_context.account_id = 1
@@ -2957,8 +2957,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
 
     def test_sensitive_masking_filter_app_log(self):
         import logging
-        import debug_logger
-        
+        from core import debug_logger
         app_log = logging.getLogger('awardtracker')
         
         from logging import Handler
@@ -2985,7 +2984,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
             )
             
             # Scenario 1: Privacy masking enabled
-            with unittest.mock.patch('debug_logger.is_privacy_masked', return_value=True):
+            with unittest.mock.patch('core.debug_logger.is_privacy_masked', return_value=True):
                 app_log.info("User is shyoo_test with password secret_password123 and balance 88888")
                 self.assertEqual(len(test_handler.records), 1)
                 self.assertNotIn("shyoo_test", test_handler.records[0])
@@ -2997,7 +2996,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
             test_handler.records.clear()
             
             # Scenario 2: Privacy masking disabled
-            with unittest.mock.patch('debug_logger.is_privacy_masked', return_value=False):
+            with unittest.mock.patch('core.debug_logger.is_privacy_masked', return_value=False):
                 app_log.info("User is shyoo_test with password secret_password123 and balance 88888")
                 self.assertEqual(len(test_handler.records), 1)
                 self.assertIn("shyoo_test", test_handler.records[0])
@@ -3009,15 +3008,15 @@ class TestAPIsAndPlugins(unittest.TestCase):
             debug_logger.clear_run_context()
 
     def test_save_snapshot_logs_url(self):
-        import debug_logger
+        from core import debug_logger
         from unittest.mock import patch, MagicMock
         
         mock_sb = MagicMock()
         mock_sb.get_current_url.return_value = "https://www.example.com/login"
         
-        with patch('debug_logger.is_debug_mode', return_value=True), \
-             patch('debug_logger.log_action') as mock_log_action, \
-             patch('debug_logger.os.makedirs'), \
+        with patch('core.debug_logger.is_debug_mode', return_value=True), \
+             patch('core.debug_logger.log_action') as mock_log_action, \
+             patch('core.debug_logger.os.makedirs'), \
              patch('builtins.open', unittest.mock.mock_open()):
              
             debug_logger._log_context.account_id = 1
@@ -3039,7 +3038,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
                 debug_logger.clear_run_context()
 
     def test_url_change_snapshot_records_redirect_once(self):
-        import debug_logger
+        from core import debug_logger
         from unittest.mock import MagicMock, patch
 
         mock_sb = MagicMock()
@@ -3048,8 +3047,8 @@ class TestAPIsAndPlugins(unittest.TestCase):
         debug_logger._log_context.last_snapshot_url = "https://www.example.com/login"
         debug_logger._log_context.in_logger = False
         try:
-            with patch('debug_logger.is_debug_mode', return_value=True), \
-                 patch('debug_logger.save_snapshot') as save_snapshot:
+            with patch('core.debug_logger.is_debug_mode', return_value=True), \
+                 patch('core.debug_logger.save_snapshot') as save_snapshot:
                 debug_logger.save_snapshot_on_url_change(mock_sb, "url_sleep")
                 debug_logger.save_snapshot_on_url_change(mock_sb, "url_get_page_source")
 
@@ -3060,7 +3059,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
 
     def test_failed_run_captures_final_page_before_teardown(self):
         """A plugin error raised after the page loaded still saves that page."""
-        import debug_logger
+        from core import debug_logger
         from seleniumbase import BaseCase
         from unittest.mock import MagicMock, patch
         from plugins import browser
@@ -3071,7 +3070,7 @@ class TestAPIsAndPlugins(unittest.TestCase):
         debug_logger._log_context.run_dir = "dummy_dir"
         debug_logger._log_context.failure_snapshot_saved = False
         try:
-            with patch('debug_logger.is_debug_mode', return_value=True),                  patch('debug_logger.log_action'),                  patch('debug_logger.save_snapshot') as save_snapshot:
+            with patch('core.debug_logger.is_debug_mode', return_value=True),                  patch('core.debug_logger.log_action'),                  patch('core.debug_logger.save_snapshot') as save_snapshot:
                 sb._has_failure = False
                 browser.snapshot_failed_run(sb)
                 save_snapshot.assert_not_called()
@@ -3094,14 +3093,14 @@ class TestAPIsAndPlugins(unittest.TestCase):
             debug_logger.clear_run_context()
 
     def test_failure_snapshot_skipped_when_last_call_already_captured_error(self):
-        import debug_logger
+        from core import debug_logger
         from unittest.mock import MagicMock, patch
 
         debug_logger._log_context.run_dir = "dummy_dir"
         debug_logger._log_context.failure_snapshot_saved = True
         try:
-            with patch('debug_logger.is_debug_mode', return_value=True), \
-                 patch('debug_logger.save_snapshot') as save_snapshot:
+            with patch('core.debug_logger.is_debug_mode', return_value=True), \
+                 patch('core.debug_logger.save_snapshot') as save_snapshot:
                 debug_logger.save_failure_snapshot(MagicMock())
             save_snapshot.assert_not_called()
         finally:

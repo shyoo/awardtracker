@@ -7,7 +7,7 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-from config import write_dir
+from core.config import write_dir
 
 log_file = os.path.join(write_dir, 'logs', 'awardtracker_debug.log')
 os.makedirs(os.path.dirname(log_file), exist_ok=True)

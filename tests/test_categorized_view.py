@@ -8,10 +8,10 @@ import shutil
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
-from extensions import db
-from models import Provider, Person, Account, Settings
+from core.extensions import db
+from core.models import Provider, Person, Account, Settings
 from plugins.base import PROVIDER_CATEGORIES
-from security import security_manager
+from core.security import security_manager
 
 class TestConfig:
     TESTING = True
@@ -23,7 +23,7 @@ class TestConfig:
 class TestCategorizedView(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        import config
+        from core import config
         self.orig_write_dir = config.write_dir
         config.write_dir = self.temp_dir
 
@@ -57,7 +57,7 @@ class TestCategorizedView(unittest.TestCase):
         db.session.remove()
         db.drop_all()
         self.app_context.pop()
-        import config
+        from core import config
         config.write_dir = self.orig_write_dir
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 

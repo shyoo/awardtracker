@@ -1,6 +1,9 @@
 #!/bin/bash
 # Award Tracker - Premium Release Packaging Script for macOS
 
+# Run from the repository root so relative paths (venv, dist, packaging) resolve.
+cd "$(dirname "$0")/.." || exit 1
+
 # Colors for terminal
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -18,8 +21,8 @@ echo -e "${CYAN}      Award Tracker Release Builder Tool (macOS)   ${NC}"
 echo -e "${CYAN}==================================================${NC}"
 
 # 1. Verify build script
-if [ ! -f "./build-macos.sh" ]; then
-    echo -e "${RED}Error: Build script './build-macos.sh' not found.${NC}"
+if [ ! -f "./scripts/build-macos.sh" ]; then
+    echo -e "${RED}Error: Build script './scripts/build-macos.sh' not found.${NC}"
     exit 1
 fi
 
@@ -327,7 +330,7 @@ fi
 
 # 2. Call build-macos.sh to compile application
 echo -e "\n${YELLOW}Step 1: Compiling application via build-macos.sh...${NC}"
-./build-macos.sh
+./scripts/build-macos.sh
 RESULT=$?
 if [ $RESULT -ne 0 ]; then
     echo -e "${RED}Error: Compilation failed.${NC}"

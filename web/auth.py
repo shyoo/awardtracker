@@ -3,10 +3,10 @@ import os
 
 from flask import flash, redirect, render_template, request, url_for
 
-from applog import app_log
-from extensions import db
-from models import Settings
-from security import security_manager
+from core.applog import app_log
+from core.extensions import db
+from core.models import Settings
+from core.security import security_manager
 from services.settings_store import get_setting
 
 

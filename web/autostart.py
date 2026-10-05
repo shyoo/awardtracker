@@ -1,7 +1,7 @@
 """Register / unregister Award Tracker to launch at login (Windows Run key, macOS LaunchAgent)."""
 import os
 
-from applog import app_log
+from core.applog import app_log
 
 
 def set_app_autostart(enabled: bool):

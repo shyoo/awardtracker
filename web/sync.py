@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 from flask import flash, jsonify, redirect, request, url_for
 
-from applog import app_log
-from models import Account
+from core.applog import app_log
+from core.models import Account
 from plugins.base import active_drivers, cancel_active_driver
 from plugins.context import RunTrigger
 from services import sync_service
@@ -89,7 +89,7 @@ def register(app):
             'scheduled_sync_current_index': '0',
             'scheduled_sync_total_count': '0',
         })
-        from scheduler import run_sync_all_in_background
+        from services.scheduler import run_sync_all_in_background
         threading.Thread(target=run_sync_all_in_background, daemon=True).start()
         return jsonify({'status': 'success'})
 

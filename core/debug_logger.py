@@ -3,7 +3,7 @@ import re
 import logging
 from datetime import datetime
 import threading
-from config import write_dir
+from core.config import write_dir
 
 _log_context = threading.local()
 
@@ -11,7 +11,7 @@ def get_setting(key, default=''):
     try:
         from flask import has_app_context
         if has_app_context():
-            from models import Settings
+            from core.models import Settings
             setting = Settings.query.filter_by(key=key).first()
             return setting.value if setting else default
     except Exception:

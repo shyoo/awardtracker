@@ -5,9 +5,9 @@ import pytest
 from unittest.mock import patch, MagicMock
 from io import BytesIO
 from app import create_app
-from extensions import db
-from models import Settings
-from updater import (
+from core.extensions import db
+from core.models import Settings
+from services.updater import (
     parse_version,
     is_newer_version,
     select_best_asset_for_platform,
@@ -21,7 +21,7 @@ from updater import (
 )
 
 
-from security import security_manager
+from core.security import security_manager
 
 
 class TestConfig:
@@ -316,7 +316,7 @@ class TestAutoUpdater:
 
     def test_build_ssl_context_loads_certifi_bundle(self):
         import certifi
-        from updater import build_ssl_context
+        from services.updater import build_ssl_context
         with patch("ssl.SSLContext.load_verify_locations") as load:
             build_ssl_context()
         load.assert_any_call(cafile=certifi.where())
@@ -392,7 +392,7 @@ class TestUpdateRelaunch:
                 written['script'] = fh.read()
             return MagicMock()
 
-        monkeypatch.setattr('updater.subprocess.Popen', capture_popen)
+        monkeypatch.setattr('services.updater.subprocess.Popen', capture_popen)
         manager._apply_windows_update(str(installer), 4321, r'C:\Program Files (x86)\AwardTrackerwardtracker.exe')
         return written
 
@@ -454,7 +454,7 @@ class TestUpdateRelaunch:
     def test_macos_relaunch_reuses_the_port(self, manager, monkeypatch, tmp_path):
         monkeypatch.setenv('AWARDTRACKER_PORT', '7767')
         monkeypatch.setattr('tempfile.gettempdir', lambda: str(tmp_path))
-        monkeypatch.setattr('updater.get_macos_app_bundle_path', lambda: '/Applications/Award Tracker.app')
+        monkeypatch.setattr('services.updater.get_macos_app_bundle_path', lambda: '/Applications/Award Tracker.app')
         scripts = {}
 
         def capture_popen(cmd, **kwargs):
@@ -462,7 +462,7 @@ class TestUpdateRelaunch:
                 scripts['script'] = fh.read()
             return MagicMock()
 
-        monkeypatch.setattr('updater.subprocess.Popen', capture_popen)
+        monkeypatch.setattr('services.updater.subprocess.Popen', capture_popen)
         dmg = tmp_path / 'awardtracker-macos-arm64-setup-v1.4.0.dmg'
         dmg.write_text('dmg')
         manager._apply_macos_update(str(dmg), 4321, '/Applications/Award Tracker.app/Contents/MacOS/awardtracker')

@@ -3,7 +3,7 @@ import subprocess
 
 import pytest
 
-from versioning import resolve_version, version_from_describe
+from core.versioning import resolve_version, version_from_describe
 
 
 def test_version_from_describe_handles_final_rc_and_dirty_builds():
@@ -28,5 +28,5 @@ def test_version_file_is_offline_fallback(tmp_path: Path, monkeypatch):
     def fail_git(*args, **kwargs):
         raise subprocess.CalledProcessError(1, "git")
 
-    monkeypatch.setattr("versioning.subprocess.run", fail_git)
+    monkeypatch.setattr("core.versioning.subprocess.run", fail_git)
     assert resolve_version(repo_dir=tmp_path, bundle_dir=tmp_path, env={}) == "1.3.10"

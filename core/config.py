@@ -3,7 +3,7 @@ import sys
 import platform
 import json
 
-from versioning import resolve_version
+from core.versioning import resolve_version
 
 os_name = platform.system()
 if os_name == "Windows":
@@ -14,10 +14,13 @@ elif os_name == "Darwin":
 else:  # Linux / POSIX fallback
     write_dir = os.path.expanduser("~/.config/awardtracker")
 
+# Project root of a source checkout (this file lives in core/).
+repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 if getattr(sys, 'frozen', False):
     basedir = sys._MEIPASS
 else:
-    basedir = os.path.abspath(os.path.dirname(__file__))
+    basedir = repo_dir
 
 # Ensure the writeable user directory exists
 os.makedirs(write_dir, exist_ok=True)
@@ -52,7 +55,7 @@ def get_active_db_path():
 
 # Release builds materialize their tag into the bundled version.txt. Source
 # checkouts derive a useful development version from git instead.
-APP_VERSION = resolve_version(repo_dir=os.path.abspath(os.path.dirname(__file__)), bundle_dir=basedir)
+APP_VERSION = resolve_version(repo_dir=repo_dir, bundle_dir=basedir)
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-key-change-in-production'

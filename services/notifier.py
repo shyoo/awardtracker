@@ -10,7 +10,7 @@ def send_desktop_notification(title: str, message: str):
         if current_app:
             if current_app.config.get('TESTING'):
                 return
-            from models import Settings
+            from core.models import Settings
             native_notifications_setting = Settings.query.filter_by(key='native_notifications').first()
             if native_notifications_setting and native_notifications_setting.value == 'false':
                 return

@@ -12,14 +12,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from applog import app_log
-from config import write_dir
-from extensions import db
-from models import Account, AccountHistory, Certificate
+from core.applog import app_log
+from core.config import write_dir
+from core.extensions import db
+from core.models import Account, AccountHistory, Certificate
 from plugins import base as plugin_base
 from plugins.context import RunMode, RunTrigger
 from plugins.manager import plugin_manager
-from security import security_manager
+from core.security import security_manager
 from services.settings_store import get_warning_threshold_days
 
 
@@ -89,7 +89,7 @@ def run_plugin(account: Account, mode: RunMode, trigger: RunTrigger) -> Any:
 # --------------------------------------------------------------------------- #
 
 def _compute_expiration(account: Account, data: Dict[str, Any]) -> Optional[datetime]:
-    from expiration import calculate_expiration
+    from services.expiration import calculate_expiration
 
     plugin_name = account.provider.plugin_name
     last_activity = data.get('last_activity_date')
@@ -210,13 +210,13 @@ def mark_failed(account: Account, error: str) -> None:
 # --------------------------------------------------------------------------- #
 
 def _notify(title: str, message: str) -> None:
-    from notifier import send_desktop_notification
+    from services.notifier import send_desktop_notification
     send_desktop_notification(title, message)
 
 
 def _clear_debug_context() -> None:
     try:
-        import debug_logger
+        from core import debug_logger
         debug_logger.clear_run_context()
     except Exception:
         pass

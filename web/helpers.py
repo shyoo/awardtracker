@@ -3,7 +3,7 @@ import json
 import os
 import shutil
 
-from config import basedir, write_dir
+from core.config import basedir, write_dir
 from plugins.manager import plugin_manager
 
 CATEGORY_ORDER = ['Airlines', 'Hotels', 'Credit Cards', 'Car Rentals', 'Other']

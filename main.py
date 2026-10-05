@@ -16,7 +16,7 @@ if getattr(sys, 'frozen', False):
     # When launched from a .app bundle or frozen exe, CWD may be '/' (read-only on macOS)
     # or an unpredictable location on Windows. Change to the writable user data directory
     # so that SeleniumBase's relative 'downloaded_files' folder is created somewhere writable.
-    from config import write_dir
+    from core.config import write_dir
     os.chdir(write_dir)
 from PIL import Image, ImageDraw
 import pystray
@@ -87,9 +87,9 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, basedir)
 
 from app import create_app
-from bootstrap import register_providers
-from extensions import db
-from scheduler import scheduler
+from core.bootstrap import register_providers
+from core.extensions import db
+from services.scheduler import scheduler
 
 def create_icon_image():
     """
@@ -126,13 +126,13 @@ def start_flask():
         register_providers()
         
     try:
-        from notifier import send_desktop_notification
+        from services.notifier import send_desktop_notification
         send_desktop_notification("Award Tracker Started", f"The application is running and accessible at http://127.0.0.1:{PORT}")
     except Exception:
         pass
         
     scheduler.start()
-    from updater import check_for_updates_bg
+    from services.updater import check_for_updates_bg
     check_for_updates_bg(app)
     # use_reloader=False is mandatory when running in secondary thread
     app.run(debug=False, port=PORT, use_reloader=False)
@@ -151,9 +151,9 @@ def open_browser(icon, item):
     open_url_safely(f"http://127.0.0.1:{PORT}")
 
 def run_background_sync():
-    from notifier import send_desktop_notification
-    from scheduler import sync_all_accounts
-    from models import Settings
+    from services.notifier import send_desktop_notification
+    from services.scheduler import sync_all_accounts
+    from core.models import Settings
     
     # Query settings to see if native notifications are enabled
     with app.app_context():
@@ -177,7 +177,7 @@ def sync_accounts(icon, item):
     t.start()
 
 def check_updates_tray(icon, item):
-    from updater import check_for_updates_bg
+    from services.updater import check_for_updates_bg
     check_for_updates_bg(app, force=True)
 
 def quit_app(icon, item):
@@ -254,7 +254,7 @@ def main():
     
     # Conditionally auto-open browser dashboard on manual launch
     if not is_startup:
-        from models import Settings
+        from core.models import Settings
         with app.app_context():
             auto_open_setting = Settings.query.filter_by(key='auto_open_on_launch').first()
             should_open = (auto_open_setting.value == 'true') if auto_open_setting else True

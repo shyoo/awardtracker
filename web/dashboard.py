@@ -4,9 +4,9 @@ from datetime import datetime
 
 from flask import make_response, render_template, request
 
-from expiration import annotate_account_expiration, annotate_certificate_expiration
-from extensions import db
-from models import Account, Certificate
+from services.expiration import annotate_account_expiration, annotate_certificate_expiration
+from core.extensions import db
+from core.models import Account, Certificate
 from services.settings_store import get_advisory_threshold_days, get_warning_threshold_days
 from web.helpers import CATEGORY_ORDER, get_account_cpp_and_value, get_category_icon, load_valuations
 
@@ -98,7 +98,7 @@ def _category_tabs(accounts):
 def register(app):
     @app.route('/')
     def index():
-        from updater import check_for_updates_bg
+        from services.updater import check_for_updates_bg
         check_for_updates_bg(app)
 
         threshold_days = get_warning_threshold_days()

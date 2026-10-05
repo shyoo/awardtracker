@@ -135,10 +135,10 @@ If you are a developer and want to clone and compile the application standalone 
      ```powershell
      venv\Scripts\python.exe main.py
      ```
-     *(Or simply double-click the `run-win.bat` file in the root folder!)*
+     *(Or simply double-click `scripts\run-win.bat`!)*
    * **macOS/Linux**:
      ```bash
-     ./run-macos.sh
+     ./scripts/run-macos.sh
      ```
 
 ### 3. Standalone Compilation & Release Packaging
@@ -147,29 +147,29 @@ We have provided streamlined build and release tools that compile the Flask app,
 #### Standalone Binary Compilation
 * **Windows**:
   ```powershell
-  powershell -ExecutionPolicy Bypass -File build-win.ps1
+  powershell -ExecutionPolicy Bypass -File scripts\build-win.ps1
   ```
   Generates a standalone binary at `dist/awardtracker.exe` (~42 MB).
 * **macOS**:
   ```bash
-  ./build-macos.sh
+  ./scripts/build-macos.sh
   ```
   Generates a native app bundle at `dist/AwardTracker.app` (~54 MB) and standalone binary at `dist/awardtracker`.
 
 #### Complete Local Packaging (Setup Installer & Portable Zip)
 * **Windows (Setup Wizard)**:
   ```powershell
-  powershell -ExecutionPolicy Bypass -File release-win.ps1
+  powershell -ExecutionPolicy Bypass -File scripts\release-win.ps1
   ```
   Generates a Setup Wizard installer (`dist/awardtracker-win64-setup-v<VERSION>.exe`) and portable zip (`dist/awardtracker-win64-portable-v<VERSION>.zip`).
 * **macOS (Disk Image DMG)**:
   By default, this compiles the application bundle for the **local architecture** of the build machine:
   ```bash
-  ./release-macos.sh
+  ./scripts/release-macos.sh
   ```
   A Universal 2 package can still be built locally with:
   ```bash
-  ./release-macos.sh --universal
+  ./scripts/release-macos.sh --universal
   ```
   > [!IMPORTANT]
   > To package a **Universal 2** release, you **must** use the official Python installer from [Python.org](https://www.python.org/downloads/mac-osx/). The default Python installed via Homebrew lacks Universal2 architecture support and will fail compatibility verification.
@@ -186,11 +186,11 @@ We have provided streamlined build and release tools that compile the Flask app,
 To verify all APIs, naming overrides, settings parameters, and plugin infrastructure are fully functional, execute our premium color-coded test runners:
 * **Windows**:
   ```powershell
-  powershell -ExecutionPolicy Bypass -File run_tests.ps1
+  powershell -ExecutionPolicy Bypass -File scripts\run_tests.ps1
   ```
 * **macOS/Linux**:
   ```bash
-  ./run_tests.sh
+  ./scripts/run_tests.sh
   ```
 
 ---

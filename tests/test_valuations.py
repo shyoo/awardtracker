@@ -9,8 +9,8 @@ import shutil
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app, load_valuations, save_valuations, get_account_cpp_and_value
-from extensions import db
-from models import Provider, Person, Account, Settings
+from core.extensions import db
+from core.models import Provider, Person, Account, Settings
 
 class TestConfig:
     TESTING = True
@@ -25,7 +25,7 @@ class TestValuations(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         
         # Override config.write_dir dynamically
-        import config
+        from core import config
         self.original_write_dir = config.write_dir
         config.write_dir = self.temp_dir
         
@@ -45,7 +45,7 @@ class TestValuations(unittest.TestCase):
         db.session.add_all([self.provider_manual, self.provider_aa, self.provider_bilt, self.person])
         db.session.commit()
 
-        from security import security_manager
+        from core.security import security_manager
         security_manager.initialize_with_password("test-password")
 
         # Initialize mock valuations.json content
@@ -58,7 +58,7 @@ class TestValuations(unittest.TestCase):
         save_valuations(self.initial_valuations)
 
     def tearDown(self):
-        from security import security_manager
+        from core.security import security_manager
         security_manager.fernet = None
         
         db.session.remove()
@@ -66,7 +66,7 @@ class TestValuations(unittest.TestCase):
         self.app_context.pop()
         
         # Restore config.write_dir
-        import config
+        from core import config
         config.write_dir = self.original_write_dir
         
         # Remove temp directory

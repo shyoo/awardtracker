@@ -7,8 +7,7 @@ from datetime import datetime, timedelta
 
 from flask import flash, redirect, request, send_file, url_for
 
-import config
-
+from core import config
 RUN_DIR_RE = re.compile(r'^\d{8}_\d{6}-\d+-')       # YYYYMMDD_HHMMSS-<account>-<provider>
 LOG_LINE_TS_RE = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
 

@@ -4,7 +4,7 @@ import hashlib
 import sqlite3
 import shutil
 from datetime import datetime
-from config import write_dir, get_active_db_path
+from core.config import write_dir, get_active_db_path
 
 def validate_db_file(file_path: str) -> tuple[bool, str]:
     """
@@ -119,7 +119,7 @@ def check_db_conflict(db_path: str = None) -> dict:
     the last recorded fingerprint in the .meta file.
     Only active when using a custom database location (e.g. cloud sync folder).
     """
-    from config import get_active_db_path, write_dir
+    from core.config import get_active_db_path, write_dir
     if not db_path:
         db_path = get_active_db_path()
 

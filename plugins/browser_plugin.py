@@ -40,7 +40,7 @@ from .session import (RESTORE_LAST_SESSION_ARG, ResultCache, clear_profile_sessi
 def log(message: str, level: str = "INFO") -> None:
     """Route plugin progress messages through the run-aware debug logger."""
     try:
-        import debug_logger
+        from core import debug_logger
         debug_logger.log_action(message, level=level)
     except Exception:
         pass

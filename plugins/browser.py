@@ -336,7 +336,7 @@ def _apply_selenium_patches():
             def make_wrapper(m_name, orig_method):
                 def wrapper(self, *args, **kwargs):
                     try:
-                        import debug_logger
+                        from core import debug_logger
                     except ImportError:
                         return orig_method(self, *args, **kwargs)
 
@@ -432,7 +432,7 @@ def snapshot_failed_run(sb) -> None:
     if not getattr(sb, "_has_failure", False):
         return
     try:
-        import debug_logger
+        from core import debug_logger
         account_id = getattr(debug_logger._log_context, "account_id", None)
         # A cancelled run's browser is already being killed; touching it could
         # make uc mode reconnect and relaunch Chrome.
@@ -465,7 +465,7 @@ def _apply_sb_context_patch():
     if getattr(sys, 'frozen', False):
         try:
             import os
-            from config import write_dir
+            from core.config import write_dir
             from seleniumbase.fixtures import constants
             
             # Re-route standard downloads/archives folder constants to absolute writeable paths
