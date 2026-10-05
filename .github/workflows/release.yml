@@ -113,7 +113,7 @@ jobs:
         shell: pwsh
         env:
           AT_RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
-        run: ./release-win.ps1
+        run: ./scripts/release-win.ps1
 
       - uses: actions/upload-artifact@v4
         with:
@@ -201,8 +201,8 @@ jobs:
             echo "$AC_API_KEY_P8" | base64 --decode > "$AT_NOTARY_KEY_PATH"
           fi
           chmod 600 "$AT_NOTARY_KEY_PATH"
-          chmod +x release-macos.sh build-macos.sh
-          ./release-macos.sh --codesign
+          chmod +x scripts/release-macos.sh scripts/build-macos.sh
+          ./scripts/release-macos.sh --codesign
 
       - name: Clean up keychain
         if: always()

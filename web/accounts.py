@@ -5,12 +5,12 @@ from datetime import datetime
 
 from flask import flash, redirect, render_template, request, url_for
 
-from applog import app_log
-from expiration import annotate_account_expiration, annotate_certificate_expiration
-from extensions import db
-from models import Account, AccountHistory, Certificate, Person, Provider
+from core.applog import app_log
+from services.expiration import annotate_account_expiration, annotate_certificate_expiration
+from core.extensions import db
+from core.models import Account, AccountHistory, Certificate, Person, Provider
 from plugins.manager import plugin_manager
-from security import security_manager
+from core.security import security_manager
 from services.settings_store import get_advisory_threshold_days, get_warning_threshold_days
 from services.sync_service import profile_dir_for
 from web.helpers import (CATEGORY_ORDER, get_account_cpp_and_value, load_valuations, manual_plugin_ids,

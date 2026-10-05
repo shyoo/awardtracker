@@ -7,8 +7,8 @@ from datetime import datetime
 
 from flask import flash, jsonify, redirect, request, send_file, url_for
 
-import config
-from extensions import db
+from core import config
+from core.extensions import db
 
 
 def _sqlite_uri(path):
@@ -32,7 +32,7 @@ def _update_settings_json(mutate):
 
 def _switch_database(app, target_db_path):
     """Point the running app at another SQLite file and refresh its lock fingerprint."""
-    from db_manager import update_db_meta
+    from services.db_manager import update_db_meta
     db.engine.dispose()
     app.config['SQLALCHEMY_DATABASE_URI'] = _sqlite_uri(target_db_path)
     update_db_meta(target_db_path)
@@ -52,7 +52,7 @@ def register(app):
 
     @app.route('/settings/db/import', methods=['POST'])
     def import_database():
-        from db_manager import validate_db_file, create_emergency_backup, update_db_meta
+        from services.db_manager import validate_db_file, create_emergency_backup, update_db_meta
 
         file = request.files.get('db_file')
         if not file or file.filename == '':
@@ -87,7 +87,7 @@ def register(app):
 
     @app.route('/settings/db/change-location', methods=['POST'])
     def change_db_location():
-        from db_manager import validate_db_file
+        from services.db_manager import validate_db_file
 
         new_location = request.form.get('new_db_location', '').strip()
         copy_existing = request.form.get('copy_existing') == 'on'
@@ -143,12 +143,12 @@ def register(app):
 
     @app.route('/api/db/check-conflict')
     def api_check_db_conflict():
-        from db_manager import check_db_conflict
+        from services.db_manager import check_db_conflict
         return jsonify(check_db_conflict())
 
     @app.route('/api/db/resolve-conflict', methods=['POST'])
     def api_resolve_db_conflict():
-        from db_manager import update_db_meta, create_emergency_backup, smart_merge_databases
+        from services.db_manager import update_db_meta, create_emergency_backup, smart_merge_databases
 
         data = request.get_json(silent=True) or request.form
         action = data.get('action')
@@ -177,7 +177,7 @@ def register(app):
 
     @app.route('/api/db/browse-folder', methods=['POST'])
     def api_browse_db_folder():
-        from db_manager import open_native_folder_picker
+        from services.db_manager import open_native_folder_picker
         folder_path = open_native_folder_picker()
         if folder_path:
             return jsonify({'status': 'success', 'path': folder_path})

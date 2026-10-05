@@ -9,9 +9,9 @@ import sys
 
 from flask import Flask
 
-from applog import app_log
-from config import Config
-from extensions import db, migrate
+from core.applog import app_log
+from core.config import Config
+from core.extensions import db, migrate
 
 # Re-exported for callers (tests, older scripts) that import these from app.
 from web.helpers import (DEFAULT_STANDARD_VALUATIONS, format_time_remaining,  # noqa: F401
@@ -37,7 +37,7 @@ def create_app(config_class=Config):
     @app.teardown_request
     def teardown_request_log_context(exception=None):
         try:
-            import debug_logger
+            from core import debug_logger
             debug_logger.clear_run_context()
         except Exception:
             pass
@@ -45,7 +45,7 @@ def create_app(config_class=Config):
     from web import register_all
     register_all(app)
 
-    from bootstrap import prepare_database
+    from core.bootstrap import prepare_database
     prepare_database(app)
 
     return app
@@ -57,8 +57,8 @@ if __name__ == '__main__':
     import time
     import webbrowser
 
-    from bootstrap import heal_zero_balance_expirations, register_providers
-    from scheduler import scheduler
+    from core.bootstrap import heal_zero_balance_expirations, register_providers
+    from services.scheduler import scheduler
 
     def find_free_port():
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -92,7 +92,7 @@ if __name__ == '__main__':
 
         # Run startup backup check and start scheduler in the worker process only
         if not app.debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
-            from scheduler import check_startup_backup
+            from services.scheduler import check_startup_backup
             threading.Thread(target=check_startup_backup, daemon=True).start()
             scheduler.start()
             app_log.info("Background scheduler and startup backup check started in Flask worker process.")

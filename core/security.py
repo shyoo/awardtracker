@@ -3,8 +3,8 @@ import base64
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
-from models import Settings
-from extensions import db
+from core.models import Settings
+from core.extensions import db
 
 class SecurityManager:
     def __init__(self):

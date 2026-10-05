@@ -14,9 +14,9 @@ from unittest.mock import patch
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
-from extensions import db
-from models import Provider, Person, Account, Settings, Certificate
-from security import security_manager
+from core.extensions import db
+from core.models import Provider, Person, Account, Settings, Certificate
+from core.security import security_manager
 
 
 class TestConfig:
@@ -88,29 +88,29 @@ class TestSyncService(unittest.TestCase):
     def test_api_sync_persists_membership_number_and_certificates(self):
         """The dashboard's JSON endpoint used to drop member_number entirely."""
         with patch('plugins.base.safe_call_plugin_method', return_value=self._scraped()), \
-             patch('notifier.send_desktop_notification'):
+             patch('services.notifier.send_desktop_notification'):
             res = self.client.post(f'/api/accounts/{self.account.id}/sync')
         self.assertEqual(res.get_json()['status'], 'success')
         self._assert_fully_persisted(self.account)
 
     def test_form_sync_persists_identically(self):
         with patch('plugins.base.safe_call_plugin_method', return_value=self._scraped()), \
-             patch('notifier.send_desktop_notification'):
+             patch('services.notifier.send_desktop_notification'):
             res = self.client.post(f'/accounts/{self.account.id}/sync')
         self.assertEqual(res.status_code, 302)
         self._assert_fully_persisted(self.account)
 
     def test_scheduled_sync_persists_identically(self):
-        from scheduler import sync_all_accounts
+        from services.scheduler import sync_all_accounts
         with patch('app.create_app', return_value=self.app), \
              patch('plugins.base.safe_call_plugin_method', return_value=self._scraped()), \
-             patch('notifier.send_desktop_notification'):
+             patch('services.notifier.send_desktop_notification'):
             sync_all_accounts()
         self._assert_fully_persisted(self.account)
 
     def test_interactive_login_persists_identically(self):
         with patch('plugins.base.safe_call_plugin_method', return_value=self._scraped()), \
-             patch('notifier.send_desktop_notification'):
+             patch('services.notifier.send_desktop_notification'):
             res = self.client.post(f'/accounts/{self.account.id}/interactive')
         self.assertEqual(res.status_code, 302)
         self._assert_fully_persisted(self.account)
@@ -122,7 +122,7 @@ class TestSyncService(unittest.TestCase):
         # Hilton: 24 months of inactivity -> expiring in ~10 days
         old_activity = datetime.utcnow() - timedelta(days=24 * 30 - 10)
         with patch('plugins.base.safe_call_plugin_method', return_value=self._scraped(last_activity_date=old_activity)), \
-             patch('notifier.send_desktop_notification') as notify:
+             patch('services.notifier.send_desktop_notification') as notify:
             self.client.post(f'/api/accounts/{self.account.id}/sync')
         titles = [c.args[0] for c in notify.call_args_list]
         self.assertTrue(any(t.startswith('Points Expiring Soon') for t in titles), titles)
@@ -134,7 +134,7 @@ class TestSyncService(unittest.TestCase):
         from services import sync_service
         with patch('plugins.base.safe_call_plugin_method', return_value=self._scraped()), \
              patch('services.sync_service._replace_scraped_certificates', side_effect=RuntimeError("boom")), \
-             patch('notifier.send_desktop_notification'):
+             patch('services.notifier.send_desktop_notification'):
             outcome = sync_service.sync_account(self.account)
         self.assertFalse(outcome.ok)
         db.session.refresh(self.account)

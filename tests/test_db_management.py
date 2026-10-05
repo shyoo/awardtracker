@@ -12,10 +12,10 @@ from io import BytesIO
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
-from extensions import db
-from models import Person, Provider, Account, Settings
-import config
-from db_manager import (
+from core.extensions import db
+from core.models import Person, Provider, Account, Settings
+from core import config
+from services.db_manager import (
     validate_db_file,
     get_db_fingerprint,
     update_db_meta,
@@ -23,7 +23,7 @@ from db_manager import (
     create_emergency_backup,
     smart_merge_databases
 )
-from security import security_manager
+from core.security import security_manager
 
 class TestDBManagement(unittest.TestCase):
     def setUp(self):
@@ -33,7 +33,7 @@ class TestDBManagement(unittest.TestCase):
         self.write_dir_patcher = patch.object(config, 'write_dir', self.temp_dir)
         self.write_dir_patcher.start()
 
-        self.db_mgr_write_dir_patcher = patch('db_manager.write_dir', self.temp_dir)
+        self.db_mgr_write_dir_patcher = patch('services.db_manager.write_dir', self.temp_dir)
         self.db_mgr_write_dir_patcher.start()
 
         self.db_path_patcher = patch.object(config, 'get_active_db_path', lambda: self.db_path)
@@ -292,7 +292,7 @@ class TestDBManagement(unittest.TestCase):
         data = json.loads(res.data)
         self.assertEqual(data["status"], "success")
 
-    @patch('db_manager.open_native_folder_picker', return_value='/mock/selected/path')
+    @patch('services.db_manager.open_native_folder_picker', return_value='/mock/selected/path')
     def test_browse_folder_endpoint(self, mock_picker):
         res = self.client.post('/api/db/browse-folder')
         self.assertEqual(res.status_code, 200)

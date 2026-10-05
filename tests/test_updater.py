@@ -7,11 +7,11 @@ basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 if basedir not in sys.path:
     sys.path.insert(0, basedir)
 
-from updater import parse_version
-from config import Config
+from services.updater import parse_version
+from core.config import Config
 from app import create_app
-from extensions import db
-from models import Settings
+from core.extensions import db
+from core.models import Settings
 
 class TestConfig:
     TESTING = True

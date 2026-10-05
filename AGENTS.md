@@ -55,7 +55,15 @@ remove them from the current PR and report any history that still needs cleanup.
 ```
 app.py                 Flask factory (create_app) + dev-server entry point
 main.py                Tray-icon launcher used by the packaged binaries
-bootstrap.py           Schema creation, self-healing migrations, provider registration
+core/
+  config.py            Config, write_dir (user data) and basedir (repo or bundle root)
+  versioning.py        App version from AT_RELEASE_VERSION, git describe, or version.txt
+  extensions.py        Flask-SQLAlchemy db + Flask-Migrate instances
+  models.py            SQLAlchemy models
+  security.py          Master-password key derivation + Fernet encryption
+  applog.py            Application-wide rotating log (app_log)
+  debug_logger.py      Debug-mode run folders, step logs, snapshots, privacy masking
+  bootstrap.py         Schema creation, self-healing migrations, provider registration
 web/                   HTTP layer: one module per area, each with register(app)
   dashboard.py, accounts.py, sync.py, settings.py, db_admin.py,
   diagnostics.py, certificates.py, auth.py, template_context.py, helpers.py
@@ -63,8 +71,13 @@ services/
   sync_service.py      THE sync path: run_plugin -> persist_result, used by the
                        Sync Now form + JSON API, Interactive Login, scheduler, tray
   settings_store.py    Typed access to the key/value Settings table
-scheduler.py           APScheduler jobs (sync-all, daily backup)
-expiration.py          Expiry calculation + expired/critical/warning/safe/at_risk classification
+  scheduler.py         APScheduler jobs (sync-all, daily backup)
+  expiration.py        Expiry calculation + expired/critical/warning/safe/at_risk classification
+  notifier.py          Native desktop notifications
+  updater.py           GitHub release check, download and self-update
+  db_manager.py        Database validation, conflict checks, emergency backup, merge-import
+scripts/               Build, release, run and test scripts (they cd to the repo root)
+packaging/             PyInstaller spec, Inno Setup installer script, app icon
 plugins/
   base.py              ProviderPlugin contract, safe_call_plugin_method runner, re-exports
   browser_plugin.py    BrowserPlugin template: shared fetch_data / interactive_login flows

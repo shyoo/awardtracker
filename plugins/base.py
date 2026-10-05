@@ -69,7 +69,7 @@ def safe_call_plugin_method(method, *args, **kwargs):
 
     # Initialize debug log context if metadata is provided
     try:
-        import debug_logger
+        from core import debug_logger
         if account_id and provider_name:
             username = args[0] if len(args) > 0 else ""
             password = args[1] if len(args) > 1 else ""
@@ -111,7 +111,7 @@ def safe_call_plugin_method(method, *args, **kwargs):
         try:
             res = method(*args, **filtered_kwargs)
             try:
-                import debug_logger
+                from core import debug_logger
                 if isinstance(res, dict) and 'balance' in res:
                     debug_logger.update_balance_in_context(res['balance'])
                     debug_logger.log_action(f"Finished sync run successfully. Balance: {res['balance']}")
@@ -127,7 +127,7 @@ def safe_call_plugin_method(method, *args, **kwargs):
                     "Please terminate any orphaned Chrome processes in your Task Manager/Activity Monitor, or restart your computer."
                 )
             try:
-                import debug_logger
+                from core import debug_logger
                 debug_logger.log_action(f"Sync run failed with exception: {e}", level="ERROR")
             except Exception:
                 pass

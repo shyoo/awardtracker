@@ -11,10 +11,10 @@ from unittest.mock import MagicMock, patch
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
-from extensions import db
-from models import Provider, Person, Account
+from core.extensions import db
+from core.models import Provider, Person, Account
 from plugins.manager import plugin_manager
-from security import security_manager
+from core.security import security_manager
 
 
 class TestConfig:
@@ -53,7 +53,7 @@ class TestMembershipIdPersistence(unittest.TestCase):
 
     def _sync(self, membership_id):
         with patch('plugins.base.safe_call_plugin_method', return_value={'balance': 1, 'membership_id': membership_id}), \
-             patch('notifier.send_desktop_notification'):
+             patch('services.notifier.send_desktop_notification'):
             self.assertEqual(self.client.post(f'/api/accounts/{self.account.id}/sync').get_json()['status'], 'success')
         db.session.refresh(self.account)
 

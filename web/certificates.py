@@ -1,8 +1,8 @@
 """User-managed certificates/vouchers and manual edits to the balance history."""
 from flask import flash, redirect, request, url_for
 
-from extensions import db
-from models import Account, AccountHistory, Certificate
+from core.extensions import db
+from core.models import Account, AccountHistory, Certificate
 from web.helpers import parse_date_field, parse_int_field
 
 

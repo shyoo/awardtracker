@@ -2,8 +2,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
 
-from applog import app_log
-from config import write_dir, get_active_db_path
+from core.applog import app_log
+from core.config import write_dir, get_active_db_path
 from services.settings_store import get_setting, set_setting as _set_setting
 
 
@@ -25,9 +25,9 @@ def sync_all_accounts(is_scheduled=True):
 
     # Imported here to avoid a circular import at module load.
     from app import create_app
-    from extensions import db
-    from models import Account
-    from security import security_manager
+    from core.extensions import db
+    from core.models import Account
+    from core.security import security_manager
     from plugins.context import RunTrigger
     from services import sync_service
 
@@ -74,7 +74,7 @@ def sync_all_accounts(is_scheduled=True):
             enabled = get_setting('scheduled_sync_enabled', 'false')
             frequency = get_setting('scheduled_sync_frequency', 'never')
             if is_scheduled and enabled == 'true' and frequency != 'never':
-                from notifier import send_desktop_notification
+                from services.notifier import send_desktop_notification
                 send_desktop_notification("Scheduled Sync Completed", "Automated background synchronization finished successfully!")
         elif status == 'idle':
             set_setting(db, 'scheduled_sync_current_account', 'Canceled')
@@ -165,7 +165,7 @@ def check_scheduled_sync():
     based on user settings, frequency and snooze state.
     """
     from app import create_app
-    from extensions import db
+    from core.extensions import db
     import threading
 
     app = create_app()
@@ -207,8 +207,8 @@ def check_scheduled_sync():
 def run_sync_all_in_background():
     """Record the run time, notify, and execute sync-all in the calling (daemon) thread."""
     from app import create_app
-    from extensions import db
-    from notifier import send_desktop_notification
+    from core.extensions import db
+    from services.notifier import send_desktop_notification
 
     app = create_app()
     with app.app_context():

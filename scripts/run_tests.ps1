@@ -1,5 +1,8 @@
 # Award Tracker - Premium Test Runner Script
-# Usage: .\run_tests.ps1
+# Usage: .\scripts\run_tests.ps1
+
+# Run from the repository root so relative paths (venv, dist, packaging) resolve.
+Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
 
 Clear-Host
 Write-Host "==================================================" -ForegroundColor Cyan

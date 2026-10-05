@@ -1,7 +1,9 @@
 ; Award Tracker - Premium Setup Script
 ; For compiling with Inno Setup Compiler (ISCC)
+; Relative paths resolve against this file's folder (packaging/), so repository
+; files are reached through "..".
 
-#define FileHandle FileOpen(SourcePath + "\version.txt")
+#define FileHandle FileOpen(SourcePath + "\..\version.txt")
 #define AppVersion FileRead(FileHandle)
 #expr FileClose(FileHandle)
 
@@ -15,7 +17,7 @@ DirExistsWarning=no
 DefaultGroupName=Award Tracker
 DisableProgramGroupPage=yes
 DisableDirPage=no
-OutputDir=dist
+OutputDir=..\dist
 OutputBaseFilename=awardtracker-win64-setup
 SetupIconFile=awardtracker.ico
 Compression=lzma
@@ -40,9 +42,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "dist\awardtracker.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
-Source: "NOTICE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\awardtracker.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\NOTICE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Award Tracker"; Filename: "{app}\awardtracker.exe"

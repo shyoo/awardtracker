@@ -55,7 +55,7 @@ def resolve_version(
             raise ValueError(f"AT_RELEASE_VERSION is not SemVer: {supplied!r}")
         return supplied
 
-    checkout = Path(repo_dir or Path(__file__).resolve().parent)
+    checkout = Path(repo_dir or Path(__file__).resolve().parent.parent)
     try:
         output = subprocess.run(
             ["git", "describe", "--tags", "--match", "v*", "--long", "--dirty"],

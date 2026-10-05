@@ -2,7 +2,7 @@
 import os
 from datetime import datetime
 
-from expiration import get_program_rule_description, get_never_expires_reason
+from services.expiration import get_program_rule_description, get_never_expires_reason
 from plugins.manager import plugin_manager
 from services.settings_store import get_setting
 from web.helpers import format_time_remaining, get_category_icon, load_settings
@@ -68,7 +68,7 @@ def _available_update(current_version, respect_dismissed):
     dismissed = get_setting('update_dismissed_version', '').lstrip('v').strip()
     if respect_dismissed and dismissed == latest:
         return None
-    from updater import is_newer_version
+    from services.updater import is_newer_version
     if is_newer_version(latest, current_version):
         return {'version': latest, 'url': get_setting('latest_release_url', '') or RELEASES_URL}
     return None

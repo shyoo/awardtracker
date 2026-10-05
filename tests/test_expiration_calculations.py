@@ -6,7 +6,7 @@ import sys
 # Ensure project root is in the python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from expiration import calculate_expiration, get_program_rule_description, add_months
+from services.expiration import calculate_expiration, get_program_rule_description, add_months
 
 class TestExpirationCalculations(unittest.TestCase):
     def test_add_months_basic(self):

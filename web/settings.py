@@ -3,8 +3,8 @@ import os
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 
-import config
-from models import Account, Provider
+from core import config
+from core.models import Account, Provider
 from plugins.manager import plugin_manager
 from services.settings_store import get_setting, get_settings, set_setting, set_settings
 from web.autostart import set_app_autostart
@@ -152,7 +152,7 @@ def register(app):
             flash('Settings saved successfully.')
             return redirect(url_for('settings'))
 
-        from updater import check_for_updates_bg
+        from services.updater import check_for_updates_bg
         check_for_updates_bg(app)
 
         settings_data = get_settings(SETTINGS_DEFAULTS)
@@ -160,7 +160,7 @@ def register(app):
         settings_data['advisory_threshold'] = int(settings_data['advisory_threshold'])
         standard_valuations, custom_valuations = _valuations_for_display()
 
-        from db_manager import check_db_conflict
+        from services.db_manager import check_db_conflict
         active_db_path = config.get_active_db_path()
         default_db_path = os.path.abspath(os.path.join(config.write_dir, 'awardtracker.db'))
 
@@ -189,7 +189,7 @@ def register(app):
 
     @app.route('/api/updater/check', methods=['POST'])
     def api_updater_check():
-        from updater import perform_update_check
+        from services.updater import perform_update_check
         result = perform_update_check(app, force=True)
         current_ver = app.config.get('APP_VERSION', '1.0.0')
         if result.get('error'):
@@ -209,21 +209,21 @@ def register(app):
 
     @app.route('/api/updater/status', methods=['GET'])
     def api_updater_status():
-        from updater import auto_updater
+        from services.updater import auto_updater
         return jsonify(auto_updater.get_status())
 
     @app.route('/api/updater/start', methods=['POST'])
     def api_updater_start():
-        from updater import auto_updater
+        from services.updater import auto_updater
         return jsonify(auto_updater.start_download(app))
 
     @app.route('/api/updater/cancel', methods=['POST'])
     def api_updater_cancel():
-        from updater import auto_updater
+        from services.updater import auto_updater
         auto_updater.cancel_download()
         return jsonify(auto_updater.get_status())
 
     @app.route('/api/updater/apply', methods=['POST'])
     def api_updater_apply():
-        from updater import auto_updater
+        from services.updater import auto_updater
         return jsonify(auto_updater.apply_update_and_restart(app))

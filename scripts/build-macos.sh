@@ -1,6 +1,9 @@
 #!/bin/bash
 # Award Tracker - executable builder for macOS/Linux
 
+# Run from the repository root so relative paths (venv, dist, packaging) resolve.
+cd "$(dirname "$0")/.." || exit 1
+
 # Colors for terminal
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -12,7 +15,7 @@ echo -e "${CYAN}==================================================${NC}"
 echo -e "${CYAN}      Award Tracker Executable Builder            ${NC}"
 echo -e "${CYAN}==================================================${NC}"
 
-SPEC_FILE="awardtracker.spec"
+SPEC_FILE="packaging/awardtracker.spec"
 
 # Detect virtual environment
 VENV_DIR="venv"
@@ -33,11 +36,11 @@ if ! command -v pyinstaller &> /dev/null; then
     exit 1
 fi
 
-# Generate awardtracker.icns from static/favicon.png (macOS only, requires sips + iconutil)
+# Generate packaging/awardtracker.icns from static/favicon.png (macOS only, requires sips + iconutil)
 if [ "$(uname)" == "Darwin" ]; then
     SOURCE_PNG="static/favicon.png"
-    ICONSET_DIR="awardtracker.iconset"
-    ICNS_FILE="awardtracker.icns"
+    ICONSET_DIR="packaging/awardtracker.iconset"
+    ICNS_FILE="packaging/awardtracker.icns"
 
     if [ ! -f "$SOURCE_PNG" ]; then
         echo -e "${RED}Error: Source icon not found at $SOURCE_PNG${NC}"

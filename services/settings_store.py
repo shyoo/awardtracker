@@ -5,8 +5,8 @@ plus its own default and int/bool coercion; keep that in one place.
 """
 from typing import Any, Dict
 
-from extensions import db
-from models import Settings
+from core.extensions import db
+from core.models import Settings
 
 
 def get_setting(key: str, default: str = '') -> str:

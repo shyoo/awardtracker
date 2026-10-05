@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
-from extensions import db
-from models import Provider, Person, Account, Settings, Certificate
+from core.extensions import db
+from core.models import Provider, Person, Account, Settings, Certificate
 
 class TestConfig:
     TESTING = True
@@ -37,11 +37,11 @@ class TestAlertThresholds(unittest.TestCase):
         db.session.add(Settings(key="advisory_threshold", value="90"))
         db.session.commit()
 
-        from security import security_manager
+        from core.security import security_manager
         security_manager.initialize_with_password("test-password")
 
     def tearDown(self):
-        from security import security_manager
+        from core.security import security_manager
         security_manager.fernet = None
         
         db.session.remove()
@@ -294,7 +294,7 @@ class TestAlertThresholds(unittest.TestCase):
         self.assertIn('Expires: ' + cert_b.expiration_date.strftime('%Y-%m-%d'), html_detail)
 
     def test_account_detail_history_deltas(self):
-        from models import AccountHistory
+        from core.models import AccountHistory
         
         acc = Account(
             provider_id=self.provider_manual.id,
@@ -332,7 +332,7 @@ class TestAlertThresholds(unittest.TestCase):
         self.assertIn('Initial', html)
 
     def test_delete_history_entry_updates_account_balance(self):
-        from models import AccountHistory
+        from core.models import AccountHistory
         
         acc = Account(
             provider_id=self.provider_manual.id,
@@ -373,7 +373,7 @@ class TestAlertThresholds(unittest.TestCase):
         self.assertEqual(acc.balance, 0)
 
     def test_edit_history_entry_updates_account_balance(self):
-        from models import AccountHistory
+        from core.models import AccountHistory
         
         acc = Account(
             provider_id=self.provider_manual.id,
@@ -406,7 +406,7 @@ class TestAlertThresholds(unittest.TestCase):
         self.assertEqual(h2.timestamp, datetime(2026, 1, 2, 12, 0))
 
     def test_edit_middle_history_entry_does_not_affect_latest_balance(self):
-        from models import AccountHistory
+        from core.models import AccountHistory
         
         acc = Account(
             provider_id=self.provider_manual.id,
@@ -438,7 +438,7 @@ class TestAlertThresholds(unittest.TestCase):
         self.assertEqual(h1.balance, 120)
 
     def test_manual_accounts_excluded_from_sync_all_list(self):
-        from security import security_manager
+        from core.security import security_manager
         provider_auto = Provider(name="United Airlines", plugin_name="united", enabled=True)
         db.session.add(provider_auto)
         db.session.commit()

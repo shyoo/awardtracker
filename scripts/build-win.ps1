@@ -1,18 +1,21 @@
 # Award Tracker - Premium Build Script
-# Usage: .\build-win.ps1
+# Usage: .\scripts\build-win.ps1
+
+# Run from the repository root so relative paths (venv, dist, packaging) resolve.
+Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
 
 Clear-Host
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "      Award Tracker Executable Builder            " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 
-$SpecFile = "awardtracker.spec"
+$SpecFile = "packaging\awardtracker.spec"
 $VenvPath = "venv\Scripts\Activate.ps1"
 $ExePath = "dist\awardtracker.exe"
 
 # 1. Verify Spec file
 if (-not (Test-Path $SpecFile)) {
-    Write-Error "Specification file '$SpecFile' not found in current directory."
+    Write-Error "Specification file '$SpecFile' not found."
     Exit 1
 }
 

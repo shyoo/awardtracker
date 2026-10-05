@@ -6,9 +6,9 @@ the real entry points (main.py tray launcher, ``python app.py`` dev server).
 """
 from sqlalchemy import text
 
-from applog import app_log
-from extensions import db
-from models import Account, Provider, Settings
+from core.applog import app_log
+from core.extensions import db
+from core.models import Account, Provider, Settings
 from plugins.manager import plugin_manager
 
 

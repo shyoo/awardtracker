@@ -21,7 +21,7 @@ scraper_debug.log
 **/._.DS_Store
 desktop.ini
 
-# macOS build-time generated icon artifacts
+# macOS build-time generated icon artifacts (written to packaging/ by scripts/build-macos.sh)
 awardtracker.icns
 awardtracker.iconset/
 

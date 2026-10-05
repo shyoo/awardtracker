@@ -1,5 +1,8 @@
 # Award Tracker - Premium Release Packaging Script
-# Usage: .\release-win.ps1
+# Usage: .\scripts\release-win.ps1
+
+# Run from the repository root so relative paths (venv, dist, packaging) resolve.
+Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
 
 # Clear-Host throws "The handle is invalid" without a console (GitHub Actions).
 if (-not $env:CI) { Clear-Host }
@@ -8,8 +11,8 @@ Write-Host "      Award Tracker Release Builder Tool          " -ForegroundColor
 Write-Host "==================================================" -ForegroundColor Cyan
 
 $VenvPath = "venv\Scripts\Activate.ps1"
-$SpecFile = "awardtracker.spec"
-$IssFile = "installer.iss"
+$SpecFile = "packaging\awardtracker.spec"
+$IssFile = "packaging\installer.iss"
 $DistDir = "dist"
 
 $VersionSuffix = ""
@@ -40,8 +43,8 @@ if (Test-Path $VenvPath) {
 
 # 2. Run compilation build script
 Write-Host "Step 1: Compiling standalone binary..." -ForegroundColor Yellow
-if (Test-Path "build-win.ps1") {
-    powershell -ExecutionPolicy Bypass -File build-win.ps1
+if (Test-Path "scripts\build-win.ps1") {
+    powershell -ExecutionPolicy Bypass -File scripts\build-win.ps1
 } else {
     Write-Host "Running PyInstaller manually..." -ForegroundColor Gray
     if (Test-Path "build") { Remove-Item -Recurse -Force "build" }

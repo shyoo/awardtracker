@@ -8,9 +8,9 @@ from unittest.mock import patch
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
-from extensions import db
-from models import Provider, Person, Account, Settings, Certificate
-from security import security_manager
+from core.extensions import db
+from core.models import Provider, Person, Account, Settings, Certificate
+from core.security import security_manager
 
 class TestConfig:
     TESTING = True
@@ -48,7 +48,7 @@ class TestCustomExpirationAndCertificates(unittest.TestCase):
         security_manager.fernet = None
         
         try:
-            import debug_logger
+            from core import debug_logger
             debug_logger.clear_run_context()
         except Exception:
             pass
@@ -238,7 +238,7 @@ class TestCustomExpirationAndCertificates(unittest.TestCase):
         # Every sync path goes through services.sync_service, which calls the
         # plugin via plugins.base.safe_call_plugin_method -- one patch target.
         with patch('plugins.base.safe_call_plugin_method') as mock_safe_call, \
-             patch('notifier.send_desktop_notification') as mock_notify:
+             patch('services.notifier.send_desktop_notification') as mock_notify:
             
             mock_data = {
                 'balance': 25000,

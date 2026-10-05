@@ -13,9 +13,9 @@ import json
 import ssl
 import re
 from typing import Optional, Dict, Any, Tuple
-from models import Settings
-from extensions import db
-from config import Config
+from core.models import Settings
+from core.extensions import db
+from core.config import Config
 
 
 RELEASES_PAGE_URL = "https://github.com/shyoo/awardtracker/releases"
@@ -256,7 +256,7 @@ def get_update_log_path() -> str:
     The app is already gone by the time the installer runs, so this file is the
     only account of an update that failed after the hand-off.
     """
-    from config import write_dir
+    from core.config import write_dir
     log_dir = os.path.join(write_dir, "logs")
     try:
         os.makedirs(log_dir, exist_ok=True)
@@ -464,7 +464,7 @@ class AutoUpdateManager:
         def _clean_exit():
             time.sleep(1.0)
             try:
-                from scheduler import scheduler
+                from services.scheduler import scheduler
                 if scheduler.running:
                     scheduler.shutdown(wait=False)
             except Exception:

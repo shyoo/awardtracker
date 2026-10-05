@@ -11,8 +11,8 @@ builds every downloadable file in GitHub Actions.
 | `/release rc` | Creates and pushes an annotated `vX.Y.Z-rc.N` tag on `origin/main` | Tests, builds, signs, notarizes, and publishes a prerelease |
 | `/release promote` | Creates `vX.Y.Z` on the verified RC commit | Rebuilds that commit and publishes it as the latest release |
 
-No release command builds or uploads files locally. `release-win.ps1` and
-`release-macos.sh` remain available for development, but shipped assets always
+No release command builds or uploads files locally. `scripts/release-win.ps1` and
+`scripts/release-macos.sh` remain available for development, but shipped assets always
 come from `.github/workflows/release.yml`.
 
 The tag is the version and its annotated message is the release notes. Cutting
@@ -81,7 +81,7 @@ Actions**:
 | `AC_API_ISSUER_ID` | App Store Connect API issuer ID |
 | `AC_API_KEY_P8` | The API key's `.p8` contents (PEM text or base64) |
 
-`release-macos.sh` also accepts Apple ID notarization through
+`scripts/release-macos.sh` also accepts Apple ID notarization through
 `AT_NOTARY_APPLE_ID`, `AT_NOTARY_TEAM_ID` and `AT_NOTARY_PASSWORD` when the
 API-key variables are unset.
 
@@ -94,17 +94,17 @@ automatic `GITHUB_TOKEN` and need no extra secret.
 Local architecture builds still work:
 
 ```powershell
-./release-win.ps1
+./scripts/release-win.ps1
 ```
 
 ```bash
-./release-macos.sh --codesign
+./scripts/release-macos.sh --codesign
 ```
 
 The optional Universal 2 path is retained for local experiments:
 
 ```bash
-./release-macos.sh --universal --codesign
+./scripts/release-macos.sh --universal --codesign
 ```
 
 It is not used for GitHub releases; separate native Intel and Apple Silicon
