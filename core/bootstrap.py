@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from core.applog import app_log
 from core.extensions import db
-from core.models import Account, Provider, Settings
+from core.models import Account, ChatMessage, Conversation, Provider, Settings
 from plugins.manager import plugin_manager
 
 

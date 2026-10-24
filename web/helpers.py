@@ -90,7 +90,7 @@ def get_account_cpp_and_value(account, valuations):
     return cpp, value_usd
 
 
-def format_time_remaining(days):
+def format_time_remaining(days, today=None):
     if days is None:
         return ""
     if days < 0:
@@ -102,7 +102,7 @@ def format_time_remaining(days):
     try:
         from dateutil.relativedelta import relativedelta
         from datetime import date as _date
-        today = _date.today()
+        today = today or _date.today()
         future = today + relativedelta(days=days)
         delta = relativedelta(future, today)
         parts = []

@@ -1,0 +1,1141 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto py-4">
+  <!-- Top Title Bar -->
+  <div class="sm:flex sm:items-center sm:justify-between mb-4">
+    <div>
+      <h1 class="text-2xl font-bold leading-7 text-slate-900 flex items-center gap-2">
+        <span>🤖</span> Ask AI Assistant
+      </h1>
+      <p class="mt-1 text-xs text-slate-500">Ask questions about your loyalty programs, balances, certificates, and upcoming expirations.</p>
+    </div>
+    <div class="mt-3 sm:mt-0 flex items-center gap-2">
+      <button type="button" id="toggle-settings-btn" onclick="toggleSettingsPanel()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-sm transition-colors">
+        <svg class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <span id="settings-btn-label">Settings</span>
+      </button>
+      <a href="{{ url_for('index') }}" class="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50">Back to Dashboard</a>
+    </div>
+  </div>
+
+  <!-- Collapsible Settings Panel -->
+  <div id="settings-panel" class="hidden mb-6 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+    <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+      <div>
+        <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <span>⚙️</span> Assistant Configuration
+        </h2>
+        <p class="text-xs text-slate-500 mt-0.5">Configure your AI provider, API credentials, and privacy options.</p>
+      </div>
+      <button type="button" onclick="toggleSettingsPanel()" class="text-slate-400 hover:text-slate-600 text-sm font-semibold">✕ Close</button>
+    </div>
+
+    <form id="assistant-settings-form" onsubmit="saveAssistantSettings(event)" class="mt-4 space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Provider -->
+        <div>
+          <label for="setting-provider" class="block text-xs font-semibold text-slate-700">Provider to configure</label>
+          <select id="setting-provider" onchange="onProviderChange()" class="mt-1.5 block w-full rounded-lg border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 shadow-sm border focus:ring-2 focus:ring-primary focus:border-transparent">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="openai_compatible">OpenAI-Compatible (Ollama, LM Studio, etc.)</option>
+          </select>
+        </div>
+
+        <!-- Model -->
+        <div>
+          <div class="flex items-center justify-between">
+            <label for="setting-model" class="block text-xs font-semibold text-slate-700">Model</label>
+            <button type="button" id="btn-load-models" onclick="loadModelsForProvider()" class="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1">
+              <span>↻ Load models</span>
+            </button>
+          </div>
+          <div class="mt-1.5 flex gap-2">
+            <input type="text" id="setting-model" list="models-datalist" placeholder="e.g. gpt-5.5" class="block flex-1 rounded-lg border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 shadow-sm border focus:ring-2 focus:ring-primary focus:border-transparent">
+            <datalist id="models-datalist"></datalist>
+          </div>
+        </div>
+
+        <!-- API Key -->
+        <div>
+          <div class="flex items-center justify-between">
+            <label for="setting-api-key" class="block text-xs font-semibold text-slate-700">API Key</label>
+            <span id="key-saved-badge" class="hidden inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Key saved
+            </span>
+          </div>
+          <div class="mt-1.5 flex gap-2">
+            <input type="password" id="setting-api-key" placeholder="Enter API key..." autocomplete="off" class="block flex-1 rounded-lg border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900 shadow-sm border focus:ring-2 focus:ring-primary focus:border-transparent">
+            <button type="button" id="btn-clear-key" onclick="clearApiKey()" class="px-2.5 py-2 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors">
+              Clear key
+            </button>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-400">Leave blank to retain existing key. Keys are encrypted with your master password.</p>
+        </div>
+
+        <!-- Base URL -->
+        <div id="base-url-container">
+          <label for="setting-base-url" class="block text-xs font-semibold text-slate-700">Base URL (OpenAI-compatible)</label>
+          <input type="text" id="setting-base-url" placeholder="http://localhost:11434/v1" class="mt-1.5 block w-full rounded-lg border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 shadow-sm border focus:ring-2 focus:ring-primary focus:border-transparent">
+          <p class="mt-1 text-[11px] text-slate-400">Endpoint URL for local or custom OpenAI-compatible servers.</p>
+        </div>
+      </div>
+
+      <!-- Pseudonymize Toggle & Privacy Note -->
+      <div class="pt-3 border-t border-slate-100 space-y-3">
+        <label class="relative flex items-start gap-3 cursor-pointer">
+          <div class="flex items-center h-5">
+            <input type="checkbox" id="setting-pseudonymize" class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+          </div>
+          <div class="text-xs">
+            <span class="font-semibold text-slate-800">Pseudonymize names before sending</span>
+            <p class="text-slate-500 text-[11px]">Replaces real person names with Person A, Person B, etc., in prompts and tool arguments before sending to the model, and restores them when displaying replies.</p>
+          </div>
+        </label>
+
+        <!-- Privacy Disclosure Banner -->
+        <div class="rounded-xl bg-slate-50 border border-slate-200/80 p-3 text-xs text-slate-600 space-y-1">
+          <p class="font-semibold text-slate-800 flex items-center gap-1.5">
+            <span>🔒</span> Privacy & Data Handling
+          </p>
+          <p class="text-[11px] leading-relaxed">
+            Data sent to providers is limited strictly to read-only portfolio balances, programs, status tiers, certificates, and expiration dates.
+            Usernames, passwords, membership numbers, certificate voucher details, and raw scraper errors are <strong>never</strong> shared.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-2">
+        <span id="settings-status-msg" class="text-xs text-emerald-600 font-semibold hidden"></span>
+        <button type="submit" id="btn-save-settings" class="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 transition-colors">
+          Save Settings
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Main Container: Sidebar + Chat Area -->
+  <!-- Height is set by fitLayout() so the chat reaches the bottom of the window. -->
+  <div id="assistant-layout" class="flex flex-col md:flex-row gap-4 md:gap-0" style="height: 750px">
+    <!-- Left Sidebar: Conversations -->
+    <div class="w-full md:w-72 flex-shrink-0 flex flex-col overflow-hidden md:border-r md:border-slate-200 md:pr-4">
+      <!-- New Chat Button -->
+      <div class="pb-3 flex items-center justify-between">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Conversations</h2>
+        <button type="button" onclick="startNewChat()" class="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 transition-colors">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          New Chat
+        </button>
+      </div>
+
+      <!-- Conversation List -->
+      <div id="conversation-list" class="flex-1 overflow-y-auto space-y-1">
+        <div class="p-4 text-center text-xs text-slate-400">Loading conversations...</div>
+      </div>
+    </div>
+
+    <!-- Right Pane: Active Chat -->
+    <div class="flex-1 min-w-0 flex flex-col overflow-hidden md:pl-4">
+      <!-- Chat Header -->
+      <div class="px-2 pb-3 border-b border-slate-100 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+          <span id="chat-header-title" class="text-xs font-bold text-slate-800 truncate max-w-md">New Conversation</span>
+        </div>
+      </div>
+
+      <!-- Messages Scroll Area -->
+      <div id="chat-messages" class="flex-1 overflow-y-auto px-2 py-5 space-y-4">
+        <!-- Welcome empty state -->
+        <div id="empty-state" class="h-full flex flex-col items-center justify-center text-center p-6 max-w-3xl mx-auto space-y-4">
+          <div class="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-100 text-primary flex items-center justify-center text-2xl shadow-sm">
+            💬
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-800">How can I help you today?</h3>
+            <p class="text-xs text-slate-500 mt-1">Plan a trip with the points you have, or ask about balances, expirations, status and certificates. Click an example to edit it before sending.</p>
+          </div>
+          {% set example_groups = [
+            ('Plan a trip', [
+              ('✈️', 'When is the best time to look for business class award seats for my family from NYC to Seoul (ICN) with my current miles?'),
+              ('🏨', 'I plan to visit Tokyo next week by myself. Please recommend hotels I can stay at with my points, and how many nights they would cover.'),
+              ('🌴', 'We are a family of four planning a beach vacation this winter. Which destination gets us the most out of our combined points?'),
+              ('💺', 'Do I have enough miles for a round-trip business class ticket to Europe? If not, how far short am I and what could close the gap?'),
+            ]),
+            ('Make the most of my points', [
+              ('⏳', 'What points, miles or certificates expire in the next 90 days, and how could I use them before they do?'),
+              ('🎟️', 'I have free night or upgrade certificates. Where could I use them on a long weekend trip?'),
+              ('💰', 'Which of my programs are worth the most right now, and which points should I spend first?'),
+              ('⭐', 'Which accounts hold elite status, and when does each status expire?'),
+            ]),
+          ] %}
+          <div class="w-full grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 text-left">
+            {% for group_title, examples in example_groups %}
+            <div class="space-y-2">
+              <h4 class="text-[11px] font-bold uppercase tracking-wider text-slate-400">{{ group_title }}</h4>
+              {% for icon, prompt in examples %}
+              <button type="button" data-prompt="{{ prompt }}" onclick="fillPrompt(this.dataset.prompt)" class="w-full text-left px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-700 font-medium transition-colors shadow-xs">
+                {{ icon }} {{ prompt }}
+              </button>
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Thinking Indicator -->
+      <div id="thinking-indicator" class="hidden px-6 py-2 bg-slate-50/60 border-t border-slate-100 flex items-center gap-2 text-xs font-semibold text-slate-500">
+        <svg class="animate-spin h-3.5 w-3.5 text-primary" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Assistant is thinking...</span>
+      </div>
+
+      <!-- Pseudonym Legend Notice (shown when free-prompt returns a legend) -->
+      <div id="legend-banner" class="hidden px-6 py-2 bg-amber-50 border-t border-amber-200/80 text-xs text-amber-900 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span>👥</span>
+          <span id="legend-text" class="font-medium"></span>
+        </div>
+        <button type="button" onclick="document.getElementById('legend-banner').classList.add('hidden')" class="text-amber-700 hover:text-amber-900 font-bold ml-2">✕</button>
+      </div>
+
+      <!-- Composer Area -->
+      <!-- px/pb leave room for focus rings: the pane clips overflow. -->
+      <div class="pt-3 px-1 pb-1">
+        <div class="relative">
+          <textarea id="chat-input" rows="3" maxlength="8000"
+                    placeholder="Ask about your points, elite status, expiring miles, or certificates... (Enter to send, Shift+Enter for newline)"
+                    onkeydown="handleInputKeydown(event)"
+                    oninput="updateCharCount()"
+                    class="block w-full rounded-xl border border-slate-200 px-4 py-3 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none shadow-xs"></textarea>
+          <div class="mt-2 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-3 min-w-0">
+              <!-- Agent picker: who answers this message -->
+              <select id="answer-with" onchange="onSelectionChange()" aria-label="Answer with" title="Who answers your question" class="max-w-[16rem] truncate rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus:ring-2 focus:ring-primary focus:border-transparent">
+                <optgroup label="Free: opens in your browser with a snapshot">
+                  <option value="free:chatgpt">ChatGPT (free)</option>
+                  <option value="free:claude">Claude (free)</option>
+                  <option value="free:gemini">Gemini (free, paste the prompt)</option>
+                </optgroup>
+                <optgroup label="Your API key: answers here, looks up your data">
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic (Claude)</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai_compatible">OpenAI-compatible server</option>
+                </optgroup>
+              </select>
+              <span id="char-count" class="text-[11px] text-slate-400 font-mono">0 / 8000</span>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+            <button type="button" onclick="copyPromptOnly()" title="Copy a privacy-safe prompt with your question to paste into any AI chat" class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-sm transition-colors">
+              📋 Copy prompt
+            </button>
+            <button type="button" id="btn-send" onclick="sendCurrentMessage()" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 disabled:opacity-50 transition-colors">
+              <span>Send</span>
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+              </svg>
+            </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Floating Toast -->
+<div id="toast" class="fixed bottom-6 right-6 z-50 transform transition-all duration-300 translate-y-8 opacity-0 pointer-events-none rounded-xl bg-slate-900 text-white px-4 py-2.5 text-xs font-semibold shadow-xl flex items-center gap-2">
+  <span id="toast-message"></span>
+</div>
+
+<script>
+// State
+let appSettings = {{ settings|tojson }};
+const defaultModels = {{ default_models|tojson }};
+let currentConversationId = null;
+let isWaitingForResponse = false;
+let lastUserMessageText = "";
+let emptyStateEl = null;  // kept detached while a conversation is shown
+
+const PROVIDER_LABELS = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic (Claude)',
+  gemini: 'Google Gemini',
+  openai_compatible: 'OpenAI-compatible server',
+};
+const DEFAULT_SELECTION = {{ default_selection|tojson }};
+const FREE_SITE_LABELS ={ chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini' };
+
+// Fill the window down to its bottom edge instead of a fixed height.
+function fitLayout() {
+  const layout = document.getElementById('assistant-layout');
+  const top = layout.getBoundingClientRect().top + window.scrollY;
+  // 40px = the bottom padding of the page and of <main> in base.html.
+  layout.style.height = Math.max(420, window.innerHeight - top - 40) + 'px';
+}
+window.addEventListener('resize', fitLayout);
+
+document.addEventListener('DOMContentLoaded', () => {
+  emptyStateEl = document.getElementById('empty-state');
+  fitLayout();
+  renderSettingsValues();
+  loadConversations();
+});
+
+function showEmptyState() {
+  const messagesEl = document.getElementById('chat-messages');
+  messagesEl.replaceChildren(emptyStateEl);
+  emptyStateEl.classList.remove('hidden');
+}
+
+function isFreeSelection(sel) {
+  return typeof sel === 'string' && sel.startsWith('free:');
+}
+
+// "Answer with" dropdown: label each API provider with its model and whether
+// it is ready, and show the user's choice (free ChatGPT until they pick one).
+function renderSelection() {
+  const select = document.getElementById('answer-with');
+  for (const opt of select.options) {
+    const provider = opt.value;
+    if (!PROVIDER_LABELS[provider]) continue;
+    const ready = appSettings.ready && appSettings.ready[provider];
+    const model = (appSettings.model && appSettings.model[provider]) || defaultModels[provider] || '';
+    if (!ready) {
+      opt.textContent = `${PROVIDER_LABELS[provider]}: ${provider === 'openai_compatible' ? 'set up server' : 'add API key'}`;
+    } else {
+      opt.textContent = `${PROVIDER_LABELS[provider]}${model ? ' · ' + model : ''}`;
+    }
+  }
+  select.value = appSettings.selection || DEFAULT_SELECTION;
+}
+
+function openSettingsFor(provider) {
+  document.getElementById('settings-panel').classList.remove('hidden');
+  fitLayout();
+  document.getElementById('setting-provider').value = provider;
+  onProviderChange();
+  const target = provider === 'openai_compatible' ? 'setting-base-url' : 'setting-api-key';
+  document.getElementById(target).focus();
+}
+
+async function onSelectionChange() {
+  const selection = document.getElementById('answer-with').value;
+  try {
+    const res = await fetch('/api/assistant/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selection }),
+    });
+    const data = await res.json();
+    if (data.settings) appSettings = data.settings;
+  } catch (err) {
+    showToast(`Could not save your choice: ${err.message}`);
+  }
+  renderSelection();
+  if (PROVIDER_LABELS[selection] && !(appSettings.ready && appSettings.ready[selection])) {
+    openSettingsFor(selection);
+    showToast(`Set up ${PROVIDER_LABELS[selection]} to use it.`);
+  }
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  document.getElementById('toast-message').textContent = msg;
+  toast.classList.remove('translate-y-8', 'opacity-0', 'pointer-events-none');
+  setTimeout(() => {
+    toast.classList.add('translate-y-8', 'opacity-0', 'pointer-events-none');
+  }, 2500);
+}
+
+function toggleSettingsPanel() {
+  const panel = document.getElementById('settings-panel');
+  panel.classList.toggle('hidden');
+  fitLayout();
+}
+
+function renderSettingsValues() {
+  const provider = appSettings.provider || 'openai';
+  document.getElementById('setting-provider').value = provider;
+
+  const modelVal = (appSettings.model && appSettings.model[provider]) || defaultModels[provider] || '';
+  document.getElementById('setting-model').value = modelVal;
+
+  document.getElementById('setting-base-url').value = appSettings.base_url || '';
+  document.getElementById('setting-pseudonymize').checked = !!appSettings.pseudonymize;
+
+  updateKeySavedBadge(provider);
+  renderSelection();
+}
+
+function updateKeySavedBadge(provider) {
+  const hasKey = appSettings.has_key && appSettings.has_key[provider];
+  const badge = document.getElementById('key-saved-badge');
+  if (hasKey) {
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function onProviderChange() {
+  const provider = document.getElementById('setting-provider').value;
+  const modelVal = (appSettings.model && appSettings.model[provider]) || defaultModels[provider] || '';
+  document.getElementById('setting-model').value = modelVal;
+  updateKeySavedBadge(provider);
+}
+
+async function loadModelsForProvider() {
+  const provider = document.getElementById('setting-provider').value;
+  const btn = document.getElementById('btn-load-models');
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+
+  try {
+    const res = await fetch('/api/assistant/models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // The key or server address typed but not saved yet is used too.
+      body: JSON.stringify({
+        provider,
+        api_key: document.getElementById('setting-api-key').value.trim(),
+        base_url: document.getElementById('setting-base-url').value.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (data.models && Array.isArray(data.models)) {
+      const datalist = document.getElementById('models-datalist');
+      datalist.innerHTML = '';
+      data.models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        datalist.appendChild(opt);
+      });
+      showToast(`Loaded ${data.models.length} models for ${provider}`);
+    } else if (data.error) {
+      alert(`Could not load models: ${data.error}`);
+    }
+  } catch (err) {
+    alert(`Failed to load models: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↻ Load models';
+  }
+}
+
+async function clearApiKey() {
+  const provider = document.getElementById('setting-provider').value;
+  if (!confirm(`Clear stored API key for ${provider}?`)) return;
+
+  try {
+    const payload = {
+      provider: provider,
+      clear_key: true,
+    };
+    const res = await fetch('/api/assistant/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.settings) {
+      appSettings = data.settings;
+      document.getElementById('setting-api-key').value = '';
+      updateKeySavedBadge(provider);
+      showToast(`Key cleared for ${provider}`);
+    }
+  } catch (err) {
+    alert(`Failed to clear key: ${err.message}`);
+  }
+}
+
+async function saveAssistantSettings(e) {
+  if (e) e.preventDefault();
+  const provider = document.getElementById('setting-provider').value;
+  const model = document.getElementById('setting-model').value.trim();
+  const apiKey = document.getElementById('setting-api-key').value.trim();
+  const baseUrl = document.getElementById('setting-base-url').value.trim();
+  const pseudonymize = document.getElementById('setting-pseudonymize').checked;
+
+  // Configuring a provider also makes it the one that answers.
+  const payload = {
+    provider: provider,
+    selection: provider,
+    model: model,
+    base_url: baseUrl,
+    pseudonymize: pseudonymize,
+  };
+  if (apiKey) {
+    payload.api_key = apiKey;
+  }
+
+  const btn = document.getElementById('btn-save-settings');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    const res = await fetch('/api/assistant/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.settings) {
+      appSettings = data.settings;
+      renderSettingsValues();
+      document.getElementById('setting-api-key').value = '';
+      showToast('Settings saved successfully!');
+      setTimeout(() => toggleSettingsPanel(), 400);
+    }
+  } catch (err) {
+    alert(`Failed to save settings: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Settings';
+  }
+}
+
+let conversationsCache = [];
+// Title of a new chat whose first reply is still pending: the server only
+// creates the conversation when the reply comes back, so show it meanwhile.
+let pendingConversationTitle = null;
+let pendingConversationView = -1;
+// Bumped whenever the user switches chats, so a late reply is not drawn into
+// a different conversation than the one it belongs to.
+let viewGeneration = 0;
+
+function formatWhen(iso) {
+  if (!iso) return '';
+  const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z');
+  if (isNaN(d)) return '';
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) {
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+async function loadConversations() {
+  const listEl = document.getElementById('conversation-list');
+  try {
+    const res = await fetch('/api/assistant/conversations');
+    conversationsCache = (await res.json()) || [];
+    renderConversationList();
+  } catch (err) {
+    listEl.innerHTML = '<div class="p-4 text-center text-xs text-rose-500">Failed to load conversations.</div>';
+  }
+}
+
+function conversationCard(title, subtitle, active, pending) {
+  const item = document.createElement('div');
+  item.className = `group flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border text-xs transition-colors ${
+    active
+      ? 'border-blue-300 bg-blue-50 text-primary shadow-sm'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 hover:shadow-sm'
+  } ${pending ? '' : 'cursor-pointer'}`;
+  const text = document.createElement('div');
+  text.className = 'min-w-0 flex-1';
+  const titleEl = document.createElement('div');
+  titleEl.className = `truncate ${active ? 'font-semibold' : 'font-medium'}`;
+  titleEl.textContent = title || 'Untitled chat';
+  const sub = document.createElement('div');
+  sub.className = `mt-0.5 text-[10px] ${pending ? 'text-primary/80 italic' : 'text-slate-400'}`;
+  sub.textContent = subtitle;
+  text.appendChild(titleEl);
+  text.appendChild(sub);
+  item.appendChild(text);
+  return item;
+}
+
+function renderConversationList() {
+  const listEl = document.getElementById('conversation-list');
+  listEl.innerHTML = '';
+  if (pendingConversationTitle !== null) {
+    const viewing = viewGeneration === pendingConversationView;
+    listEl.appendChild(conversationCard(pendingConversationTitle, 'Waiting for the reply…', viewing, true));
+  }
+  if (conversationsCache.length === 0 && pendingConversationTitle === null) {
+    listEl.innerHTML = '<div class="p-4 text-center text-xs text-slate-400">No conversations yet.</div>';
+    return;
+  }
+
+  conversationsCache.forEach(c => {
+      const item = conversationCard(c.title, formatWhen(c.updated_at), c.id === currentConversationId, false);
+      item.setAttribute('role', 'button');
+      item.tabIndex = 0;
+      item.title = 'Open this conversation';
+      item.onclick = () => selectConversation(c.id);
+      item.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectConversation(c.id);
+        }
+      };
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 p-1 text-slate-400 hover:text-rose-600 rounded transition-opacity flex-shrink-0';
+      delBtn.title = 'Delete chat';
+      delBtn.innerHTML = `
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+        </svg>
+      `;
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteConversation(c.id);
+      };
+
+      item.appendChild(delBtn);
+      listEl.appendChild(item);
+  });
+}
+
+function startNewChat() {
+  viewGeneration++;
+  currentConversationId = null;
+  document.getElementById('chat-header-title').textContent = 'New Conversation';
+  showEmptyState();
+  document.getElementById('chat-input').value = '';
+  updateCharCount();
+  document.getElementById('legend-banner').classList.add('hidden');
+  loadConversations();
+  document.getElementById('chat-input').focus();
+}
+
+async function selectConversation(id) {
+  viewGeneration++;
+  currentConversationId = id;
+  loadConversations();
+  const messagesEl = document.getElementById('chat-messages');
+  messagesEl.innerHTML = '<div class="p-4 text-center text-xs text-slate-400">Loading messages...</div>';
+
+  try {
+    const res = await fetch(`/api/assistant/conversations/${id}`);
+    if (!res.ok) throw new Error('Conversation not found');
+    const data = await res.json();
+    document.getElementById('chat-header-title').textContent = data.title || 'Conversation';
+    messagesEl.innerHTML = '';
+
+    if (data.messages && data.messages.length > 0) {
+      data.messages.forEach(m => {
+        appendMessageBubble(m.role, m.content, m.tools_used);
+      });
+      scrollChatToBottom();
+    } else {
+      showEmptyState();
+    }
+  } catch (err) {
+    const errEl = document.createElement('div');
+    errEl.className = 'p-4 text-center text-xs text-rose-500';
+    errEl.textContent = err.message;
+    messagesEl.replaceChildren(errEl);
+  }
+}
+
+async function deleteConversation(id) {
+  if (!confirm('Are you sure you want to delete this conversation?')) return;
+  try {
+    await fetch(`/api/assistant/conversations/${id}`, { method: 'DELETE' });
+    if (currentConversationId === id) {
+      startNewChat();
+    } else {
+      loadConversations();
+    }
+    showToast('Conversation deleted');
+  } catch (err) {
+    alert(`Failed to delete conversation: ${err.message}`);
+  }
+}
+
+function fillPrompt(text) {
+  const input = document.getElementById('chat-input');
+  input.value = text;
+  updateCharCount();
+  input.focus();
+}
+
+function handleInputKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendCurrentMessage();
+  }
+}
+
+function updateCharCount() {
+  const input = document.getElementById('chat-input');
+  document.getElementById('char-count').textContent = `${input.value.length} / 8000`;
+}
+
+function scrollChatToBottom() {
+  const messagesEl = document.getElementById('chat-messages');
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+const LOOKUP_LABELS = {
+  get_portfolio_summary: 'portfolio summary',
+  list_accounts: 'accounts',
+  get_account: 'account details',
+  list_expiring: 'expiring items',
+};
+
+function describeLookups(toolsUsed) {
+  if (!Array.isArray(toolsUsed) || toolsUsed.length === 0) return '';
+  const counts = new Map();
+  toolsUsed.forEach(t => {
+    const label = LOOKUP_LABELS[t] || t;
+    counts.set(label, (counts.get(label) || 0) + 1);
+  });
+  return [...counts].map(([label, n]) => (n > 1 ? `${label} (×${n})` : label)).join(', ');
+}
+
+// ---------------------------------------------------------------------------
+// Minimal Markdown renderer for assistant replies. It creates DOM nodes and
+// sets only textContent and http(s) hrefs, so model output can never inject
+// HTML. Covers what chat models emit: headings, paragraphs, bold/italic,
+// inline and fenced code, links, bullet/numbered lists, quotes, rules, tables.
+// ---------------------------------------------------------------------------
+function mdEl(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function renderInline(text, parent) {
+  const pattern = /(`[^`]+`)|(\*\*[^*]+?\*\*|__[^_]+?__)|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(\*[^*\s][^*]*?\*)|(~~[^~]+~~)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/g;
+  let last = 0;
+  let m;
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+    if (m[1]) {
+      parent.appendChild(mdEl('code', 'px-1 py-0.5 rounded bg-slate-100 text-[12px] font-mono text-slate-700', m[1].slice(1, -1)));
+    } else if (m[2]) {
+      const strong = mdEl('strong', 'font-semibold text-slate-900');
+      renderInline(m[2].slice(2, -2), strong);
+      parent.appendChild(strong);
+    } else if (m[3]) {
+      const a = mdEl('a', 'text-primary underline hover:no-underline', m[4]);
+      a.href = m[5];
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      parent.appendChild(a);
+    } else if (m[6]) {
+      const em = mdEl('em');
+      renderInline(m[6].slice(1, -1), em);
+      parent.appendChild(em);
+    } else if (m[7]) {
+      const del = mdEl('del');
+      renderInline(m[7].slice(2, -2), del);
+      parent.appendChild(del);
+    } else if (m[8]) {
+      const a = mdEl('a', 'text-primary underline hover:no-underline break-all', m[8]);
+      a.href = m[8];
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      parent.appendChild(a);
+    }
+    last = pattern.lastIndex;
+  }
+  if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+}
+
+function splitTableRow(line) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+}
+
+function renderMarkdown(source) {
+  const frag = document.createDocumentFragment();
+  const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
+  let i = 0;
+  const isBlank = l => /^\s*$/.test(l);
+  const listItem = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+  const startsBlock = l => /^\s*(#{1,6}\s|```|>|([-*_])\s*\2\s*\2[\s\-*_]*$)/.test(l) || listItem.test(l);
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (isBlank(line)) { i++; continue; }
+
+    // Fenced code block
+    if (/^\s*```/.test(line)) {
+      const code = [];
+      i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i++]);
+      i++;
+      const pre = mdEl('pre', 'my-2 p-3 rounded-lg bg-slate-900 text-slate-100 text-[12px] font-mono overflow-x-auto');
+      pre.appendChild(mdEl('code', '', code.join('\n')));
+      frag.appendChild(pre);
+      continue;
+    }
+
+    // Heading
+    const h = line.match(/^\s*(#{1,6})\s+(.*?)\s*#*\s*$/);
+    if (h) {
+      const sizes = ['text-base', 'text-sm', 'text-[13px]', 'text-[13px]', 'text-[13px]', 'text-[13px]'];
+      const el = mdEl('h' + Math.min(h[1].length + 2, 6), `${sizes[h[1].length - 1]} font-bold text-slate-900 mt-3 mb-1.5`);
+      renderInline(h[2], el);
+      frag.appendChild(el);
+      i++;
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
+      frag.appendChild(mdEl('hr', 'my-3 border-slate-200'));
+      i++;
+      continue;
+    }
+
+    // Table: header row followed by a |---|---| separator
+    if (line.includes('|') && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[i + 1])) {
+      const wrap = mdEl('div', 'my-2 overflow-x-auto');
+      const table = mdEl('table', 'min-w-full text-[12px] border border-slate-200 rounded');
+      const thead = mdEl('thead', 'bg-slate-50');
+      const tr = mdEl('tr');
+      splitTableRow(line).forEach(c => {
+        const th = mdEl('th', 'px-2 py-1 text-left font-semibold text-slate-700 border-b border-slate-200');
+        renderInline(c, th);
+        tr.appendChild(th);
+      });
+      thead.appendChild(tr);
+      table.appendChild(thead);
+      const tbody = mdEl('tbody');
+      i += 2;
+      while (i < lines.length && lines[i].includes('|') && !isBlank(lines[i])) {
+        const row = mdEl('tr', 'border-b border-slate-100');
+        splitTableRow(lines[i]).forEach(c => {
+          const td = mdEl('td', 'px-2 py-1 align-top text-slate-700');
+          renderInline(c, td);
+          row.appendChild(td);
+        });
+        tbody.appendChild(row);
+        i++;
+      }
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      frag.appendChild(wrap);
+      continue;
+    }
+
+    // Block quote
+    if (/^\s*>/.test(line)) {
+      const quoted = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) quoted.push(lines[i++].replace(/^\s*>\s?/, ''));
+      const bq = mdEl('blockquote', 'my-2 pl-3 border-l-2 border-slate-300 text-slate-600');
+      bq.appendChild(renderMarkdown(quoted.join('\n')));
+      frag.appendChild(bq);
+      continue;
+    }
+
+    // Lists (nested by indentation)
+    if (listItem.test(line)) {
+      const stack = [];  // [{indent, list}]
+      while (i < lines.length && (listItem.test(lines[i]) || (!isBlank(lines[i]) && stack.length && /^\s+/.test(lines[i])))) {
+        const m = lines[i].match(listItem);
+        if (!m) {
+          // Continuation line of the previous item
+          const items = stack[stack.length - 1].list.lastElementChild;
+          items.appendChild(document.createElement('br'));
+          renderInline(lines[i].trim(), items);
+          i++;
+          continue;
+        }
+        const indent = m[1].replace(/\t/g, '  ').length;
+        const ordered = /\d/.test(m[2]);
+        while (stack.length && indent < stack[stack.length - 1].indent) stack.pop();
+        // A bullet list followed by a numbered one (or vice versa) is a new list.
+        if (stack.length && indent === stack[stack.length - 1].indent && ordered !== stack[stack.length - 1].ordered) stack.pop();
+        if (!stack.length || indent > stack[stack.length - 1].indent) {
+          const list = mdEl(ordered ? 'ol' : 'ul', `${ordered ? 'list-decimal' : 'list-disc'} pl-5 my-1.5 space-y-0.5`);
+          if (ordered) list.start = parseInt(m[2], 10) || 1;
+          if (stack.length) stack[stack.length - 1].list.lastElementChild.appendChild(list);
+          else frag.appendChild(list);
+          stack.push({ indent, list, ordered });
+        }
+        const li = mdEl('li');
+        renderInline(m[3], li);
+        stack[stack.length - 1].list.appendChild(li);
+        i++;
+        // A blank line followed by another item continues the same list.
+        if (i + 1 < lines.length && isBlank(lines[i]) && listItem.test(lines[i + 1])) i++;
+      }
+      continue;
+    }
+
+    // Paragraph: consecutive lines, keeping single line breaks
+    const para = mdEl('p', 'my-1.5');
+    let first = true;
+    while (i < lines.length && !isBlank(lines[i]) && !(first ? false : startsBlock(lines[i]))) {
+      if (!first) para.appendChild(document.createElement('br'));
+      renderInline(lines[i].trim(), para);
+      first = false;
+      i++;
+    }
+    frag.appendChild(para);
+  }
+  return frag;
+}
+
+// Security: messages are rendered with textContent or renderMarkdown, never innerHTML of model output
+function appendMessageBubble(role, content, toolsUsed) {
+  if (emptyStateEl) emptyStateEl.remove();
+
+  const messagesEl = document.getElementById('chat-messages');
+  const row = document.createElement('div');
+
+  if (role === 'user') {
+    row.className = 'flex justify-end';
+    const bubble = document.createElement('div');
+    bubble.className = 'bg-primary text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-2xl text-xs leading-relaxed shadow-sm whitespace-pre-wrap break-words';
+    bubble.textContent = content;
+    row.appendChild(bubble);
+  } else if (role === 'assistant') {
+    row.className = 'flex justify-start items-start gap-3';
+    
+    const avatar = document.createElement('div');
+    avatar.className = 'h-7 w-7 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-xs select-none';
+    avatar.textContent = 'AI';
+    row.appendChild(avatar);
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-sm px-4 py-3 max-w-3xl min-w-0 text-[13px] leading-relaxed shadow-sm break-words';
+
+    // Which of the user's data the model looked up (plain text, not buttons).
+    const lookups = describeLookups(toolsUsed);
+    if (lookups) {
+      const note = document.createElement('div');
+      note.className = 'mb-2 text-[11px] text-slate-400';
+      note.title = 'Read-only lookups the assistant made in your Award Tracker data to answer';
+      note.textContent = '🔎 Looked up: ' + lookups;
+      bubble.appendChild(note);
+    }
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'break-words';
+    textDiv.appendChild(renderMarkdown(content)); // builds DOM nodes, never innerHTML
+    bubble.appendChild(textDiv);
+
+    row.appendChild(bubble);
+  } else if (role === 'error') {
+    row.className = 'flex justify-start items-start gap-3';
+    
+    const avatar = document.createElement('div');
+    avatar.className = 'h-7 w-7 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-xs select-none';
+    avatar.textContent = '⚠️';
+    row.appendChild(avatar);
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl text-xs leading-relaxed shadow-sm break-words';
+
+    const errLabel = document.createElement('div');
+    errLabel.className = 'font-bold text-[11px] uppercase tracking-wider text-rose-700 mb-1';
+    errLabel.textContent = 'Provider Error';
+    bubble.appendChild(errLabel);
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'whitespace-pre-wrap break-words';
+    textDiv.textContent = content;
+    bubble.appendChild(textDiv);
+
+    row.appendChild(bubble);
+  } else if (role === 'info') {
+    row.className = 'flex justify-center';
+    const note = document.createElement('div');
+    note.className = 'rounded-xl bg-slate-100 border border-slate-200 text-slate-600 px-3 py-2 max-w-2xl text-[11px] leading-relaxed whitespace-pre-wrap break-words';
+    note.textContent = content;
+    row.appendChild(note);
+  }
+
+  messagesEl.appendChild(row);
+}
+
+async function sendCurrentMessage() {
+  if (isWaitingForResponse) return;
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  if (text.length > 8000) {
+    alert('Message exceeds maximum length of 8000 characters.');
+    return;
+  }
+
+  const selection = appSettings.selection || DEFAULT_SELECTION;
+  if (isFreeSelection(selection)) {
+    openFreeSite(selection.slice('free:'.length), text);
+    return;
+  }
+  if (!(appSettings.ready && appSettings.ready[selection])) {
+    openSettingsFor(selection);
+    showToast(`Set up ${PROVIDER_LABELS[selection]} first.`);
+    return;
+  }
+
+  lastUserMessageText = text;
+  input.value = '';
+  updateCharCount();
+
+  // Render user bubble
+  appendMessageBubble('user', text);
+  scrollChatToBottom();
+
+  isWaitingForResponse = true;
+  document.getElementById('btn-send').disabled = true;
+  document.getElementById('thinking-indicator').classList.remove('hidden');
+  scrollChatToBottom();
+
+  const sentConversationId = currentConversationId;
+  const sentView = viewGeneration;
+  if (!sentConversationId) {
+    // Show the new chat in the list and header right away.
+    pendingConversationTitle = text.slice(0, 60);
+    pendingConversationView = sentView;
+    document.getElementById('chat-header-title').textContent = pendingConversationTitle;
+    renderConversationList();
+  }
+
+  try {
+    const payload = {
+      conversation_id: sentConversationId,
+      message: text,
+    };
+    const res = await fetch('/api/assistant/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    const stillViewing = viewGeneration === sentView;
+    if (res.ok && data.message) {
+      if (stillViewing) {
+        if (!sentConversationId && data.conversation_id) currentConversationId = data.conversation_id;
+        appendMessageBubble(data.message.role, data.message.content, data.message.tools_used);
+      }
+    } else if (stillViewing) {
+      appendMessageBubble('error', data.error || 'An unexpected error occurred while communicating with the assistant.');
+    }
+  } catch (err) {
+    if (viewGeneration === sentView) appendMessageBubble('error', `Network error: ${err.message}`);
+  } finally {
+    // The reply is saved either way: refresh the list (new chat, new order).
+    pendingConversationTitle = null;
+    if (viewGeneration === sentView && !currentConversationId) {
+      document.getElementById('chat-header-title').textContent = 'New Conversation';
+    }
+    loadConversations();
+    isWaitingForResponse = false;
+    document.getElementById('btn-send').disabled = false;
+    document.getElementById('thinking-indicator').classList.add('hidden');
+    scrollChatToBottom();
+    input.focus();
+  }
+}
+
+async function fetchFreePrompt(question, site) {
+  const res = await fetch('/api/assistant/free-prompt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, site }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'Server error');
+  return data;
+}
+
+function showLegend(legend) {
+  if (!legend || Object.keys(legend).length === 0) return;
+  const pairs = Object.entries(legend).map(([p, r]) => `${p} = ${r}`).join(', ');
+  document.getElementById('legend-text').textContent = `Pseudonym legend (stays on this computer): ${pairs}`;
+  document.getElementById('legend-banner').classList.remove('hidden');
+}
+
+// Free mode: the question goes to the chosen site in a new browser tab with
+// a privacy-safe snapshot. It is not saved as a conversation here.
+async function openFreeSite(site, question) {
+  // Copy first, then open the tab: the clipboard only accepts writes while
+  // this page has focus, which the new tab takes away. Both still happen
+  // within the click's user activation (the prompt is built locally).
+  const input = document.getElementById('chat-input');
+  let data;
+  try {
+    data = await fetchFreePrompt(question, site);
+  } catch (err) {
+    appendMessageBubble('error', `Could not prepare the prompt: ${err.message}`);
+    return;
+  }
+  let copied = false;
+  if (data.copy_to_clipboard && data.prompt) {
+    try {
+      await navigator.clipboard.writeText(data.prompt);
+      copied = true;
+    } catch (e) {
+      copied = false;
+    }
+  }
+  window.open(data.url, '_blank', 'noopener');
+
+  appendMessageBubble('user', question);
+  const name = FREE_SITE_LABELS[site] || site;
+  let note = data.copy_to_clipboard
+    ? `Opened ${name} in a new tab.`
+    : `Opened ${name} in a new tab with your question and a privacy-safe portfolio snapshot filled in.`;
+  if (data.copy_to_clipboard) {
+    note += copied
+      ? ' The prompt (your question and a privacy-safe snapshot) is on your clipboard: paste it into the chat box there.'
+      : ' Could not copy the prompt automatically; click "Copy prompt" and paste it there.';
+  }
+  note += ' The answer appears on that site, not here.';
+  appendMessageBubble('info', note);
+  // window.open with noopener returns null, so offer a link as well in case
+  // a popup blocker stopped the tab.
+  appendLinkRow(data.url, `Open ${name} again`);
+  showLegend(data.legend);
+  lastUserMessageText = question;
+  input.value = '';
+  updateCharCount();
+  scrollChatToBottom();
+}
+
+function appendLinkRow(url, label) {
+  const row = document.createElement('div');
+  row.className = 'flex justify-center -mt-2';
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.className = 'text-[11px] font-semibold text-primary hover:underline';
+  link.textContent = label;
+  row.appendChild(link);
+  document.getElementById('chat-messages').appendChild(row);
+}
+
+async function copyPromptOnly() {
+  const input = document.getElementById('chat-input');
+  const question = input.value.trim() || lastUserMessageText;
+  if (!question) {
+    showToast('Type a question first.');
+    input.focus();
+    return;
+  }
+  try {
+    const data = await fetchFreePrompt(question, '');
+    await navigator.clipboard.writeText(data.prompt);
+    showLegend(data.legend);
+    showToast('Prompt copied: paste it into any AI chat.');
+  } catch (err) {
+    alert(`Could not copy the prompt: ${err.message}`);
+  }
+}
+</script>
+{% endblock %}
