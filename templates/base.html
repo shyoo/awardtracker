@@ -93,6 +93,8 @@
 
                             <a href="{{ url_for('people') }}" class="{% if request.endpoint == 'people' %}border-primary text-white{% else %}border-transparent text-slate-300 hover:border-slate-300 hover:text-white{% endif %} inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium">People</a>
 
+                            <a href="{{ url_for('assistant') }}" class="{% if request.endpoint == 'assistant' %}border-primary text-white{% else %}border-transparent text-slate-300 hover:border-slate-300 hover:text-white{% endif %} inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium">Ask AI</a>
+
                             <a href="{{ url_for('settings') }}" class="{% if request.endpoint == 'settings' %}border-primary text-white{% else %}border-transparent text-slate-300 hover:border-slate-300 hover:text-white{% endif %} inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium">Settings</a>
                         </div>
                     </div>

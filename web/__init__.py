@@ -4,7 +4,7 @@ Plain ``@app.route`` registration (rather than Blueprints) is deliberate: it
 keeps endpoint names such as ``url_for('index')`` exactly as the templates
 and tests already use them.
 """
-from web import accounts, auth, certificates, dashboard, db_admin, diagnostics, settings, sync, template_context
+from web import accounts, assistant, auth, certificates, dashboard, db_admin, diagnostics, settings, sync, template_context
 
 
 def register_all(app):
@@ -17,3 +17,4 @@ def register_all(app):
     db_admin.register(app)
     diagnostics.register(app)
     certificates.register(app)
+    assistant.register(app)
