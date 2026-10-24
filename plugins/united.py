@@ -2,6 +2,7 @@ from typing import Dict, Any, Tuple, Optional
 from bs4 import BeautifulSoup
 
 from .base import PluginError, InteractionRequiredError
+from .context import current_run_context
 from .browser_plugin import BrowserPlugin, log
 
 
@@ -115,43 +116,34 @@ class UnitedAirlinesPlugin(BrowserPlugin):
             
         return balance, status
 
-    def _check_for_mfa(self, sb) -> bool:
-        """Helper to detect if United is presenting an MFA passcode verification page."""
-        try:
-            curr_url = sb.get_current_url().lower()
-            if "myunited" in curr_url:
-                # We are successfully on the MyUnited page, definitely not stuck on MFA
-                return False
-        except Exception:
-            pass
+    # The sign-in form, its password step and the passcode step are all served in
+    # place at /myunited, so the URL cannot tell the MFA page from the dashboard.
+    MFA_INPUT_SELECTORS = (
+        "input#code, input[name='code'], input[name='otp'], input[name='passcode'], "
+        "input[name='verificationCode'], input[name='passcodeVal'], input[autocomplete='one-time-code']"
+    )
+    MFA_PHRASES = (
+        "verification code", "passcode", "security code", "one-time code", "temporary code",
+        "enter the code", "enter code", "6-digit", "six-digit", "verify your identity",
+    )
 
-        mfa_selectors = (
-            "input#code, input[name='code'], input[name='otp'], input[name='passcode'], "
-            "input[name='verificationCode'], input[name='passcodeVal']"
-        )
-        mfa_visible = False
+    def _check_for_mfa(self, sb) -> bool:
+        """Detect United's passcode verification step from what is visible on the page."""
         try:
-            mfa_visible = sb.is_element_visible(mfa_selectors)
+            if sb.is_element_visible(self.MFA_INPUT_SELECTORS):
+                return True
         except Exception:
             pass
-            
-        mfa_text_detected = False
+        # Visible text only: the dashboard's page source carries script strings
+        # such as "otp" or "verify" that would read as a challenge.
         try:
-            text_content = sb.get_page_source().lower()
-            mfa_keywords = [
-                "passcode", "verification code", "security code", "enter code", 
-                "six-digit", "6-digit", "one-time code", "temporary code", 
-                "enter the code", "security screening", "mfa", "otp", "verify your identity"
-            ]
-            if any(kw in text_content for kw in mfa_keywords):
-                # Ensure we are not on some standard page with other forms by checking if we have active MFA inputs 
-                # or if the page specifically mentions identity verification or security screening
-                if "verify" in text_content or "identity" in text_content or mfa_visible or "security screening" in text_content or "digit" in text_content:
-                    mfa_text_detected = True
+            text = sb.execute_script("return document.body ? document.body.innerText : '';")
         except Exception:
-            pass
-            
-        return mfa_visible or mfa_text_detected
+            return False
+        if not isinstance(text, str):
+            return False
+        text = text.lower()
+        return any(phrase in text for phrase in self.MFA_PHRASES)
 
     def fill_login_form(self, sb, username: str, password: str, auto_submit: bool = True) -> None:
         """Fills the United Airlines login form and submits, supporting both new 2-step and older 1-step pages."""
@@ -300,15 +292,24 @@ class UnitedAirlinesPlugin(BrowserPlugin):
         if "myunited" not in sb.get_current_url() or self.login_form_visible(sb):
             return False
         balance, _ = self._extract_data(sb)
-        if balance is None and not self.is_mfa(sb):
-            # Dashboard can render slowly; one refresh before giving up.
-            sb.refresh()
-            sb.sleep(8)
-            balance, _ = self._extract_data(sb)
+        if balance is not None:
+            return True
+        if self.is_mfa(sb):
+            return False
+        ctx = current_run_context()
+        if ctx is not None and ctx.is_interactive:
+            # The user is mid sign-in (between steps, or typing a passcode); a
+            # refresh would throw them back to the username step.
+            return False
+        # Dashboard can render slowly; one refresh before giving up.
+        sb.refresh()
+        sb.sleep(8)
+        balance, _ = self._extract_data(sb)
         return balance is not None
 
     def is_mfa(self, sb) -> bool:
-        return self._check_for_mfa(sb)
+        # A dashboard that shows a balance is never the challenge, whatever its text says.
+        return self._check_for_mfa(sb) and self._extract_data(sb)[0] is None
 
     def mfa_message(self) -> str:
         return self.MFA_MESSAGE
