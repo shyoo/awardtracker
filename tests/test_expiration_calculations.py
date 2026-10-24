@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 import os
 import sys
 
@@ -238,13 +238,18 @@ class TestFormatTimeRemaining(unittest.TestCase):
     """
     Tests for format_time_remaining in app.py.
     Verifies calendar-accurate output using relativedelta.
+
+    The output depends on the calendar (30 days is a month only from a 30-day
+    month), so every case runs from a fixed date instead of today.
     """
+
+    TODAY = date(2026, 6, 1)
 
     def _fmt(self, days):
         import sys, os
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from app import format_time_remaining
-        return format_time_remaining(days)
+        return format_time_remaining(days, today=self.TODAY)
 
     def test_none_returns_empty(self):
         self.assertEqual(self._fmt(None), "")
@@ -264,9 +269,13 @@ class TestFormatTimeRemaining(unittest.TestCase):
         self.assertIn("2 days", self._fmt(2))
 
     def test_thirty_days(self):
-        result = self._fmt(30)
-        self.assertIn("remaining", result)
-        self.assertIn("mo", result)
+        # June has 30 days, so 30 days from June 1 is exactly one month.
+        self.assertEqual(self._fmt(30), "1 mo remaining")
+
+    def test_thirty_days_short_of_a_calendar_month(self):
+        # From October 24, 30 days lands on November 23: not yet a month.
+        from app import format_time_remaining
+        self.assertEqual(format_time_remaining(30, today=date(2026, 10, 24)), "30 days remaining")
 
     def test_one_year_exactly(self):
         result = self._fmt(365)
@@ -296,8 +305,7 @@ class TestFormatTimeRemaining(unittest.TestCase):
         # 730 days may or may not equal exactly 2 calendar years depending on whether
         # a leap year falls in the window.  Instead, compute the exact number of days
         # for 2 calendar years from today and test that value.
-        from datetime import date
-        today = date.today()
+        today = self.TODAY
         two_years_later = today.replace(year=today.year + 2)
         days_for_two_years = (two_years_later - today).days
         result = self._fmt(days_for_two_years)
