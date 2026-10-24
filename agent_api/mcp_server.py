@@ -25,7 +25,16 @@ INSTRUCTIONS = (
     "Read-only access to the user's local Award Tracker loyalty portfolio: point and mile "
     "balances, elite status, estimated USD value, expiration dates and reward certificates. "
     "Balances are as of each account's last_updated time; this server cannot start a sync. "
-    "Credentials, membership numbers and certificate codes are never returned."
+    "Credentials, membership numbers and certificate codes are never returned. "
+    "The user must turn on AI assistant access in Award Tracker's Settings first."
+)
+
+#: Settings key the user toggles on the Settings page; access is off unless it is "true".
+ENABLED_SETTING = "mcp_server_enabled"
+DISABLED_MESSAGE = (
+    "AI assistant access is turned off in Award Tracker. To allow it, open Award Tracker, "
+    "go to Settings > AI Assistant Access (MCP), check \"Allow AI assistants to read my "
+    "portfolio\", and save. Then try again."
 )
 
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS = -32700, -32600, -32601, -32602
@@ -88,6 +97,12 @@ def _str_arg(args: dict, name: str) -> Optional[str]:
     if value is not None and not isinstance(value, str):
         raise ToolError(f"'{name}' must be a string.")
     return value or None
+
+
+def access_enabled() -> bool:
+    """Whether the user has allowed assistant access (read at call time, so toggling needs no restart)."""
+    from services.settings_store import get_bool_setting
+    return get_bool_setting(ENABLED_SETTING, False)
 
 
 def _call_tool(name: str, args: dict) -> Any:
@@ -161,6 +176,8 @@ class McpServer:
             raise _InvalidParams(f"Unknown tool: {name}")
         try:
             with self.app.app_context():
+                if not access_enabled():
+                    raise ToolError(DISABLED_MESSAGE)
                 data = _call_tool(name, args)
         except ToolError as e:
             return {"content": [{"type": "text", "text": str(e)}], "isError": True}
@@ -237,5 +254,12 @@ def main(argv=None) -> int:
         return 1
     server = McpServer(create_readonly_app(db_path), version=APP_VERSION)
     print(f"Award Tracker MCP server ready (read-only): {db_path}", file=sys.stderr)
+    try:
+        with server.app.app_context():
+            if not access_enabled():
+                print("AI assistant access is off; tools will refuse until it is enabled in Settings.",
+                      file=sys.stderr)
+    except Exception:
+        pass
     server.serve(sys.stdin, protocol_out)
     return 0

@@ -1,5 +1,7 @@
 """Settings page and the update-checker endpoints."""
+import json
 import os
+import sys
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 
@@ -25,6 +27,7 @@ SETTINGS_DEFAULTS = {
     'db_backup_frequency': '7',
     'debug_mode': 'false',
     'debug_mask_privacy': 'true',
+    'mcp_server_enabled': 'false',
 }
 
 
@@ -96,6 +99,17 @@ def _save_valuations_from_form(form):
     save_valuations(valuations)
 
 
+def _mcp_client_config():
+    """The MCP client entry for this checkout, or None in packaged builds (no stdio there)."""
+    if getattr(sys, 'frozen', False):
+        return None
+    return json.dumps({"mcpServers": {"awardtracker": {
+        "command": sys.executable.replace('\\', '/'),
+        "args": ["-m", "agent_api"],
+        "cwd": config.repo_dir.replace('\\', '/'),
+    }}}, indent=2)
+
+
 def _valuations_for_display():
     standard_keys = set(plugin_manager.plugins.keys())
     valuations = load_valuations()
@@ -145,6 +159,11 @@ def register(app):
                 })
                 flash('Debug settings saved successfully.')
                 return redirect(url_for('settings'))
+            if request.form.get('form_id') == 'mcp_settings':
+                enabled = _checkbox(request.form, 'mcp-server-enabled')
+                set_setting('mcp_server_enabled', enabled)
+                flash('AI assistant access enabled.' if enabled == 'true' else 'AI assistant access disabled.')
+                return redirect(url_for('settings'))
 
             failure = _save_general_settings(request.form)
             if failure is not None:
@@ -173,6 +192,7 @@ def register(app):
             default_db_path=default_db_path,
             is_custom_db_location=(active_db_path != default_db_path),
             db_conflict_info=check_db_conflict(active_db_path),
+            mcp_client_config=_mcp_client_config(),
         )
 
     # ------------------------------------------------------------------ #
