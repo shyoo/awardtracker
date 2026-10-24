@@ -87,6 +87,8 @@ plugins/
   browser.py           Chrome binary lookup, driver registry + cancel, SeleniumBase patches,
                        guide modal, wait_for_chrome_exit, configure_session_restore
   session.py           Cookie jar, Chrome-locked User-Agent, ResultCache, native Chrome launch
+  mac_driver.py        Native, UC-patched, ad-hoc-signed uc_driver for Apple Silicon without
+                       Rosetta (SeleniumBase otherwise installs an Intel one); run by get_sb_kwargs
   parsing.py           extract_latest_date, parse_int
   context.py           RunContext (account, plugin, mode, trigger) for the current run
   errors.py            PluginError, InteractionRequiredError

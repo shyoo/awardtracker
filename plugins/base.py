@@ -34,6 +34,10 @@ def get_sb_kwargs(**kwargs) -> dict:
     binary = get_chrome_binary()
     if binary:
         kwargs.setdefault("binary_location", binary)
+    if kwargs.get("uc"):
+        # Apple Silicon without Rosetta cannot run SeleniumBase's Intel uc_driver.
+        from .mac_driver import ensure_native_uc_driver
+        ensure_native_uc_driver(kwargs.get("binary_location"))
     return kwargs
 
 

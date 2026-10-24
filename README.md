@@ -296,6 +296,21 @@ asset for current releases; use Rosetta only for a legacy Intel-only release.
 If Award Tracker still does not start, check the log file listed under *A
 provider keeps failing to sync* below.
 
+### Sync fails on a Mac with "Bad CPU type in executable"
+
+On Apple Silicon, SeleniumBase normally drives Chrome with an Intel build of
+chromedriver that runs through Rosetta 2. If Rosetta is not installed, or a
+macOS upgrade removed it, every sync fails with `[Errno 86] Bad CPU type in
+executable: '.../seleniumbase/drivers/uc_driver'`.
+
+Current releases detect this and install a native Apple Silicon driver that
+matches your Chrome version, so the next sync should work without extra
+steps. The first sync after starting Award Tracker or updating Chrome
+downloads the matching driver, so it needs an internet connection. If the error persists, install Rosetta 2
+(`softwareupdate --install-rosetta --agree-to-license`) and check the log file
+listed under *A provider keeps failing to sync* below for a line starting
+with `Could not install a native uc_driver`.
+
 ### Google Chrome cannot be found or a browser window will not open
 
 Award Tracker uses Google Chrome for account synchronization and interactive
