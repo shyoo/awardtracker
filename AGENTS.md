@@ -64,6 +64,8 @@ core/
   applog.py            Application-wide rotating log (app_log)
   debug_logger.py      Debug-mode run folders, step logs, snapshots, privacy masking
   bootstrap.py         Schema creation, self-healing migrations, provider registration
+agent_api/             Interfaces for external AI assistants
+  mcp_server.py        Read-only stdio MCP server (`python -m agent_api`), no SDK dependency
 web/                   HTTP layer: one module per area, each with register(app)
   dashboard.py, accounts.py, sync.py, settings.py, db_admin.py,
   diagnostics.py, certificates.py, auth.py, template_context.py, helpers.py
@@ -76,6 +78,7 @@ services/
   notifier.py          Native desktop notifications
   updater.py           GitHub release check, download and self-update
   db_manager.py        Database validation, conflict checks, emergency backup, merge-import
+  portfolio.py         Privacy-safe, read-only portfolio views served by the MCP server
 scripts/               Build, release, run and test scripts (they cd to the repo root)
 packaging/             PyInstaller spec, Inno Setup installer script, app icon
 plugins/
@@ -98,6 +101,37 @@ Every sync -- whichever button or job started it -- goes through
 `services.sync_service`. Do not add a second copy of the "apply result to
 account" logic in a route or job; extend `persist_result` instead.
 
+### MCP server for AI assistants
+
+`agent_api/mcp_server.py` lets desktop assistants (Claude Desktop, Claude Code,
+...) query the portfolio over MCP. It implements just the JSON-RPC subset a
+tools-only server needs (`initialize`, `ping`, `tools/list`, `tools/call`)
+rather than depending on the `mcp` SDK, and it opens the database with
+SQLite `mode=ro` through a bare Flask app (no routes, migrations or
+scheduler). Keep it that way:
+
+* **Read-only.** No tool may write the database, decrypt credentials, start a
+  sync or launch Chrome. A sync tool would need the master password and would
+  race the running app, so it needs its own design first.
+* **Privacy-safe output.** Tools return only what `services.portfolio` builds.
+  Usernames, passwords, membership / account numbers, certificate `details`
+  (codes, coupon numbers) and raw `last_error` text never leave it, because
+  an assistant's transcript may leave the machine.
+  `tests/test_mcp_server.py` checks this. Extend that test when you add a
+  field or a tool.
+* **stdout is the protocol.** `main()` points `sys.stdout` at stderr before
+  importing anything, so a stray `print` cannot corrupt the stream.
+* New tools go in `TOOLS` (with `readOnlyHint`) and `_call_tool`, with their
+  data built in `services.portfolio` and not in the server.
+
+To try it from a checkout:
+
+```
+python -m agent_api            # the database the app is using
+python -m agent_api --db PATH  # a specific (e.g. copied) awardtracker.db
+```
+
+The packaged binaries are built with `console=False` and do not expose it yet.
 ---
 
 ## 3. Writing a Provider Plugin

@@ -28,6 +28,7 @@ Award Tracker runs entirely on your local machine:
 * **Guided Interactive Sign-in (4-Step Overlay)**: When a loyalty program requires MFA or a captcha, Award Tracker opens a headed browser window, **pre-fills your ID and password automatically**, and injects a custom floating guide card (`awardtracker-guide-modal`) in the corner. The card walks you through four steps: (1) credentials are pre-filled — don't touch them, (2) click **Sign In / Submit / Continue** yourself, (3) complete any MFA code manually, and (4) once signed in, the tool auto-navigates to your mileage overview and closes the window — hands off!
 * **Automatic Daily Database Backup**: Backs up your `awardtracker.db` file automatically at 3:00 AM daily (and on startup if yesterday's backup is missing). Retention window is user-configurable — **Never**, **3**, **7** (default), or **30** days — from the Settings page. Backup files are stored as `awardtracker_backup_YYYYMMDD.db` inside an `AwardTracker/backups/` folder in your OS application data directory.
 * **Cross-Platform Native OS Notifications**: Dispatches native notifications locally through the Windows Action Center, macOS Notification Center, or Linux notify-send on app startup, sync start, sync success/failures, and points-expiry warnings.
+* **AI Assistant Access (MCP)**: A read-only Model Context Protocol server lets assistants such as Claude Desktop answer questions about your balances and expirations without ever seeing your credentials. See *Ask an AI Assistant About Your Portfolio* below.
 * **Custom Manual Tracking**: Easily track points from credit cards (Chase, Amex, Citi, Capital One, Wells Fargo) or offline store programs (e.g. "Best Buy points", "Panera rewards"), complete with custom name overrides.
 
 ---
@@ -244,6 +245,25 @@ If you experience synchronization issues or sync tasks fail repeatedly due to st
   - **Include general debug logs**: Packages `awardtracker_debug.log` and all run-specific `run.log` files.
   - **Include HTML source code & page screenshots**: Packages all page screenshots and markup dumps (only available if Debug Mode was enabled, unchecked by default to save bandwidth).
   - Click **Download Diagnostic Zip** to download a compressed report that you can upload directly to GitHub issues for easier developer debugging.
+
+### 7. Ask an AI Assistant About Your Portfolio (MCP)
+Award Tracker includes a read-only [Model Context Protocol](https://modelcontextprotocol.io) server, so desktop AI assistants such as Claude Desktop or Claude Code can answer questions like *"Which of my miles expire in the next 90 days?"* or *"What is Alice's portfolio worth?"*.
+
+* **Tools**: `get_portfolio_summary`, `list_accounts` (filter by person, category or program), `get_account` (certificates, expiration rule, balance history), and `list_expiring`.
+* **Read-only and private**: The server opens your database read-only. It never decrypts passwords, starts a sync or opens a browser. Usernames, membership numbers, certificate codes and sync error text are never sent to the assistant. Balances are as fresh as each account's last sync.
+* **Setup** (from a source checkout, see the Developer Guide above): add this to your assistant's MCP configuration, e.g. `claude_desktop_config.json`, using absolute paths:
+  ```json
+  {
+    "mcpServers": {
+      "awardtracker": {
+        "command": "C:/path/to/awardtracker/venv/Scripts/python.exe",
+        "args": ["-m", "agent_api"],
+        "cwd": "C:/path/to/awardtracker"
+      }
+    }
+  }
+  ```
+  On macOS, use `venv/bin/python` as the command. If your assistant does not support `cwd`, set `PYTHONPATH` to the repository folder instead. To point at a different database file, add `"--db", "/path/to/awardtracker.db"` to `args`. The packaged installers do not include the MCP server yet.
 
 ---
 
