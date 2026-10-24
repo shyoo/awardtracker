@@ -112,6 +112,11 @@ rather than depending on the `mcp` SDK, and it opens the database with
 SQLite `mode=ro` through a bare Flask app (no routes, migrations or
 scheduler). Keep it that way:
 
+* **Opt-in.** Every `tools/call` first checks the `mcp_server_enabled`
+  setting (default `false`, toggled in Settings > AI Assistant Access) and
+  refuses with `DISABLED_MESSAGE` unless it is `true`. It is read per call, so
+  the toggle needs no restart. New tools inherit this check through
+  `_tools_call`; do not bypass it.
 * **Read-only.** No tool may write the database, decrypt credentials, start a
   sync or launch Chrome. A sync tool would need the master password and would
   race the running app, so it needs its own design first.

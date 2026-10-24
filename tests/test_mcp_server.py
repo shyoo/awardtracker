@@ -13,15 +13,15 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from app import create_app
 from core.extensions import db
-from core.models import Account, AccountHistory, Certificate, Person, Provider
-from agent_api.mcp_server import McpServer, TOOLS
+from core.models import Account, AccountHistory, Certificate, Person, Provider, Settings
+from agent_api.mcp_server import DISABLED_MESSAGE, ENABLED_SETTING, McpServer, TOOLS
 
 SECRET_USERNAME = 'secret-login@example.com'
 SECRET_MEMBERSHIP = 'MP-998877'
 SECRET_CODE = 'PASS-123456'
 
 
-def seed(now):
+def seed(now, mcp_enabled=True):
     alice = Person(name='Alice', color='#4f46e5')
     bob = Person(name='Bob', color='#22c55e')
     united = Provider(name='United Airlines', plugin_name='united', enabled=True)
@@ -46,6 +46,8 @@ def seed(now):
         AccountHistory(account_id=ua.id, balance=40000, timestamp=now - timedelta(days=60)),
         AccountHistory(account_id=ua.id, balance=50000, timestamp=now - timedelta(days=1)),
     ])
+    if mcp_enabled:
+        db.session.add(Settings(key=ENABLED_SETTING, value='true'))
     db.session.commit()
     return ua.id, hh.id
 
@@ -166,6 +168,69 @@ class McpServerTests(unittest.TestCase):
         blob = json.dumps(outputs)
         for secret in (SECRET_USERNAME, 'bob-login', SECRET_MEMBERSHIP, SECRET_CODE, 'ciphertext', 'MFA required'):
             self.assertNotIn(secret, blob)
+
+
+class McpAccessSettingTests(unittest.TestCase):
+    """Assistant access is off until the user enables it on the Settings page."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        from core import config
+        import web.helpers
+        self.orig = (config.write_dir, web.helpers.write_dir)
+        config.write_dir = web.helpers.write_dir = self.temp_dir
+        self.app = create_app(TestConfig)
+        self.client = self.app.test_client()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        db.create_all()
+        self.ua_id, _ = seed(datetime.utcnow(), mcp_enabled=False)
+        self.server = McpServer(self.app, version='test')
+        from core.security import security_manager
+        security_manager.initialize_with_password('test-password')
+
+    def tearDown(self):
+        from core.security import security_manager
+        security_manager.fernet = None
+        db.session.remove()
+        db.drop_all()
+        self.ctx.pop()
+        from core import config
+        import web.helpers
+        config.write_dir, web.helpers.write_dir = self.orig
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def call(self, name, arguments=None):
+        return self.server.handle({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                                   'params': {'name': name, 'arguments': arguments or {}}})['result']
+
+    def test_disabled_by_default_refuses_every_tool(self):
+        for tool in TOOLS:
+            args = {'account_id': self.ua_id} if tool['name'] == 'get_account' else {}
+            result = self.call(tool['name'], args)
+            self.assertTrue(result['isError'], tool['name'])
+            self.assertEqual(result['content'][0]['text'], DISABLED_MESSAGE)
+            self.assertNotIn('structuredContent', result)
+
+    def test_settings_page_defaults_off_and_toggles_access(self):
+        html = self.client.get('/settings').get_data(as_text=True)
+        self.assertIn('name="mcp-server-enabled"', html)
+        self.assertNotRegex(html, r'id="mcp-server-enabled"[^>]*checked')
+
+        self.client.post('/settings', data={'form_id': 'mcp_settings', 'mcp-server-enabled': 'on'})
+        self.assertEqual(Settings.query.filter_by(key=ENABLED_SETTING).first().value, 'true')
+        self.assertFalse(self.call('get_portfolio_summary')['isError'])
+        self.assertRegex(self.client.get('/settings').get_data(as_text=True),
+                         r'id="mcp-server-enabled"[^>]*checked')
+
+        self.client.post('/settings', data={'form_id': 'mcp_settings'})
+        self.assertEqual(Settings.query.filter_by(key=ENABLED_SETTING).first().value, 'false')
+        self.assertTrue(self.call('get_portfolio_summary')['isError'])
+
+    def test_general_settings_save_does_not_touch_access(self):
+        self.client.post('/settings', data={'form_id': 'mcp_settings', 'mcp-server-enabled': 'on'})
+        self.client.post('/settings', data={'warning-threshold': '30', 'advisory-threshold': '90'})
+        self.assertEqual(Settings.query.filter_by(key=ENABLED_SETTING).first().value, 'true')
 
 
 class McpStdioEndToEndTests(unittest.TestCase):

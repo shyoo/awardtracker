@@ -639,6 +639,52 @@
     </div>
   </div>
 
+  <!-- AI Assistant Access (MCP) Card -->
+  <div id="ai-assistant-access" class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
+    <div class="border-b border-slate-100 pb-4 mb-6">
+      <h2 class="text-base font-bold leading-7 text-slate-900 flex items-center gap-2 select-none">
+        <span>🤖</span> AI Assistant Access (MCP)
+      </h2>
+      <p class="mt-1 text-xs text-slate-400">Let desktop AI assistants such as Claude Desktop read your portfolio through the Model Context Protocol.</p>
+    </div>
+
+    <form action="{{ url_for('settings') }}" method="POST" class="space-y-6">
+      <input type="hidden" name="form_id" value="mcp_settings">
+      <div class="relative flex items-start">
+        <div class="flex h-6 items-center">
+          <input id="mcp-server-enabled" name="mcp-server-enabled" type="checkbox" {% if settings.mcp_server_enabled == 'true' %}checked{% endif %} class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+        </div>
+        <div class="ml-3 text-sm leading-6">
+          <label for="mcp-server-enabled" class="font-bold text-slate-700 flex items-center gap-2">
+            Allow AI assistants to read my portfolio
+            {% if settings.mcp_server_enabled == 'true' %}
+            <span class="flex h-2 w-2 relative">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            {% endif %}
+          </label>
+          <p class="text-xs text-slate-400">Read-only: assistants can see balances, status, estimated value, expiration dates and certificate names. They never see passwords, usernames, membership numbers or certificate codes, and cannot sync or change anything. What you ask the assistant, and what it reads, is sent to its provider. Off by default; turning it off takes effect on the assistant's next request.</p>
+        </div>
+      </div>
+
+      {% if mcp_client_config %}
+      <div class="pl-7">
+        <p class="text-xs font-semibold text-slate-600 mb-1.5">Add this to your assistant's MCP configuration (e.g. <code>claude_desktop_config.json</code>):</p>
+        <pre class="text-[11px] leading-5 bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-slate-700 select-all">{{ mcp_client_config }}</pre>
+      </div>
+      {% else %}
+      <p class="pl-7 text-xs text-amber-600">The MCP server currently runs from a source checkout of Award Tracker (<code>python -m agent_api</code>); the installed app does not include it yet.</p>
+      {% endif %}
+
+      <div class="flex items-center justify-end">
+        <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary transition-colors">
+          Save AI Assistant Settings
+        </button>
+      </div>
+    </form>
+  </div>
+
   <!-- Scraper Diagnostics & Debugging Card -->
   <div class="mt-8 overflow-hidden bg-white shadow-sm border border-slate-100 sm:rounded-xl p-6 sm:p-8">
     <div class="border-b border-slate-100 pb-4 mb-6">
