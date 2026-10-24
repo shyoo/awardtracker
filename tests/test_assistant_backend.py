@@ -320,6 +320,44 @@ class TestLLMProviders(unittest.TestCase):
         finally:
             lp._http_request = orig_req
 
+    def test_gemini_replays_thought_signature(self):
+        import services.llm_providers as lp
+        recorded = []
+
+        def fake_request(url, method='GET', headers=None, payload=None, **kwargs):
+            recorded.append(payload)
+            return {'candidates': [{'content': {'parts': [
+                {'functionCall': {'name': 'list_accounts', 'args': {}}, 'thoughtSignature': 'sig-1'},
+            ]}}]}
+
+        with mock.patch.object(lp, '_http_request', fake_request):
+            cfg = {'provider': 'gemini', 'api_key': 'k', 'model': 'gemini-3-flash-preview'}
+            reply = chat(cfg, 'sys', [{'role': 'user', 'content': 'Hi'}], TOOLS)
+            self.assertEqual(reply.tool_calls[0].thought_signature, 'sig-1')
+            messages = [
+                {'role': 'user', 'content': 'Hi'},
+                {'role': 'assistant', 'content': '', 'tool_calls': reply.tool_calls},
+                {'role': 'tool', 'tool_call_id': reply.tool_calls[0].id, 'name': 'list_accounts', 'content': '[]'},
+            ]
+            chat(cfg, 'sys', messages, TOOLS)
+        replayed = recorded[1]['contents'][1]['parts'][0]
+        self.assertEqual(replayed['thoughtSignature'], 'sig-1')
+        self.assertEqual(replayed['functionCall']['name'], 'list_accounts')
+
+    def test_openai_ignores_custom_base_url(self):
+        import services.llm_providers as lp
+        urls = []
+
+        def fake_request(url, *args, **kwargs):
+            urls.append(url)
+            return {'data': []}
+
+        with mock.patch.object(lp, '_http_request', fake_request):
+            list_models({'provider': 'openai', 'api_key': 'k', 'base_url': 'https://elsewhere.example/v1'})
+        self.assertEqual(urls, ['https://api.openai.com/v1/models'])
+        with self.assertRaises(LLMError):
+            list_models({'provider': 'openai_compatible', 'api_key': '', 'base_url': ''})
+
     def test_list_models_for_all_providers(self):
         import services.llm_providers as lp
         orig_req = lp._http_request
@@ -441,6 +479,14 @@ class TestPseudonymizer(unittest.TestCase):
         unmasked_data = p.unmask_data(masked_data)
         self.assertEqual(unmasked_data['owner'], 'Alice')
         self.assertEqual(unmasked_data['accounts'][0], 'Bob has 100')
+
+    def test_unmask_is_case_sensitive_and_literal(self):
+        p = Pseudonymizer.from_people(['Alice', r'Dr Who'])
+        # Ordinary English must not be mistaken for a pseudonym.
+        self.assertEqual(p.unmask("Miles per person a year"), "Miles per person a year")
+        self.assertEqual(p.unmask("Person A"), "Alice")
+        # Names are inserted literally, not as regex replacement templates.
+        self.assertEqual(p.unmask(p.mask(r"Dr Who")), r"Dr Who")
 
 
 # =========================================================================== #

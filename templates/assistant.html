@@ -496,7 +496,10 @@ async function selectConversation(id) {
       document.getElementById('empty-state').classList.remove('hidden');
     }
   } catch (err) {
-    messagesEl.innerHTML = `<div class="p-4 text-center text-xs text-rose-500">${err.message}</div>`;
+    const errEl = document.createElement('div');
+    errEl.className = 'p-4 text-center text-xs text-rose-500';
+    errEl.textContent = err.message;
+    messagesEl.replaceChildren(errEl);
   }
 }
 

@@ -8,37 +8,17 @@ import os
 import shutil
 import sys
 import tempfile
-import types
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # Ensure project root is in python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Set up mock modules for services.assistant and services.llm_providers if they don't exist
-if 'services.llm_providers' not in sys.modules:
-    mock_llm = types.ModuleType('services.llm_providers')
-
-    class LLMError(Exception):
-        pass
-
-    mock_llm.LLMError = LLMError
-    mock_llm.list_models = MagicMock(return_value=['gpt-5.5', 'gpt-5'])
-    sys.modules['services.llm_providers'] = mock_llm
-else:
-    LLMError = getattr(sys.modules['services.llm_providers'], 'LLMError', Exception)
-
-if 'services.assistant' not in sys.modules:
-    mock_asst = types.ModuleType('services.assistant')
-    mock_asst.run_turn = MagicMock()
-    mock_asst.free_prompt = MagicMock()
-    mock_asst.free_site_url = MagicMock()
-    sys.modules['services.assistant'] = mock_asst
 
 from app import create_app
 from core.extensions import db
 from core.models import ChatMessage, Conversation, Settings
 from core.security import security_manager
+from services.llm_providers import LLMError
 from services.assistant_settings import (
     DEFAULT_MODELS,
     PROVIDERS,
@@ -198,7 +178,8 @@ class TestAssistantWeb(unittest.TestCase):
     # 4. Chat turn with prior messages: history passed to run_turn includes only user and assistant messages, never 'error' rows
     @patch('services.assistant.run_turn')
     def test_chat_history_skips_error_rows(self, mock_run_turn):
-        conv = Conversation(title='Multi-turn Chat', provider='anthropic')
+        save_settings({'provider': 'anthropic'})
+        conv = Conversation(title='Multi-turn Chat', provider='openai')
         db.session.add(conv)
         db.session.commit()
 
@@ -226,7 +207,9 @@ class TestAssistantWeb(unittest.TestCase):
         # Inspect history received by run_turn
         mock_run_turn.assert_called_once()
         call_config, call_history, call_message = mock_run_turn.call_args[0]
+        # The provider selected in settings wins over the one the chat started with.
         self.assertEqual(call_config['provider'], 'anthropic')
+        self.assertEqual(db.session.get(Conversation, conv.id).provider, 'anthropic')
         self.assertEqual(call_message, 'Turn 2 question')
 
         # History should ONLY have user and assistant rows (length 2), NOT the error row
@@ -237,7 +220,7 @@ class TestAssistantWeb(unittest.TestCase):
     # 5. Chat turn error path: mocks run_turn raising LLMError, stores row with role='error', returns JSON with role='error'
     @patch('services.assistant.run_turn')
     def test_chat_error_path(self, mock_run_turn):
-        llm_err = sys.modules['services.llm_providers'].LLMError('Invalid API key provided')
+        llm_err = LLMError('Invalid API key provided')
         mock_run_turn.side_effect = llm_err
 
         res = self.client.post(
@@ -321,6 +304,28 @@ class TestAssistantWeb(unittest.TestCase):
         res_empty = self.client.post('/api/assistant/free-prompt', json={'question': ''})
         self.assertEqual(res_empty.status_code, 400)
 
+    def test_free_prompt_copy_only_and_unknown_site(self):
+        with patch('services.assistant.free_prompt', return_value={'prompt': 'P', 'legend': {}}):
+            res = self.client.post('/api/assistant/free-prompt', json={'question': 'Q', 'site': ''})
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertEqual(data['url'], '')
+            self.assertTrue(data['copy_to_clipboard'])
+
+            res_bad = self.client.post('/api/assistant/free-prompt', json={'question': 'Q', 'site': 'evil'})
+            self.assertEqual(res_bad.status_code, 400)
+
+    @patch('services.assistant.run_turn')
+    def test_chat_unexpected_exception_becomes_error_row(self, mock_run_turn):
+        mock_run_turn.side_effect = KeyError('boom')
+        res = self.client.post('/api/assistant/chat', json={'message': 'Hi'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data['message']['role'], 'error')
+        self.assertIn('KeyError', data['message']['content'])
+        roles = [m.role for m in ChatMessage.query.filter_by(conversation_id=data['conversation_id'])]
+        self.assertEqual(roles, ['user', 'error'])
+
     # 8. Models endpoint
     @patch('services.llm_providers.list_models')
     def test_models_endpoint(self, mock_list_models):
@@ -368,7 +373,10 @@ class TestAssistantWeb(unittest.TestCase):
         self.assertEqual(cfg['provider'], 'anthropic')
         self.assertEqual(cfg['model'], 'claude-sonnet-5-5-custom')
         self.assertEqual(cfg['api_key'], 'sk-ant-test-secret-key-123')
-        self.assertEqual(cfg['base_url'], 'https://example.com/api')
+        # The custom server address is only ever handed to openai_compatible.
+        self.assertEqual(cfg['base_url'], '')
+        self.assertEqual(get_provider_config('openai')['base_url'], '')
+        self.assertEqual(get_provider_config('openai_compatible')['base_url'], 'https://example.com/api')
 
         # Saving with blank key retains existing key
         save_settings({

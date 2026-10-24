@@ -8,6 +8,7 @@ import json
 
 from flask import jsonify, render_template, request
 
+from core.applog import app_log
 from core.extensions import db
 from core.models import ChatMessage, Conversation
 from services.assistant_settings import (
@@ -135,6 +136,9 @@ def register(app):
         # Lazy imports so the app starts even if backend services are not yet present
         from services import assistant, llm_providers
 
+        # Follow the provider currently selected in settings, so switching
+        # provider (e.g. after adding a key) also applies to an open chat.
+        conv.provider = get_setting(SETTING_PROVIDER, 'openai')
         provider_config = get_provider_config(conv.provider)
         try:
             reply_data = assistant.run_turn(provider_config, history, message)
@@ -152,6 +156,15 @@ def register(app):
                 conversation_id=conv.id,
                 role='error',
                 content=str(e),
+                tools_used=None,
+            )
+            db.session.add(reply_msg)
+        except Exception as e:  # keep the user's message and show something useful
+            app_log.exception("Assistant turn failed")
+            reply_msg = ChatMessage(
+                conversation_id=conv.id,
+                role='error',
+                content=f"The assistant failed unexpectedly ({type(e).__name__}). See the application log.",
                 tools_used=None,
             )
             db.session.add(reply_msg)
@@ -216,6 +229,9 @@ def register(app):
         site = str((data or {}).get('site', '')).strip()
 
         from services import assistant
+
+        if site and site not in assistant.FREE_SITES:
+            return jsonify({'error': f'Unknown site: {site}'}), 400
 
         prompt_data = assistant.free_prompt(question)
         url_data = assistant.free_site_url(site, prompt_data.get('prompt', ''))

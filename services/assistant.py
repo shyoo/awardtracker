@@ -79,7 +79,7 @@ class Pseudonymizer:
             left_b = r'\b' if re.match(r'^\w', real_name) else ''
             right_b = r'\b' if re.search(r'\w$', real_name) else ''
             pattern = re.compile(rf'{left_b}{re.escape(real_name)}{right_b}', re.IGNORECASE)
-            text = pattern.sub(pseudo, text)
+            text = pattern.sub(lambda _m, p=pseudo: p, text)
         return text
 
     def unmask(self, text: str) -> str:
@@ -91,8 +91,9 @@ class Pseudonymizer:
         for pseudo, real_name in sorted_items:
             left_b = r'\b' if re.match(r'^\w', pseudo) else ''
             right_b = r'\b' if re.search(r'\w$', pseudo) else ''
-            pattern = re.compile(rf'{left_b}{re.escape(pseudo)}{right_b}', re.IGNORECASE)
-            text = pattern.sub(real_name, text)
+            # Case-sensitive: plain English such as "per person a year" must not unmask.
+            pattern = re.compile(rf'{left_b}{re.escape(pseudo)}{right_b}')
+            text = pattern.sub(lambda _m, r=real_name: r, text)
         return text
 
     def mask_data(self, obj: Any) -> Any:
@@ -292,7 +293,12 @@ def free_prompt(question: str) -> dict:
 
 
 def free_site_url(site: str, prompt: str) -> dict:
-    """Generate pre-filled or clipboard-fallback URL for free-tier web LLM sites."""
+    """Generate pre-filled or clipboard-fallback URL for free-tier web LLM sites.
+
+    An empty ``site`` means "Copy prompt": clipboard only, nothing to open.
+    """
+    if not site:
+        return {'url': '', 'copy_to_clipboard': True}
     if site not in FREE_SITES:
         raise ValueError(f"Unknown free site: '{site}'. Must be one of {FREE_SITES}")
 

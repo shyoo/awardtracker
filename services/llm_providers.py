@@ -31,6 +31,8 @@ class ToolCall:
     id: str
     name: str
     arguments: dict
+    # Gemini 3 rejects a replayed functionCall part without the signature it was issued with.
+    thought_signature: Optional[str] = None
 
 
 @dataclass
@@ -107,6 +109,20 @@ def _http_request(url: str, method: str = 'GET', headers: Optional[dict] = None,
         raise LLMError(f"{provider_name.capitalize()} request failed: {safe_exc}") from None
 
 
+def _openai_base_url(config: dict) -> str:
+    """API root for the OpenAI wire format.
+
+    Only ``openai_compatible`` honours ``base_url``: an OpenAI key must never be
+    sent to a user-supplied server.
+    """
+    if config.get('provider') == 'openai_compatible':
+        base_url = (config.get('base_url') or '').strip().rstrip('/')
+        if not base_url:
+            raise LLMError("Set the server address for the OpenAI-compatible provider first.")
+        return base_url
+    return 'https://api.openai.com/v1'
+
+
 # --------------------------------------------------------------------------- #
 # Schema conversion helpers
 # --------------------------------------------------------------------------- #
@@ -130,9 +146,7 @@ def _strip_gemini_schema(schema: Any) -> Any:
 
 def _chat_openai(config: dict, system: str, messages: list[dict], tools: list[dict], is_compatible: bool = False) -> LLMReply:
     provider_name = "openai_compatible" if is_compatible else "openai"
-    base_url = (config.get('base_url') or '').rstrip('/')
-    if not base_url:
-        base_url = 'https://api.openai.com/v1'
+    base_url = _openai_base_url(config)
     api_key = config.get('api_key') or ''
     model = config.get('model') or DEFAULT_MODELS.get(provider_name, '')
 
@@ -326,7 +340,11 @@ def _chat_gemini(config: dict, system: str, messages: list[dict], tools: list[di
             for tc in m.get('tool_calls', []):
                 tc_name = tc.name if hasattr(tc, 'name') else tc['name']
                 tc_args = tc.arguments if hasattr(tc, 'arguments') else tc['arguments']
-                parts.append({'functionCall': {'name': tc_name, 'args': tc_args}})
+                signature = getattr(tc, 'thought_signature', None)
+                part: Dict[str, Any] = {'functionCall': {'name': tc_name, 'args': tc_args}}
+                if signature:
+                    part['thoughtSignature'] = signature
+                parts.append(part)
             contents.append({'role': 'model', 'parts': parts})
             i += 1
         elif role == 'tool':
@@ -387,6 +405,7 @@ def _chat_gemini(config: dict, system: str, messages: list[dict], tools: list[di
                     id=f"call_{call_idx}",
                     name=fc.get('name', ''),
                     arguments=fc.get('args') if isinstance(fc.get('args'), dict) else {},
+                    thought_signature=p.get('thoughtSignature'),
                 ))
 
     return LLMReply(text="".join(text_parts), tool_calls=tool_calls)
@@ -416,9 +435,7 @@ def list_models(config: dict) -> list[str]:
     api_key = config.get('api_key') or ''
 
     if provider in ('openai', 'openai_compatible'):
-        base_url = (config.get('base_url') or '').rstrip('/')
-        if not base_url:
-            base_url = 'https://api.openai.com/v1'
+        base_url = _openai_base_url(config)
         headers = {}
         if api_key:
             headers['Authorization'] = f"Bearer {api_key}"

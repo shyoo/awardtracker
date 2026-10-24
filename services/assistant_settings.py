@@ -10,17 +10,10 @@ from core.models import Settings
 from core.security import security_manager
 from services.settings_store import get_bool_setting, get_setting, set_setting
 
+from services.llm_providers import DEFAULT_MODELS, PROVIDERS
+
 SETTING_PROVIDER = 'assistant_provider'
 SETTING_PSEUDONYMIZE = 'assistant_pseudonymize_names'
-
-PROVIDERS = ('openai', 'anthropic', 'gemini', 'openai_compatible')
-
-DEFAULT_MODELS = {
-    'openai': 'gpt-5.5',
-    'anthropic': 'claude-sonnet-5-5',
-    'gemini': 'gemini-3-flash-preview',
-    'openai_compatible': '',
-}
 
 
 def get_public_settings() -> Dict[str, Any]:
@@ -54,7 +47,7 @@ def save_settings(form: Dict[str, Any]) -> None:
         return
 
     # 1. Provider
-    if 'provider' in form and form['provider']:
+    if form.get('provider') in PROVIDERS:
         set_setting(SETTING_PROVIDER, str(form['provider']).strip(), commit=False)
 
     # 2. Pseudonymize
@@ -71,7 +64,7 @@ def save_settings(form: Dict[str, Any]) -> None:
         set_setting(SETTING_PSEUDONYMIZE, 'true' if p_bool else 'false', commit=False)
 
     # 3. Models
-    current_provider = form.get('provider') or get_setting(SETTING_PROVIDER, 'openai')
+    current_provider = form.get('provider') if form.get('provider') in PROVIDERS else get_setting(SETTING_PROVIDER, 'openai')
     if 'model' in form:
         if isinstance(form['model'], dict):
             for p, m in form['model'].items():
@@ -147,7 +140,9 @@ def get_provider_config(provider: Optional[str] = None) -> Dict[str, Any]:
         provider = get_setting(SETTING_PROVIDER, 'openai')
 
     model = get_setting(f'assistant_model_{provider}', DEFAULT_MODELS.get(provider, ''))
-    base_url = get_setting('assistant_base_url', '')
+    # The custom server address belongs to openai_compatible only, so another
+    # provider's key is never sent to it.
+    base_url = get_setting('assistant_base_url', '') if provider == 'openai_compatible' else ''
     enc_key = get_setting(f'assistant_key_{provider}', '')
     api_key = ''
     if enc_key:
