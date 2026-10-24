@@ -61,7 +61,7 @@ DEFAULT_MODELS = {...}            # see above
 class LLMError(Exception): ...    # message is safe to show the user (never contains the key)
 
 @dataclass
-class ToolCall:   id: str; name: str; arguments: dict
+class ToolCall:   id: str; name: str; arguments: dict; thought_signature: str | None = None
 @dataclass
 class LLMReply:   text: str; tool_calls: list[ToolCall]
 
@@ -70,7 +70,9 @@ def list_models(config: dict) -> list[str]
 ```
 
 `config = {'provider', 'api_key', 'model', 'base_url'}` (`base_url` only for
-`openai_compatible`, e.g. `http://localhost:11434/v1`).
+`openai_compatible`, e.g. `http://localhost:11434/v1`). `openai` always uses
+`api.openai.com`, and `get_provider_config` gives the base URL to
+`openai_compatible` alone, so no key reaches a user-supplied server by accident.
 
 `messages` is a provider-neutral transcript:
 
@@ -97,6 +99,8 @@ Wire formats:
   `user`/`model`, `tools: [{functionDeclarations: [...]}]`, `functionCall` /
   `functionResponse` parts. Strip `additionalProperties` (and `default`) from
   schemas: Gemini rejects them. Gemini has no call ids; synthesize them.
+  Gemini 3 returns a `thoughtSignature` beside each `functionCall` and rejects
+  a replay without it, so it rides on `ToolCall.thought_signature`.
   Models: `GET .../v1beta/models`, keep those supporting `generateContent`,
   strip the `models/` prefix.
 
@@ -143,6 +147,7 @@ def free_site_url(site: str, prompt: str) -> dict
 * `free_site_url`: `{'url': str, 'copy_to_clipboard': bool}`. Prefill for
   `chatgpt` / `claude` when the URL fits `MAX_PREFILL_URL_CHARS`; otherwise
   (and always for `gemini`) the plain site URL with `copy_to_clipboard: True`.
+  An empty `site` ("Copy prompt") returns `{'url': '', 'copy_to_clipboard': True}`.
 
 ### `services/assistant_settings.py`
 
@@ -177,7 +182,7 @@ stored with **real** names (local DB); masking happens only on the way out.
 | `GET /api/assistant/conversations` | `[{id, title, updated_at}]`, newest first |
 | `GET /api/assistant/conversations/<id>` | `{id, title, messages: [...]}` |
 | `DELETE /api/assistant/conversations/<id>` | Delete |
-| `POST /api/assistant/chat` | `{conversation_id?, message}` -> stores user msg, `run_turn`, stores reply (or an `error` row on `LLMError`), returns `{conversation_id, message}` |
+| `POST /api/assistant/chat` | `{conversation_id?, message}` -> stores user msg, `run_turn`, stores reply (or an `error` row on `LLMError` or any unexpected failure) using the provider currently selected in settings, returns `{conversation_id, message}` |
 | `POST /api/assistant/settings` | Save provider/model/key/base URL/pseudonymize |
 | `POST /api/assistant/models` | `{provider}` -> `{models: [...]}` or `{error}` |
 | `POST /api/assistant/free-prompt` | `{question, site}` -> `{prompt, url, copy_to_clipboard, legend}` |
