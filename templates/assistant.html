@@ -1,0 +1,715 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto py-4">
+  <!-- Top Title Bar -->
+  <div class="sm:flex sm:items-center sm:justify-between mb-4">
+    <div>
+      <h1 class="text-2xl font-bold leading-7 text-slate-900 flex items-center gap-2">
+        <span>🤖</span> Ask AI Assistant
+      </h1>
+      <p class="mt-1 text-xs text-slate-500">Ask questions about your loyalty programs, balances, certificates, and upcoming expirations.</p>
+    </div>
+    <div class="mt-3 sm:mt-0 flex items-center gap-2">
+      <button type="button" id="toggle-settings-btn" onclick="toggleSettingsPanel()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-sm transition-colors">
+        <svg class="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <span id="settings-btn-label">Settings</span>
+      </button>
+      <a href="{{ url_for('index') }}" class="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50">Back to Dashboard</a>
+    </div>
+  </div>
+
+  <!-- Collapsible Settings Panel -->
+  <div id="settings-panel" class="hidden mb-6 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+    <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+      <div>
+        <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <span>⚙️</span> Assistant Configuration
+        </h2>
+        <p class="text-xs text-slate-500 mt-0.5">Configure your AI provider, API credentials, and privacy options.</p>
+      </div>
+      <button type="button" onclick="toggleSettingsPanel()" class="text-slate-400 hover:text-slate-600 text-sm font-semibold">✕ Close</button>
+    </div>
+
+    <form id="assistant-settings-form" onsubmit="saveAssistantSettings(event)" class="mt-4 space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Provider -->
+        <div>
+          <label for="setting-provider" class="block text-xs font-semibold text-slate-700">Provider</label>
+          <select id="setting-provider" onchange="onProviderChange()" class="mt-1.5 block w-full rounded-lg border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 shadow-sm border focus:ring-2 focus:ring-primary focus:border-transparent">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="openai_compatible">OpenAI-Compatible (Ollama, LM Studio, etc.)</option>
+          </select>
+        </div>
+
+        <!-- Model -->
+        <div>
+          <div class="flex items-center justify-between">
+            <label for="setting-model" class="block text-xs font-semibold text-slate-700">Model</label>
+            <button type="button" id="btn-load-models" onclick="loadModelsForProvider()" class="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1">
+              <span>↻ Load models</span>
+            </button>
+          </div>
+          <div class="mt-1.5 flex gap-2">
+            <input type="text" id="setting-model" list="models-datalist" placeholder="e.g. gpt-5.5" class="block flex-1 rounded-lg border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 shadow-sm border focus:ring-2 focus:ring-primary focus:border-transparent">
+            <datalist id="models-datalist"></datalist>
+          </div>
+        </div>
+
+        <!-- API Key -->
+        <div>
+          <div class="flex items-center justify-between">
+            <label for="setting-api-key" class="block text-xs font-semibold text-slate-700">API Key</label>
+            <span id="key-saved-badge" class="hidden inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Key saved
+            </span>
+          </div>
+          <div class="mt-1.5 flex gap-2">
+            <input type="password" id="setting-api-key" placeholder="Enter API key..." autocomplete="off" class="block flex-1 rounded-lg border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900 shadow-sm border focus:ring-2 focus:ring-primary focus:border-transparent">
+            <button type="button" id="btn-clear-key" onclick="clearApiKey()" class="px-2.5 py-2 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors">
+              Clear key
+            </button>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-400">Leave blank to retain existing key. Keys are encrypted with your master password.</p>
+        </div>
+
+        <!-- Base URL -->
+        <div id="base-url-container">
+          <label for="setting-base-url" class="block text-xs font-semibold text-slate-700">Base URL (OpenAI-compatible)</label>
+          <input type="text" id="setting-base-url" placeholder="http://localhost:11434/v1" class="mt-1.5 block w-full rounded-lg border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 shadow-sm border focus:ring-2 focus:ring-primary focus:border-transparent">
+          <p class="mt-1 text-[11px] text-slate-400">Endpoint URL for local or custom OpenAI-compatible servers.</p>
+        </div>
+      </div>
+
+      <!-- Pseudonymize Toggle & Privacy Note -->
+      <div class="pt-3 border-t border-slate-100 space-y-3">
+        <label class="relative flex items-start gap-3 cursor-pointer">
+          <div class="flex items-center h-5">
+            <input type="checkbox" id="setting-pseudonymize" class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary">
+          </div>
+          <div class="text-xs">
+            <span class="font-semibold text-slate-800">Pseudonymize names before sending</span>
+            <p class="text-slate-500 text-[11px]">Replaces real person names with Person A, Person B, etc., in prompts and tool arguments before sending to the model, and restores them when displaying replies.</p>
+          </div>
+        </label>
+
+        <!-- Privacy Disclosure Banner -->
+        <div class="rounded-xl bg-slate-50 border border-slate-200/80 p-3 text-xs text-slate-600 space-y-1">
+          <p class="font-semibold text-slate-800 flex items-center gap-1.5">
+            <span>🔒</span> Privacy & Data Handling
+          </p>
+          <p class="text-[11px] leading-relaxed">
+            Data sent to providers is limited strictly to read-only portfolio balances, programs, status tiers, certificates, and expiration dates.
+            Usernames, passwords, membership numbers, certificate voucher details, and raw scraper errors are <strong>never</strong> shared.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-2">
+        <span id="settings-status-msg" class="text-xs text-emerald-600 font-semibold hidden"></span>
+        <button type="submit" id="btn-save-settings" class="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 transition-colors">
+          Save Settings
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Main Container: Sidebar + Chat Area -->
+  <div class="flex flex-col md:flex-row gap-4 h-[750px]">
+    <!-- Left Sidebar: Conversations -->
+    <div class="w-full md:w-80 flex-shrink-0 bg-white border border-slate-200 rounded-2xl flex flex-col shadow-sm overflow-hidden">
+      <!-- New Chat Button -->
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Conversations</h2>
+        <button type="button" onclick="startNewChat()" class="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 transition-colors">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          New Chat
+        </button>
+      </div>
+
+      <!-- Conversation List -->
+      <div id="conversation-list" class="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 space-y-1">
+        <div class="p-4 text-center text-xs text-slate-400">Loading conversations...</div>
+      </div>
+    </div>
+
+    <!-- Right Pane: Active Chat -->
+    <div class="flex-1 bg-white border border-slate-200 rounded-2xl flex flex-col shadow-sm overflow-hidden">
+      <!-- Chat Header -->
+      <div class="px-6 py-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+          <span id="chat-header-title" class="text-xs font-bold text-slate-800 truncate max-w-md">New Conversation</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="active-provider-badge" class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-slate-200 text-slate-700">
+            openai
+          </span>
+        </div>
+      </div>
+
+      <!-- Messages Scroll Area -->
+      <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30">
+        <!-- Welcome empty state -->
+        <div id="empty-state" class="h-full flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto space-y-4">
+          <div class="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-100 text-primary flex items-center justify-center text-2xl shadow-sm">
+            💬
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-800">How can I help you today?</h3>
+            <p class="text-xs text-slate-500 mt-1">Ask questions about points balances, upcoming expirations, status perks, or free flight vouchers.</p>
+          </div>
+          <div class="w-full space-y-2 pt-2">
+            <button type="button" onclick="fillPrompt('What points or miles are expiring in the next 90 days?')" class="w-full text-left px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-700 font-medium transition-colors shadow-xs">
+              ⏳ "What points or miles are expiring in the next 90 days?"
+            </button>
+            <button type="button" onclick="fillPrompt('Summarize my total points balance across all airline and hotel programs.')" class="w-full text-left px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-700 font-medium transition-colors shadow-xs">
+              📊 "Summarize my total points balance across all programs."
+            </button>
+            <button type="button" onclick="fillPrompt('Which accounts currently hold elite status or certificates?')" class="w-full text-left px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs text-slate-700 font-medium transition-colors shadow-xs">
+              ⭐ "Which accounts currently hold elite status or certificates?"
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thinking Indicator -->
+      <div id="thinking-indicator" class="hidden px-6 py-2 bg-slate-50/60 border-t border-slate-100 flex items-center gap-2 text-xs font-semibold text-slate-500">
+        <svg class="animate-spin h-3.5 w-3.5 text-primary" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Assistant is thinking...</span>
+      </div>
+
+      <!-- Pseudonym Legend Notice (shown when free-prompt returns a legend) -->
+      <div id="legend-banner" class="hidden px-6 py-2 bg-amber-50 border-t border-amber-200/80 text-xs text-amber-900 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span>👥</span>
+          <span id="legend-text" class="font-medium"></span>
+        </div>
+        <button type="button" onclick="document.getElementById('legend-banner').classList.add('hidden')" class="text-amber-700 hover:text-amber-900 font-bold ml-2">✕</button>
+      </div>
+
+      <!-- Free Mode Row -->
+      <div class="px-6 py-2.5 bg-slate-100/70 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex items-center gap-1.5 text-slate-600 font-semibold text-[11px]">
+          <span>⚡ Free Mode (no API key required):</span>
+        </div>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button type="button" onclick="triggerFreeMode('chatgpt')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:text-primary transition-colors shadow-xs">
+            Open in ChatGPT
+          </button>
+          <button type="button" onclick="triggerFreeMode('claude')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:text-primary transition-colors shadow-xs">
+            Open in Claude
+          </button>
+          <button type="button" onclick="triggerFreeMode('gemini')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:text-primary transition-colors shadow-xs">
+            Open in Gemini
+          </button>
+          <button type="button" onclick="triggerFreeMode('')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:text-primary transition-colors shadow-xs">
+            📋 Copy prompt
+          </button>
+        </div>
+      </div>
+
+      <!-- Composer Area -->
+      <div class="p-4 border-t border-slate-200 bg-white">
+        <div class="relative">
+          <textarea id="chat-input" rows="3" maxlength="8000"
+                    placeholder="Ask about your points, elite status, expiring miles, or certificates... (Enter to send, Shift+Enter for newline)"
+                    onkeydown="handleInputKeydown(event)"
+                    oninput="updateCharCount()"
+                    class="block w-full rounded-xl border border-slate-200 px-4 py-3 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none shadow-xs"></textarea>
+          <div class="mt-2 flex items-center justify-between">
+            <span id="char-count" class="text-[11px] text-slate-400 font-mono">0 / 8000</span>
+            <button type="button" id="btn-send" onclick="sendCurrentMessage()" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 disabled:opacity-50 transition-colors">
+              <span>Send</span>
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Floating Toast -->
+<div id="toast" class="fixed bottom-6 right-6 z-50 transform transition-all duration-300 translate-y-8 opacity-0 pointer-events-none rounded-xl bg-slate-900 text-white px-4 py-2.5 text-xs font-semibold shadow-xl flex items-center gap-2">
+  <span id="toast-message"></span>
+</div>
+
+<script>
+// State
+let appSettings = {{ settings|tojson }};
+const defaultModels = {{ default_models|tojson }};
+let currentConversationId = null;
+let isWaitingForResponse = false;
+let lastUserMessageText = "";
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderSettingsValues();
+  loadConversations();
+});
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  document.getElementById('toast-message').textContent = msg;
+  toast.classList.remove('translate-y-8', 'opacity-0', 'pointer-events-none');
+  setTimeout(() => {
+    toast.classList.add('translate-y-8', 'opacity-0', 'pointer-events-none');
+  }, 2500);
+}
+
+function toggleSettingsPanel() {
+  const panel = document.getElementById('settings-panel');
+  panel.classList.toggle('hidden');
+}
+
+function renderSettingsValues() {
+  const provider = appSettings.provider || 'openai';
+  document.getElementById('setting-provider').value = provider;
+
+  const modelVal = (appSettings.model && appSettings.model[provider]) || defaultModels[provider] || '';
+  document.getElementById('setting-model').value = modelVal;
+
+  document.getElementById('setting-base-url').value = appSettings.base_url || '';
+  document.getElementById('setting-pseudonymize').checked = !!appSettings.pseudonymize;
+
+  updateKeySavedBadge(provider);
+  updateActiveProviderBadge(provider, modelVal);
+}
+
+function updateKeySavedBadge(provider) {
+  const hasKey = appSettings.has_key && appSettings.has_key[provider];
+  const badge = document.getElementById('key-saved-badge');
+  if (hasKey) {
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function updateActiveProviderBadge(provider, model) {
+  const badge = document.getElementById('active-provider-badge');
+  badge.textContent = `${provider}${model ? ': ' + model : ''}`;
+}
+
+function onProviderChange() {
+  const provider = document.getElementById('setting-provider').value;
+  const modelVal = (appSettings.model && appSettings.model[provider]) || defaultModels[provider] || '';
+  document.getElementById('setting-model').value = modelVal;
+  updateKeySavedBadge(provider);
+  updateActiveProviderBadge(provider, modelVal);
+}
+
+async function loadModelsForProvider() {
+  const provider = document.getElementById('setting-provider').value;
+  const btn = document.getElementById('btn-load-models');
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+
+  try {
+    const res = await fetch('/api/assistant/models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider }),
+    });
+    const data = await res.json();
+    if (data.models && Array.isArray(data.models)) {
+      const datalist = document.getElementById('models-datalist');
+      datalist.innerHTML = '';
+      data.models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        datalist.appendChild(opt);
+      });
+      showToast(`Loaded ${data.models.length} models for ${provider}`);
+    } else if (data.error) {
+      alert(`Could not load models: ${data.error}`);
+    }
+  } catch (err) {
+    alert(`Failed to load models: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↻ Load models';
+  }
+}
+
+async function clearApiKey() {
+  const provider = document.getElementById('setting-provider').value;
+  if (!confirm(`Clear stored API key for ${provider}?`)) return;
+
+  try {
+    const payload = {
+      provider: provider,
+      clear_key: true,
+    };
+    const res = await fetch('/api/assistant/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.settings) {
+      appSettings = data.settings;
+      document.getElementById('setting-api-key').value = '';
+      updateKeySavedBadge(provider);
+      showToast(`Key cleared for ${provider}`);
+    }
+  } catch (err) {
+    alert(`Failed to clear key: ${err.message}`);
+  }
+}
+
+async function saveAssistantSettings(e) {
+  if (e) e.preventDefault();
+  const provider = document.getElementById('setting-provider').value;
+  const model = document.getElementById('setting-model').value.trim();
+  const apiKey = document.getElementById('setting-api-key').value.trim();
+  const baseUrl = document.getElementById('setting-base-url').value.trim();
+  const pseudonymize = document.getElementById('setting-pseudonymize').checked;
+
+  const payload = {
+    provider: provider,
+    model: model,
+    base_url: baseUrl,
+    pseudonymize: pseudonymize,
+  };
+  if (apiKey) {
+    payload.api_key = apiKey;
+  }
+
+  const btn = document.getElementById('btn-save-settings');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    const res = await fetch('/api/assistant/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.settings) {
+      appSettings = data.settings;
+      renderSettingsValues();
+      document.getElementById('setting-api-key').value = '';
+      showToast('Settings saved successfully!');
+      setTimeout(() => toggleSettingsPanel(), 400);
+    }
+  } catch (err) {
+    alert(`Failed to save settings: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Settings';
+  }
+}
+
+async function loadConversations() {
+  const listEl = document.getElementById('conversation-list');
+  try {
+    const res = await fetch('/api/assistant/conversations');
+    const convs = await res.json();
+    listEl.innerHTML = '';
+    if (!convs || convs.length === 0) {
+      listEl.innerHTML = '<div class="p-4 text-center text-xs text-slate-400">No conversations yet.</div>';
+      return;
+    }
+
+    convs.forEach(c => {
+      const item = document.createElement('div');
+      item.className = `group flex items-center justify-between p-2.5 rounded-xl cursor-pointer text-xs transition-colors ${
+        c.id === currentConversationId ? 'bg-blue-50 text-primary font-semibold' : 'text-slate-700 hover:bg-slate-50'
+      }`;
+      item.onclick = () => selectConversation(c.id);
+
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'truncate flex-1 pr-2';
+      titleSpan.textContent = c.title || 'Untitled chat';
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 rounded transition-opacity';
+      delBtn.title = 'Delete chat';
+      delBtn.innerHTML = `
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+        </svg>
+      `;
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteConversation(c.id);
+      };
+
+      item.appendChild(titleSpan);
+      item.appendChild(delBtn);
+      listEl.appendChild(item);
+    });
+  } catch (err) {
+    listEl.innerHTML = '<div class="p-4 text-center text-xs text-rose-500">Failed to load conversations.</div>';
+  }
+}
+
+function startNewChat() {
+  currentConversationId = null;
+  document.getElementById('chat-header-title').textContent = 'New Conversation';
+  const messagesEl = document.getElementById('chat-messages');
+  messagesEl.innerHTML = '';
+  document.getElementById('empty-state').classList.remove('hidden');
+  messagesEl.appendChild(document.getElementById('empty-state'));
+  document.getElementById('chat-input').value = '';
+  updateCharCount();
+  document.getElementById('legend-banner').classList.add('hidden');
+  loadConversations();
+  document.getElementById('chat-input').focus();
+}
+
+async function selectConversation(id) {
+  currentConversationId = id;
+  loadConversations();
+  const messagesEl = document.getElementById('chat-messages');
+  messagesEl.innerHTML = '<div class="p-4 text-center text-xs text-slate-400">Loading messages...</div>';
+
+  try {
+    const res = await fetch(`/api/assistant/conversations/${id}`);
+    if (!res.ok) throw new Error('Conversation not found');
+    const data = await res.json();
+    document.getElementById('chat-header-title').textContent = data.title || 'Conversation';
+    messagesEl.innerHTML = '';
+
+    if (data.messages && data.messages.length > 0) {
+      data.messages.forEach(m => {
+        appendMessageBubble(m.role, m.content, m.tools_used);
+      });
+      scrollChatToBottom();
+    } else {
+      messagesEl.appendChild(document.getElementById('empty-state'));
+      document.getElementById('empty-state').classList.remove('hidden');
+    }
+  } catch (err) {
+    const errEl = document.createElement('div');
+    errEl.className = 'p-4 text-center text-xs text-rose-500';
+    errEl.textContent = err.message;
+    messagesEl.replaceChildren(errEl);
+  }
+}
+
+async function deleteConversation(id) {
+  if (!confirm('Are you sure you want to delete this conversation?')) return;
+  try {
+    await fetch(`/api/assistant/conversations/${id}`, { method: 'DELETE' });
+    if (currentConversationId === id) {
+      startNewChat();
+    } else {
+      loadConversations();
+    }
+    showToast('Conversation deleted');
+  } catch (err) {
+    alert(`Failed to delete conversation: ${err.message}`);
+  }
+}
+
+function fillPrompt(text) {
+  const input = document.getElementById('chat-input');
+  input.value = text;
+  updateCharCount();
+  input.focus();
+}
+
+function handleInputKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendCurrentMessage();
+  }
+}
+
+function updateCharCount() {
+  const input = document.getElementById('chat-input');
+  document.getElementById('char-count').textContent = `${input.value.length} / 8000`;
+}
+
+function scrollChatToBottom() {
+  const messagesEl = document.getElementById('chat-messages');
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// Security: Escapes and safely renders messages using textContent, never innerHTML of model output
+function appendMessageBubble(role, content, toolsUsed) {
+  const emptyState = document.getElementById('empty-state');
+  if (emptyState) emptyState.classList.add('hidden');
+
+  const messagesEl = document.getElementById('chat-messages');
+  const row = document.createElement('div');
+
+  if (role === 'user') {
+    row.className = 'flex justify-end';
+    const bubble = document.createElement('div');
+    bubble.className = 'bg-primary text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-2xl text-xs leading-relaxed shadow-sm whitespace-pre-wrap break-words';
+    bubble.textContent = content;
+    row.appendChild(bubble);
+  } else if (role === 'assistant') {
+    row.className = 'flex justify-start items-start gap-3';
+    
+    const avatar = document.createElement('div');
+    avatar.className = 'h-7 w-7 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-xs select-none';
+    avatar.textContent = 'AI';
+    row.appendChild(avatar);
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl text-xs leading-relaxed shadow-sm break-words';
+
+    // Tool chips if any
+    if (toolsUsed && Array.isArray(toolsUsed) && toolsUsed.length > 0) {
+      const toolsContainer = document.createElement('div');
+      toolsContainer.className = 'flex flex-wrap gap-1.5 mb-2.5';
+      toolsUsed.forEach(tool => {
+        const chip = document.createElement('span');
+        chip.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-100 text-slate-600 border border-slate-200';
+        chip.textContent = '🛠️ ' + tool;
+        toolsContainer.appendChild(chip);
+      });
+      bubble.appendChild(toolsContainer);
+    }
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'whitespace-pre-wrap break-words';
+    textDiv.textContent = content; // Guaranteed safe against XSS
+    bubble.appendChild(textDiv);
+
+    row.appendChild(bubble);
+  } else if (role === 'error') {
+    row.className = 'flex justify-start items-start gap-3';
+    
+    const avatar = document.createElement('div');
+    avatar.className = 'h-7 w-7 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-xs select-none';
+    avatar.textContent = '⚠️';
+    row.appendChild(avatar);
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl rounded-tl-sm px-4 py-3 max-w-2xl text-xs leading-relaxed shadow-sm break-words';
+
+    const errLabel = document.createElement('div');
+    errLabel.className = 'font-bold text-[11px] uppercase tracking-wider text-rose-700 mb-1';
+    errLabel.textContent = 'Provider Error';
+    bubble.appendChild(errLabel);
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'whitespace-pre-wrap break-words';
+    textDiv.textContent = content;
+    bubble.appendChild(textDiv);
+
+    row.appendChild(bubble);
+  }
+
+  messagesEl.appendChild(row);
+}
+
+async function sendCurrentMessage() {
+  if (isWaitingForResponse) return;
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  if (text.length > 8000) {
+    alert('Message exceeds maximum length of 8000 characters.');
+    return;
+  }
+
+  lastUserMessageText = text;
+  input.value = '';
+  updateCharCount();
+
+  // Render user bubble
+  appendMessageBubble('user', text);
+  scrollChatToBottom();
+
+  isWaitingForResponse = true;
+  document.getElementById('btn-send').disabled = true;
+  document.getElementById('thinking-indicator').classList.remove('hidden');
+  scrollChatToBottom();
+
+  try {
+    const payload = {
+      conversation_id: currentConversationId,
+      message: text,
+    };
+    const res = await fetch('/api/assistant/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (res.ok && data.message) {
+      if (!currentConversationId && data.conversation_id) {
+        currentConversationId = data.conversation_id;
+        loadConversations();
+      }
+      appendMessageBubble(data.message.role, data.message.content, data.message.tools_used);
+    } else {
+      appendMessageBubble('error', data.error || 'An unexpected error occurred while communicating with the assistant.');
+    }
+  } catch (err) {
+    appendMessageBubble('error', `Network error: ${err.message}`);
+  } finally {
+    isWaitingForResponse = false;
+    document.getElementById('btn-send').disabled = false;
+    document.getElementById('thinking-indicator').classList.add('hidden');
+    scrollChatToBottom();
+    input.focus();
+  }
+}
+
+async function triggerFreeMode(site) {
+  const input = document.getElementById('chat-input');
+  const question = input.value.trim() || lastUserMessageText;
+  if (!question) {
+    alert('Please type a question in the composer first.');
+    input.focus();
+    return;
+  }
+
+  showToast('Generating privacy-safe prompt...');
+
+  try {
+    const res = await fetch('/api/assistant/free-prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, site }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      alert(`Could not generate prompt: ${data.error || 'Server error'}`);
+      return;
+    }
+
+    if (data.copy_to_clipboard && data.prompt) {
+      await navigator.clipboard.writeText(data.prompt);
+      showToast('Prompt copied to clipboard!');
+    }
+
+    if (data.legend && Object.keys(data.legend).length > 0) {
+      const banner = document.getElementById('legend-banner');
+      const textEl = document.getElementById('legend-text');
+      const pairs = Object.entries(data.legend).map(([p, r]) => `${p} = ${r}`).join(', ');
+      textEl.textContent = `Pseudonym Legend: ${pairs}`;
+      banner.classList.remove('hidden');
+    }
+
+    if (data.url) {
+      window.open(data.url, '_blank');
+    }
+  } catch (err) {
+    alert(`Free mode error: ${err.message}`);
+  }
+}
+</script>
+{% endblock %}

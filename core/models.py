@@ -182,3 +182,28 @@ class Certificate(db.Model):
     @details.setter
     def details(self, value):
         self.details_json = json.dumps(value)
+
+class Conversation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    provider = db.Column(db.String(40), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    messages = db.relationship(
+        'ChatMessage',
+        backref=db.backref('conversation', lazy=True),
+        cascade='all, delete-orphan',
+        lazy=True,
+        order_by='ChatMessage.created_at.asc()'
+    )
+
+
+class ChatMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversation.id'), nullable=False)
+    role = db.Column(db.String(20), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    tools_used = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
