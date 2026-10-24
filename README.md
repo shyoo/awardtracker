@@ -28,7 +28,8 @@ Award Tracker runs entirely on your local machine:
 * **Guided Interactive Sign-in (4-Step Overlay)**: When a loyalty program requires MFA or a captcha, Award Tracker opens a headed browser window, **pre-fills your ID and password automatically**, and injects a custom floating guide card (`awardtracker-guide-modal`) in the corner. The card walks you through four steps: (1) credentials are pre-filled — don't touch them, (2) click **Sign In / Submit / Continue** yourself, (3) complete any MFA code manually, and (4) once signed in, the tool auto-navigates to your mileage overview and closes the window — hands off!
 * **Automatic Daily Database Backup**: Backs up your `awardtracker.db` file automatically at 3:00 AM daily (and on startup if yesterday's backup is missing). Retention window is user-configurable — **Never**, **3**, **7** (default), or **30** days — from the Settings page. Backup files are stored as `awardtracker_backup_YYYYMMDD.db` inside an `AwardTracker/backups/` folder in your OS application data directory.
 * **Cross-Platform Native OS Notifications**: Dispatches native notifications locally through the Windows Action Center, macOS Notification Center, or Linux notify-send on app startup, sync start, sync success/failures, and points-expiry warnings.
-* **AI Assistant Access (MCP)**: A read-only Model Context Protocol server lets assistants such as Claude Desktop answer questions about your balances and expirations without ever seeing your credentials. Off by default; turn it on in Settings. See *Ask an AI Assistant About Your Portfolio* below.
+* **In-App AI Assistant ("Ask AI")**: An interactive chat tab right inside Award Tracker to plan trips, compare redemptions, and ask about balances, certificates, and expirations. Use your own API key (OpenAI, Anthropic, Gemini, or local OpenAI-compatible endpoints) for autonomous tool-driven answers in the app, or use **Free Mode** with ChatGPT, Claude, or Gemini in your browser with zero configuration. Person names are pseudonymized by default, and credentials never leave your device.
+* **AI Assistant Access (MCP)**: A read-only Model Context Protocol server lets desktop assistants such as Claude Desktop answer questions about your balances and expirations without ever seeing your credentials. Off by default; turn it on in Settings. See *External AI Assistant Access (MCP)* below.
 * **Custom Manual Tracking**: Easily track points from credit cards (Chase, Amex, Citi, Capital One, Wells Fargo) or offline store programs (e.g. "Best Buy points", "Panera rewards"), complete with custom name overrides.
 
 ---
@@ -46,6 +47,10 @@ When executing an Interactive Login, Award Tracker launches a visible browser wi
 ### 3. Tracking of points history
 Provides a tracking chart that shows points history over the times.
 ![Account Details](static/screenshots/account_details.png)
+
+### 4. In-App AI Assistant ("Ask AI")
+Ask questions in plain English to plan trips, compare redemptions, and receive tailored hotel or flight recommendations based on your actual point balances and elite status tiers.
+![Ask AI Assistant](static/screenshots/ask_ai.png)
 
 ---
 
@@ -246,7 +251,14 @@ If you experience synchronization issues or sync tasks fail repeatedly due to st
   - **Include HTML source code & page screenshots**: Packages all page screenshots and markup dumps (only available if Debug Mode was enabled, unchecked by default to save bandwidth).
   - Click **Download Diagnostic Zip** to download a compressed report that you can upload directly to GitHub issues for easier developer debugging.
 
-### 7. Ask an AI Assistant About Your Portfolio (MCP)
+### 7. In-App AI Assistant ("Ask AI")
+Award Tracker features a built-in AI assistant accessible from the **Ask AI** navigation tab. Ask questions in natural language like *"I plan to visit Tokyo next week. Please recommend hotels I can stay at with my points, and how many nights they would cover."* or *"What points or certificates expire in the next 90 days?"*.
+
+* **Bring Your Own Key**: Connect OpenAI, Anthropic (Claude), Google Gemini, or an OpenAI-compatible local server (e.g. Ollama, LM Studio, OpenRouter) in the assistant settings panel. The model receives read-only tool calls (`accounts`, `portfolio summary`, `expiring items`) to look up your balances and status tiers and deliver complete, calculated answers right in the chat.
+* **Free Mode (Zero Configuration)**: No API key needed. Pick **ChatGPT (free)**, **Claude (free)**, or **Gemini (free)** from the picker. Award Tracker prepares a privacy-safe snapshot of your relevant portfolio data along with your question and opens the web chat with your prompt pre-filled (or copied to your clipboard).
+* **Privacy & Pseudonymization**: Data sent to providers is limited strictly to read-only point balances, status tiers, certificates, and expirations. Passwords, usernames, and account numbers are **never** shared. By default, **Pseudonymize names before sending** replaces person names with *Person A*, *Person B*, etc., and restores them automatically when rendering the reply. API keys are encrypted with your master password and never leave your machine.
+
+### 8. External AI Assistant Access (MCP)
 Award Tracker includes a read-only [Model Context Protocol](https://modelcontextprotocol.io) server, so desktop AI assistants such as Claude Desktop or Claude Code can answer questions like *"Which of my miles expire in the next 90 days?"* or *"What is Alice's portfolio worth?"*.
 
 * **Tools**: `get_portfolio_summary`, `list_accounts` (filter by person, category or program), `get_account` (certificates, expiration rule, balance history), and `list_expiring`.
